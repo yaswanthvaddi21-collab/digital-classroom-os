@@ -1,0 +1,68 @@
+/**
+ * Styles for document content. The same string styles the editor page and the print/PDF output,
+ * so what students see is what they get. Paper is always white, like Word and Pages, even in dark mode.
+ */
+export const documentContentCss = `
+.dcos-doc {
+  font-family: Carlito, Calibri, 'Inter Variable', 'Segoe UI', Arial, sans-serif;
+  font-size: 12pt;
+  line-height: 1.5;
+  color: #1a1a1f;
+  word-wrap: break-word;
+  outline: none;
+}
+.dcos-doc > * + * { margin-top: 0.6em; }
+.dcos-doc p { margin: 0 0 0.5em; }
+.dcos-doc h1, .dcos-doc h2, .dcos-doc h3, .dcos-doc h4 { line-height: 1.25; font-weight: 700; color: #111114; margin: 1.1em 0 0.4em; }
+.dcos-doc h1 { font-size: 20pt; }
+.dcos-doc h2 { font-size: 15pt; }
+.dcos-doc h3 { font-size: 13pt; }
+.dcos-doc h4 { font-size: 12pt; }
+.dcos-doc > :first-child { margin-top: 0; }
+.dcos-doc ul, .dcos-doc ol { padding-left: 1.6em; margin: 0 0 0.6em; }
+.dcos-doc ul { list-style: disc; }
+.dcos-doc ul ul { list-style: circle; }
+.dcos-doc ul ul ul { list-style: square; }
+.dcos-doc ol { list-style: decimal; }
+.dcos-doc ol ol { list-style: lower-alpha; }
+.dcos-doc ol ol ol { list-style: lower-roman; }
+.dcos-doc li > p { margin: 0.15em 0; }
+.dcos-doc blockquote { border-left: 3px solid #c7c7d1; margin: 0.8em 0; padding: 0.1em 0 0.1em 1em; color: #555; }
+.dcos-doc pre { background: #f4f4f6; border-radius: 6px; padding: 0.75em 1em; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 10pt; white-space: pre-wrap; }
+.dcos-doc code { background: #f1f1f4; border-radius: 4px; padding: 0.1em 0.3em; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 0.9em; }
+.dcos-doc pre code { background: none; padding: 0; }
+.dcos-doc a { color: #3b49df; text-decoration: underline; }
+.dcos-doc hr { border: none; border-top: 1px solid #cfcfd6; margin: 1.2em 0; }
+.dcos-doc mark { border-radius: 2px; padding: 0 1px; }
+.dcos-doc img { max-width: 100%; height: auto; display: block; margin: 0.6em auto; }
+.dcos-doc [data-resize-container] { margin: 0.6em auto; }
+.dcos-doc table { border-collapse: collapse; width: 100%; margin: 0.8em 0; table-layout: fixed; overflow: hidden; }
+.dcos-doc th, .dcos-doc td { border: 1px solid #c9c9d2; padding: 0.35em 0.55em; vertical-align: top; position: relative; min-width: 2em; }
+.dcos-doc th { background: #f1f1f4; font-weight: 600; text-align: left; }
+.dcos-doc td > p, .dcos-doc th > p { margin: 0; }
+.dcos-doc .tableWrapper { overflow-x: auto; }
+.dcos-doc .dcos-page-break { break-after: page; page-break-after: always; height: 0; border-top: 1px dashed #b4b4c0; margin: 1.6em -0.5em; position: relative; }
+.dcos-doc .dcos-page-break::after { content: 'Page break'; position: absolute; left: 50%; top: -0.75em; transform: translateX(-50%); background: #fff; color: #8a8a96; font-size: 8pt; letter-spacing: 0.05em; text-transform: uppercase; padding: 0 0.6em; }
+.dcos-doc .dcos-toc { border: 1px solid #e1e1e7; border-radius: 8px; padding: 0.8em 1.1em; margin: 0.8em 0; }
+.dcos-doc .dcos-toc-title { font-weight: 700; font-size: 13pt; margin-bottom: 0.4em; }
+.dcos-doc .dcos-toc ol { list-style: none; padding: 0; margin: 0; }
+.dcos-doc .dcos-toc li { margin: 0.15em 0; }
+.dcos-doc .dcos-toc button { all: unset; cursor: pointer; }
+.dcos-doc .dcos-toc button:hover { color: #3b49df; text-decoration: underline; }
+.dcos-doc .dcos-toc-empty { color: #8a8a96; font-style: italic; }
+.dcos-doc .dcos-toc.is-selected, .dcos-doc .ProseMirror-selectednode { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 4px; }
+.dcos-doc .dcos-search-match { background: #fde68a; border-radius: 2px; }
+.dcos-doc .dcos-search-current { background: #f59e0b; color: #000; }
+.dcos-doc p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: #a0a0ab; float: left; height: 0; pointer-events: none; }
+.dcos-doc .selectedCell::after { content: ''; position: absolute; inset: 0; background: rgba(99, 102, 241, 0.15); pointer-events: none; }
+.dcos-doc .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: 0; width: 4px; background: #6366f1; pointer-events: none; }
+.dcos-doc.resize-cursor { cursor: col-resize; }
+
+@media print {
+  .dcos-doc .dcos-page-break { border: none; margin: 0; }
+  .dcos-doc .dcos-page-break::after { display: none; }
+  .dcos-doc .dcos-toc { border: none; padding: 0; }
+  .dcos-doc table, .dcos-doc img, .dcos-doc pre { break-inside: avoid; }
+  .dcos-doc h1, .dcos-doc h2, .dcos-doc h3, .dcos-doc h4 { break-after: avoid; }
+}
+`;

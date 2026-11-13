@@ -1,0 +1,8 @@
+{
+  "appId": "org.digitalclassroom.os",
+  "appName": "Digital Classroom OS",
+  "webDir": "../web/dist",
+  "android": {
+    "allowMixedContent": false
+  }
+}

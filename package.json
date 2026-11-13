@@ -1,0 +1,36 @@
+{
+  "name": "digital-classroom-os",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline-first academic productivity platform: documents, diagrams and classroom tools.",
+  "workspaces": [
+    "apps/web",
+    "packages/ui",
+    "packages/local-storage",
+    "packages/document-studio",
+    "packages/diagram-studio"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @dcos/web",
+    "build": "npm run build -w @dcos/web",
+    "preview": "npm run preview -w @dcos/web",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run test && npm run build",
+    "licenses": "node scripts/license-report.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "fake-indexeddb": "^6.0.0",
+    "jszip": "^3.10.1",
+    "typescript": "~5.7.0",
+    "vitest": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

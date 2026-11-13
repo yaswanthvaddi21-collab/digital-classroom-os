@@ -1,0 +1,80 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import '@xyflow/react/dist/style.css';
+
+/* Packages are consumed as source, so Tailwind must scan them too. */
+@source '../../../packages';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens. Components use only these semantic names, never raw palette colours. */
+:root {
+  --dc-bg: #f6f6f8;
+  --dc-surface: #ffffff;
+  --dc-surface-2: #f0f0f3;
+  --dc-border: #e4e4e9;
+  --dc-fg: #18181b;
+  --dc-muted: #6b6b76;
+  --dc-accent: #4f46e5;
+  --dc-accent-hover: #4338ca;
+  --dc-accent-fg: #ffffff;
+  --dc-accent-soft: #eef0ff;
+  --dc-success: #15803d;
+  --dc-warning: #b45309;
+  --dc-danger: #dc2626;
+  --dc-canvas: #ececf0;
+}
+
+.dark {
+  --dc-bg: #0e0e11;
+  --dc-surface: #17171b;
+  --dc-surface-2: #222228;
+  --dc-border: #2c2c33;
+  --dc-fg: #ededf0;
+  --dc-muted: #9b9ba6;
+  --dc-accent: #8b8cf8;
+  --dc-accent-hover: #a5a6fb;
+  --dc-accent-fg: #0e0e11;
+  --dc-accent-soft: #23233d;
+  --dc-success: #4ade80;
+  --dc-warning: #fbbf24;
+  --dc-danger: #f87171;
+  --dc-canvas: #0a0a0c;
+}
+
+@theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --color-bg: var(--dc-bg);
+  --color-surface: var(--dc-surface);
+  --color-surface-2: var(--dc-surface-2);
+  --color-border: var(--dc-border);
+  --color-fg: var(--dc-fg);
+  --color-muted: var(--dc-muted);
+  --color-accent: var(--dc-accent);
+  --color-accent-hover: var(--dc-accent-hover);
+  --color-accent-fg: var(--dc-accent-fg);
+  --color-accent-soft: var(--dc-accent-soft);
+  --color-success: var(--dc-success);
+  --color-warning: var(--dc-warning);
+  --color-danger: var(--dc-danger);
+  --color-canvas: var(--dc-canvas);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-bg font-sans text-fg antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+}
+
+@keyframes dcos-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}

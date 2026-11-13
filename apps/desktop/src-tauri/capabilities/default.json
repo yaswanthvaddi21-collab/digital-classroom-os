@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Least privilege: core window APIs only. Filesystem and SQLite permissions are added per feature in Phase 5, scoped to the app data directory.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

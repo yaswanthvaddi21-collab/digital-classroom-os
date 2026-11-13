@@ -1,0 +1,14 @@
+{
+  "name": "@dcos/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tauri 2 shell for macOS and Windows. Loads the built web app from apps/web/dist.",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icons": "tauri icon ../web/public/icon.svg"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}
