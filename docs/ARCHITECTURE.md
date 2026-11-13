@@ -24,9 +24,9 @@ Packages are consumed as TypeScript source through npm workspaces (no per-packag
 | PRD rule | How it is enforced |
 |---|---|
 | Create and save locally, offline | All editing goes through `StorageAdapter` → IndexedDB. No editor code path makes network requests. Fonts are bundled (`@fontsource`), not loaded from Google. |
-| Preserve versions | Every save increments `version`. Snapshots go to `*_versions` on create, on Ctrl/⌘+S, and at most every 10 minutes of editing; 50 kept per item. Restoring a version first snapshots the current state. |
+| Preserve versions | Every save increments `version`. Snapshots go to `*_versions` on create, on Ctrl/⌘+S, and at most every 10 minutes of editing. Restoring a version first snapshots the current state. **Known defect (audit CODE-1/STOR-7):** pruning keeps 49 rather than 50 versions, can evict manual and 'before restore' versions, and repeated Ctrl/⌘+S writes empty manual versions. Fix planned in 0.2-A4. |
 | Never silently overwrite | `save(kind, id, patch, expectedVersion)` reads, checks and writes in one IndexedDB transaction. A stale `expectedVersion` throws `ConflictError`; the editor stops autosaving and asks the user to keep their edits as a copy or load the latest. Backup import adds divergent items as copies. |
-| Interrupted saves don't corrupt | IndexedDB transactions are atomic; the record and its version snapshot are written together or not at all (tested). Autosave flushes on `visibilitychange`/`pagehide`. |
+| Interrupted saves don't corrupt | IndexedDB transactions are atomic; the record and its version snapshot are written together or not at all (tested). Autosave flushes on `visibilitychange`/`pagehide`, but that flush is asynchronous and not guaranteed to finish (audit STOR-8; fix planned in 0.2-A6). |
 | Platform independence | `StorageAdapter` is the only persistence API the app uses. Tauri/Capacitor will provide SQLite adapters (Phase 5); see [DATABASE.md](DATABASE.md). Routing uses hash URLs so `file://`, `tauri://` and `capacitor://` all work. Vite `base: './'`. |
 
 ## Document Studio

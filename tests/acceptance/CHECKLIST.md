@@ -3,7 +3,7 @@
 Status of PRD §11 criteria. ✅ verified · 🟡 partly verified · ⬜ not started (later phase).
 "Unit" means covered by automated tests; "Browser" means checked by hand in Chromium on the dev server.
 
-Last run: 2026-11-12, web app on `localhost:5173`.
+Last run: 2026-11-12, web app on `localhost:5173`. Re-assessed by the Release 0.2 audit on 2026-11-13 (see `docs/audit/RELEASE-0.2-AUDIT.md`).
 
 ## Documents
 
@@ -31,10 +31,10 @@ Last run: 2026-11-12, web app on `localhost:5173`.
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| Local data survives application restart | ✅ | Unit: reopen DB connection; Browser: reload |
+| Local data survives application restart | 🟡 | Unit: reopen DB connection; Browser: reload. **Downgraded 2026-11-13 (audit TEST-5):** neither detects browser storage eviction, and incident S-1 showed eviction happens. Needs a persistent-profile Playwright restart test plus persistent storage at startup (0.2-A3) |
 | Editing works offline | 🟡 | No network calls in editing paths; formal offline test pending |
-| Backup and recovery are tested | ✅ | Unit: export → import into empty DB; divergent items imported as copies |
-| Interrupted saves do not corrupt existing documents | ✅ | Unit: failing write inside transaction leaves previous record and version intact; stale writes rejected |
+| Backup and recovery are tested | ✅ | Unit: export → import into empty DB; divergent items imported as copies. Audit 2026-11-13 found gaps outside this path: weak validation, non-idempotent re-import, backup version tied to DB version (STOR-5/6/13; fix planned in 0.2-A7) |
+| Interrupted saves do not corrupt existing documents | 🟡 | Unit: a failing write inside a transaction leaves the previous record and version intact; stale writes rejected. **Downgraded 2026-11-13 (audit):** does not cover edits held in memory during the 600 ms autosave delay, or leaving the editor in a conflict/error state (CODE-2, STOR-8) |
 
 ## Classroom (Phase 2–3) — ⬜ not started
 
