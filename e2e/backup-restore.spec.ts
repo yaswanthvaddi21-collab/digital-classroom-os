@@ -48,6 +48,8 @@ async function dump(page: Page): Promise<Dump> {
             req.onsuccess = () => {
               out[name] = (req.result as Array<Record<string, unknown>>)
                 .map((r) => {
+                  // lastUsedAt is this device's clean-up bookkeeping (set when the file is restored), not part of the data.
+                  if (name === 'attachments') r = (({ lastUsedAt: _used, ...rest }) => rest)(r);
                   if (!(r.data instanceof ArrayBuffer)) return r;
                   let bin = '';
                   for (const b of new Uint8Array(r.data)) bin += String.fromCharCode(b);

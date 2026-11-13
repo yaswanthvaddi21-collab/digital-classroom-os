@@ -19,6 +19,8 @@ backend/ (FastAPI)  classroom host for LAN sharing — Phase 3. Never needed for
 
 Packages are consumed as TypeScript source through npm workspaces (no per-package build step). Vite bundles them; Tailwind scans them via `@source`.
 
+Design decisions are recorded in [docs/adr](adr/README.md): local-first storage, identity and privacy, concurrency, autosave and drafts, version history, migrations, backups, attachments, cross-tab coordination and deletion.
+
 ## Principles in code
 
 | PRD rule | How it is enforced |

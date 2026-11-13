@@ -13,10 +13,43 @@ export class ConflictError extends Error {
   }
 }
 
+/**
+ * The item (or the version asked for) does not exist, for example because it was deleted in another window.
+ * Every write on a missing item throws this, never a generic Error.
+ */
 export class NotFoundError extends Error {
+  readonly kind: string;
+  readonly id: string;
+
   constructor(kind: string, id: string) {
     super(`${kind} ${id} not found`);
     this.name = 'NotFoundError';
+    this.kind = kind;
+    this.id = id;
+  }
+}
+
+/** True for a NotFoundError, also one that crossed a realm or was re-created from its name. */
+export function isNotFoundError(err: unknown): boolean {
+  if (err instanceof NotFoundError) return true;
+  // Another copy of this class (e.g. two bundles) still counts; IndexedDB's own DOMException 'NotFoundError' (a missing
+  // store or index: a storage fault, not a deleted item) does not.
+  if (!err || typeof err !== 'object' || (typeof DOMException !== 'undefined' && err instanceof DOMException)) return false;
+  const e = err as { name?: unknown; kind?: unknown; id?: unknown };
+  return e.name === 'NotFoundError' && typeof e.kind === 'string' && typeof e.id === 'string';
+}
+
+/**
+ * A version refers to an image that is no longer stored on this device. Thrown instead of restoring the version
+ * with a broken image; nothing was changed.
+ */
+export class MissingAttachmentError extends Error {
+  readonly attachmentIds: string[];
+
+  constructor(attachmentIds: string[]) {
+    super('This version refers to an image that is no longer stored on this device, so it was not restored. Nothing was changed.');
+    this.name = 'MissingAttachmentError';
+    this.attachmentIds = attachmentIds;
   }
 }
 

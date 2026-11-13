@@ -1,12 +1,15 @@
 import type { StorageInfo } from '@dcos/local-storage';
 import { Badge, Button, Card, downloadBlob, Kbd, Select, useToast } from '@dcos/ui';
-import { Download, HardDrive, ShieldCheck, ShieldAlert, Trash2, Upload } from 'lucide-react';
+import { Download, Eraser, HardDrive, ShieldCheck, ShieldAlert, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ThemeSwitcher } from '../../components/AppShell';
 import { formatBytes, relativeTime } from '../../lib/format';
 import { setPreference, usePreferences } from '../../lib/preferences';
-import { notifyStorageChanged, recordBackup, requestPersistentStorage, storage, useDataSafety } from '../../lib/storage';
+import { cleanUpAttachments, notifyStorageChanged, recordBackup, requestPersistentStorage, storage, useDataSafety } from '../../lib/storage';
 import { Section } from './SettingsLayout';
+import { UnsavedDrafts } from './UnsavedDrafts';
+
+const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 const stamp = () => new Date().toISOString().slice(0, 10);
 
@@ -46,12 +49,38 @@ export function StorageSettings() {
   const safety = useDataSafety();
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanUpResult, setCleanUpResult] = useState<string | null>(null);
 
   const refresh = async () => {
-    setInfo(await storage.info());
-    const est = await navigator.storage?.estimate?.();
-    if (est) setUsage({ usage: est.usage ?? 0, quota: est.quota ?? 0 });
+    try {
+      setInfo(await storage.info());
+      setError(null);
+    } catch (err) {
+      setError(messageOf(err));
+    }
+    try {
+      const est = await navigator.storage?.estimate?.();
+      if (est) setUsage({ usage: est.usage ?? 0, quota: est.quota ?? 0 });
+    } catch {
+      // The browser does not say how much space is used; nothing else depends on it.
+    }
     await safety.refresh();
+  };
+
+  const freeUpSpace = async () => {
+    setCleaning(true);
+    setCleanUpResult(null);
+    try {
+      const { removed, freedBytes } = await cleanUpAttachments();
+      setCleanUpResult(removed === 0 ? 'Nothing to remove' : `Removed ${removed} unused image${removed === 1 ? '' : 's'}, ${formatBytes(freedBytes)}`);
+      void refresh();
+    } catch (err) {
+      setCleanUpResult(`Nothing was removed. ${messageOf(err)}`);
+    } finally {
+      setCleaning(false);
+    }
   };
   useEffect(() => {
     void refresh();
@@ -59,6 +88,11 @@ export function StorageSettings() {
 
   return (
     <>
+      {error && (
+        <Card role="alert" className="p-5 text-sm text-danger">
+          Storage details could not be read. {error}
+        </Card>
+      )}
       <Section
         title="Keep my data on this device"
         description="Your work lives in this browser's local database. Without persistent storage, the browser may clear it when the device runs low on space."
@@ -109,8 +143,12 @@ export function StorageSettings() {
                   size="sm"
                   icon={<Download size={13} />}
                   onClick={async () => {
-                    const backup = await storage.exportSafetyCopy(name);
-                    downloadBlob(new Blob([JSON.stringify(backup)], { type: 'application/json' }), `classroom-os-${name}-${stamp()}.json`);
+                    try {
+                      const backup = await storage.exportSafetyCopy(name);
+                      downloadBlob(new Blob([JSON.stringify(backup)], { type: 'application/json' }), `classroom-os-${name}-${stamp()}.json`);
+                    } catch (err) {
+                      toast(`The copy could not be exported. ${messageOf(err)}`, 'error');
+                    }
                   }}
                 >
                   Export
@@ -121,7 +159,11 @@ export function StorageSettings() {
                   icon={<Trash2 size={13} />}
                   onClick={async () => {
                     if (!confirm('Delete this copy? Your current data is not affected.')) return;
-                    await storage.deleteSafetyCopy(name);
+                    try {
+                      await storage.deleteSafetyCopy(name);
+                    } catch (err) {
+                      toast(`The copy could not be deleted. ${messageOf(err)}`, 'error');
+                    }
                     void refresh();
                   }}
                 >
@@ -132,6 +174,24 @@ export function StorageSettings() {
           </div>
         </Section>
       )}
+
+      <Section
+        title="Free up space"
+        description="Removes stored images that no document, diagram, saved version or draft uses any more. Images used in the last day are kept, in case a page that is still open needs them."
+      >
+        <div className="flex flex-col items-start gap-2 md:items-end">
+          <Button size="sm" icon={<Eraser size={14} />} disabled={cleaning} onClick={() => void freeUpSpace()}>
+            Free up space
+          </Button>
+          {cleanUpResult && (
+            <span role="status" className="text-xs text-muted">
+              {cleanUpResult}
+            </span>
+          )}
+        </div>
+      </Section>
+
+      <UnsavedDrafts />
 
       {info && (
         <Card className="p-5 text-xs text-muted">

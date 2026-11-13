@@ -1,3 +1,4 @@
+import { useToast } from '@dcos/ui';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useDiagramHost } from '../components/DiagramDialogs';
@@ -18,6 +19,7 @@ function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string
   const editable = useEditableItem<unknown>(module.kind, id);
   const { host: diagramHost, dialogs, active: diagramDialogOpen } = useDiagramHost();
   const { item, status, saveNow, holdExternalUpdates } = editable;
+  const toast = useToast();
 
   // A diagram dialog writes into the editor it was opened from. Remounting that editor for another tab's save would
   // drop the diagram, so while one is open external versions wait and later edits go through the conflict flow.
@@ -28,12 +30,12 @@ function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        if (!e.repeat) void saveNow();
+        if (!e.repeat) saveNow().catch((err) => toast(`A version could not be saved. ${err instanceof Error ? err.message : String(err)}`, 'error'));
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [saveNow]);
+  }, [saveNow, toast]);
 
   if (status === 'missing' || status === 'load-error') return <MissingItem module={module} error={status === 'load-error' ? editable.lastError : null} />;
   // Opened after another tab upgraded the database: nothing could load, so say why (the app banner offers Reload).
@@ -57,6 +59,11 @@ function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string
       onResolveConflict={editable.resolveConflict}
       onRecoverDraft={editable.recoverDraft}
       onDiscardDraft={editable.discardDraft}
+      draftCount={editable.draftCount}
+      problem={editable.problem}
+      kept={editable.kept}
+      onRetry={editable.retry}
+      onSaveAsNew={editable.saveAsNew}
     >
       <ErrorBoundary what={`this ${module.label.toLowerCase()}`}>
         <ModuleEditor

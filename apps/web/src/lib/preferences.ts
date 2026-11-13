@@ -34,6 +34,16 @@ export function setPreference<K extends keyof Preferences>(key: K, value: Prefer
   listeners.forEach((l) => l());
 }
 
+// Follow changes made in other tabs (the storage event fires only in the tabs that did not make the change).
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    // key null: localStorage was cleared.
+    if (e.key !== null && e.key !== KEY) return;
+    cache = read();
+    listeners.forEach((l) => l());
+  });
+}
+
 export const usePreferences = () =>
   useSyncExternalStore(
     (cb) => {

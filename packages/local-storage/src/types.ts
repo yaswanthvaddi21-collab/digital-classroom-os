@@ -38,6 +38,12 @@ export interface ItemVersion<C = unknown> {
   content: C;
   createdAt: string;
   reason: VersionReason;
+  /**
+   * Attachments holding large inline images that were moved out of this version's content to save space. In
+   * `content` each one appears as the text `dcos-blob:<id>`; every reader puts the original data URL back, so
+   * callers always see the content exactly as it was saved. Absent on versions that were not compacted.
+   */
+  blobRefs?: string[];
 }
 
 export type ItemVersionSummary = Omit<ItemVersion, 'content'>;
@@ -57,9 +63,15 @@ export interface SavePatch<C = unknown> {
 
 /** Unsaved edits kept when they could not be written (conflict, error, app closed mid-save). */
 export interface Draft<C = unknown> {
+  /** `${kind}:${itemId}:${session}`, or `${kind}:${itemId}` for drafts saved before drafts had sessions. */
   key: string;
   kind: ItemKind;
   itemId: string;
+  /**
+   * Editor session that kept the draft. Each session has its own draft, so one session never replaces another's.
+   * Drafts saved before sessions existed read back as ''.
+   */
+  session: string;
   /** Item version the edits were based on. */
   baseVersion: number;
   title?: string;
@@ -76,6 +88,22 @@ export interface Attachment {
   sizeBytes: number;
   data: ArrayBuffer;
   createdAt: string;
+  /** Last time the same bytes were stored again (deduplicated). Clean-up treats a re-used attachment as new. */
+  lastUsedAt?: string;
+}
+
+/** Result of removing attachments nothing refers to any more. */
+export interface CleanUpReport {
+  /** Stored files removed (second ids for the same bytes are not counted: they hold no bytes of their own). */
+  removed: number;
+  freedBytes: number;
+}
+
+export interface CleanUpOptions {
+  /** Anything stored or re-used more recently than this is kept. Default 24 hours. */
+  graceMs?: number;
+  /** References held outside the database (for example emergency drafts in localStorage). */
+  extraReferences?: Iterable<string>;
 }
 
 /** An attachment inside a backup file: same fields, bytes as base64. */
@@ -97,6 +125,11 @@ export interface BackupFile {
   versions: ItemVersion[];
   /** formatVersion 2: attachments referenced by items (older readers ignore this field). */
   attachments?: BackupAttachment[];
+  /**
+   * Images a version refers to that were not found on the device when the backup was made. Their reference text
+   * (`dcos-blob:<id>`) was left in that version. Absent when nothing was missing.
+   */
+  missingAttachments?: string[];
 }
 
 export interface ImportReport {
@@ -141,8 +174,10 @@ export interface StorageAdapter {
   duplicate(kind: ItemKind, id: string): Promise<WorkspaceItem>;
   trash(kind: ItemKind, id: string): Promise<void>;
   restore(kind: ItemKind, id: string): Promise<void>;
-  /** Permanently removes an item and its versions. */
+  /** Permanently removes an item, its versions and all of its drafts. */
   purge(kind: ItemKind, id: string): Promise<void>;
+  /** purge() for several items in one transaction (Empty trash): either all of them are removed or none. */
+  purgeMany(items: Array<{ kind: ItemKind; id: string }>): Promise<void>;
   listVersions(kind: ItemKind, id: string): Promise<ItemVersionSummary[]>;
   restoreVersion(kind: ItemKind, id: string, versionId: string): Promise<WorkspaceItem>;
   exportBackup(): Promise<BackupFile>;
@@ -150,11 +185,21 @@ export interface StorageAdapter {
   /** Stores a binary (deduplicated by content) and returns its record without the bytes. */
   putAttachment(data: Blob | ArrayBuffer, mimeType: string): Promise<Omit<Attachment, 'data'>>;
   getAttachment(id: string): Promise<Attachment | undefined>;
+  /**
+   * Removes attachments that no item, trashed item, version or draft refers to any more. Anything stored or
+   * re-used within the grace period is kept.
+   */
+  cleanUpAttachments(opts?: CleanUpOptions): Promise<CleanUpReport>;
   getMeta(key: string): Promise<string | undefined>;
   setMeta(key: string, value: string): Promise<void>;
+  /** Keeps or replaces this session's draft of the item. Drafts of other sessions are never replaced. */
   saveDraft<C = unknown>(draft: Omit<Draft<C>, 'key' | 'savedAt'>): Promise<void>;
+  /** The newest draft of the item, from any session. */
   getDraft<C = unknown>(kind: ItemKind, itemId: string): Promise<Draft<C> | undefined>;
-  deleteDraft(kind: ItemKind, itemId: string): Promise<void>;
+  /** Drafts of one item, or every draft on this device; newest first. */
+  listDrafts<C = unknown>(filter?: { kind: ItemKind; itemId: string }): Promise<Draft<C>[]>;
+  /** With `session`: that session's draft only ('' = a draft saved before sessions). Without: every draft of the item. */
+  deleteDraft(kind: ItemKind, itemId: string, session?: string): Promise<void>;
   /** Builds a backup file from a pre-upgrade safety copy, for export or re-import. */
   exportSafetyCopy(name: string): Promise<BackupFile>;
   deleteSafetyCopy(name: string): Promise<void>;

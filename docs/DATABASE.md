@@ -16,7 +16,7 @@ Database `digital-classroom-os`:
 | `diagram_versions` | v1 | `id` | `by_item` → `itemId` | `ItemVersion` snapshots |
 | `meta` | v1 | `key` | — | `deviceId`, `lastBackupAt`, other small settings |
 | `item_index` | v2 | `id` | `by_kind` → `kind` | Lightweight list rows (title, dates, favourite, trash) so lists don't load full content |
-| `drafts` | v2 | `id` | — | Unsaved edits kept after a save failed, offered back when the item reopens |
+| `drafts` | v2 | `key` | — | Unsaved edits kept after a save failed, one per editor session (key `kind:itemId:session`; drafts from before Phase 3 use `kind:itemId`). Offered back when the item reopens and listed in Settings → Storage ([ADR 0004](adr/0004-autosave-and-drafts.md)) |
 | `attachments` | v2 | `id` | `by_sha256` (unique) | Binary files, deduplicated by hash. Today: PNG previews of diagrams embedded in documents. When a backup brings bytes this device already has under another id, an alias record `{ id, aliasOf }` is stored instead; `getAttachment` follows it |
 
 `diagram_versions` extends the PRD's entity list so diagrams get the same history guarantees as documents. The v1 stores are frozen: v2 only adds stores.
@@ -24,13 +24,15 @@ Database `digital-classroom-os`:
 ```ts
 WorkspaceItem { id, kind: 'document'|'diagram', title, content, version, createdAt, updatedAt,
                 deletedAt|null, ownerDeviceId, favorite, templateId|null, lastSnapshotAt|null, restoredFrom? }
-ItemVersion   { id, itemId, kind, version, title, content, createdAt, reason: 'create'|'manual'|'auto'|'restore' }
-Attachment    { id, sha256, mimeType, sizeBytes, createdAt, data: ArrayBuffer }
+ItemVersion   { id, itemId, kind, version, title, content, createdAt, reason: 'create'|'manual'|'auto'|'restore', blobRefs? }
+Attachment    { id, sha256, mimeType, sizeBytes, createdAt, lastUsedAt?, data: ArrayBuffer }   // or an alias { id, aliasOf, createdAt, lastUsedAt? }
 ```
 
 **Writes:** `save(kind, id, patch, expectedVersion)` checks the version and writes the record, its index row and any version snapshot in one transaction. A stale `expectedVersion` throws `ConflictError`. Favourite and trash changes are metadata: they update the index row but don't bump `version` or `updatedAt`.
 
 **Version history:** snapshots on create, on Ctrl/⌘+S (`snapshot()`, which doesn't bump the item), at most every 10 minutes of editing, and before a restore. Pruning keeps exactly 50 per item and never evicts the create version, the newest manual version or the newest pre-restore version.
+
+**Large images in version history** are stored once: a new version's `data:` URLs over 16 KB are moved into `attachments` (type `text/x-dcos-data-url`) and replaced by `dcos-blob:<id>`, listed in `blobRefs`. Every reader restores them byte for byte, and backups keep them inline ([ADR 0005](adr/0005-version-history.md)). **Unused attachments** are removed only when nothing references them and they are older than 24 h ([ADR 0008](adr/0008-attachments.md)).
 
 **Migrations:** `MIGRATIONS[i](db, tx)` upgrades version *i* → *i+1* inside IndexedDB's `upgrade` transaction, and backfills new stores from existing data. Before any upgrade, the adapter copies the whole old database to `digital-classroom-os-backup-v<old>` and verifies the copy. A later attempt never replaces or removes an earlier complete copy; it writes `-2`, `-3`, …. If the copy can't be made (e.g. the device is full), nothing is upgraded: the app shows a recovery screen that can download a backup read-only from the old database, try again, or upgrade without the on-device copy only once that file has been downloaded. An error inside a migration aborts the whole upgrade transaction, so the database stays at its old version (see [BACKUP_AND_RECOVERY.md](BACKUP_AND_RECOVERY.md)). Settings → Storage lists these safety copies and can export one as a backup file or delete it. Shipped migrations are never edited. Tests open a real v0.1.0 database (fixtures in `tests/fixtures/v0.1.0`) and check that it upgrades without loss.
 

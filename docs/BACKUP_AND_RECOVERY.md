@@ -50,6 +50,9 @@ Restoring the same file twice does not add duplicates. Version history is kept, 
 | You want an earlier state of a document or diagram | Open it, click the **Version history** button (clock icon), choose a version and **Restore**. The current state is saved as a version first, so restoring can be undone. Press Ctrl/⌘+S at any time to save a version yourself |
 | You deleted something | Open **Trash** and choose **Restore**. Items stay there until you delete them forever |
 | You see "Some changes from your last session were not saved" | A save failed earlier, and the unsaved edits were kept as a draft. Click **Recover them**. If you've typed since, they come back as a separate "(recovered)" copy, so nothing you typed is replaced |
+| The editor says **this device is out of storage space** | Your latest edits are not saved. The notice says whether they were kept as a draft. Export a backup first, then free space: empty the Trash, delete copies kept from before updates, or use **Free up space** (Settings → Storage). Then click **Try again**. If the edits could not even be kept, the page stays open and Settings opens in a new tab: copy anything important before closing the page |
+| The editor says **this item was deleted in another window** | Your edits are still on screen. Click **Save as a new document/diagram** to keep them |
+| You want to see every unsaved draft on this device | **Settings → Storage → Unsaved drafts** lists them all, including drafts of items that were deleted since. Open, save as a new item, or discard each one |
 | Two tabs edited the same item and the app reports a conflict | Choose **Keep my edits as a copy** or **Discard mine, load latest**. Nothing is overwritten without you choosing |
 | A banner says the app was updated in another tab | Your work has been saved. If some edits couldn't be written, they were kept and are offered back after you click **Reload** |
 

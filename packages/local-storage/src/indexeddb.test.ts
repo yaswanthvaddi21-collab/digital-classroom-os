@@ -452,13 +452,13 @@ describe('meta and drafts', () => {
     expect(await store.getMeta('lastBackupAt')).toBe('2026-11-13T00:00:00Z');
   });
 
-  it('keeps one draft per item and removes it on purge', async () => {
+  it('keeps a session\'s draft and removes it on purge', async () => {
     const doc = await store.create('document', { title: 'A', content: 1 });
-    await store.saveDraft({ kind: 'document', itemId: doc.id, baseVersion: 1, content: 'unsaved' });
+    await store.saveDraft({ kind: 'document', itemId: doc.id, session: 's1', baseVersion: 1, content: 'unsaved' });
     expect(await store.getDraft('document', doc.id)).toMatchObject({ baseVersion: 1, content: 'unsaved' });
     await store.deleteDraft('document', doc.id);
     expect(await store.getDraft('document', doc.id)).toBeUndefined();
-    await store.saveDraft({ kind: 'document', itemId: doc.id, baseVersion: 1, content: 'again' });
+    await store.saveDraft({ kind: 'document', itemId: doc.id, session: 's1', baseVersion: 1, content: 'again' });
     await store.purge('document', doc.id);
     expect(await store.getDraft('document', doc.id)).toBeUndefined();
   });
@@ -532,7 +532,9 @@ describe('IndexedDB v1 → v2 upgrade (MIGRATION-PLAN §4)', () => {
     const doc = await a.create('document', { title: 'A', content: 1 });
     const newer = await openDB(db, SCHEMA_VERSION + 1);
     await expect(a.save('document', doc.id, { content: 2 }, doc.version)).rejects.toThrow(/updated in another tab/);
-    await expect(a.saveDraft({ kind: 'document', itemId: doc.id, baseVersion: 1, content: 2 })).rejects.toThrow(/updated in another tab/);
+    await expect(a.saveDraft({ kind: 'document', itemId: doc.id, session: 's1', baseVersion: 1, content: 2 })).rejects.toThrow(/updated in another tab/);
+    // Clean-up never runs on a database given away for an upgrade.
+    await expect(a.cleanUpAttachments({ graceMs: 0 })).rejects.toThrow(/updated in another tab/);
     newer.close();
   });
 

@@ -97,3 +97,16 @@ Scope decision: **option B, the full brief** (owner, 2026-11-13).
 | RG-13 CI has never run | ⬜ Needs a remote; prepared in [GIT_WORKFLOW.md](../GIT_WORKFLOW.md) §7, waiting for the owner | — |
 | RG-14 release metadata, licence | ⬜ Waiting for the owner's licence choice; versions are bumped in Phase 14 | — |
 | RG-1, RG-2 and the other storage items | ⬜ Phase 3 | — |
+
+## 7. Status after Phase 3 (architecture and storage hardening)
+
+| Item | Status | Where |
+|---|---|---|
+| RG-1 a draft from an earlier session can be replaced (STOR-R1) | ✅ Fixed: drafts per editor session; Settings lists every draft | [ADR 0004](../adr/0004-autosave-and-drafts.md) |
+| RG-2 storage-full is hidden (STOR-R2) | ✅ Fixed: failures classified; honest status; storage-full notice with what was kept | ADR 0004 |
+| RR-1 attachments never cleaned up (STOR-R3) | ✅ Fixed: provably safe clean-up (references, 24 h grace, one transaction) | [ADR 0008](../adr/0008-attachments.md) |
+| RR-2 images copied into every version (STOR-R4) | ✅ Fixed for new versions: large images stored once, restored byte for byte. Document content itself is unchanged (Phase 4) | [ADR 0005](../adr/0005-version-history.md) |
+| RR-11 edits to an item deleted in another tab (STOR-R8) | ✅ Fixed: deleted notice at once; Save as a new item; orphan drafts recoverable | [ADR 0010](../adr/0010-soft-delete-and-recovery.md) |
+| TD-3, TD-4, TD-5, TD-6, TD-7 (drafts, error classes, adapter injection, unguarded handlers, emergency drafts and preference sync) | ✅ Fixed | ADRs 0001, 0004, 0009 |
+| Ownership and permissions | Decided: device ownership now; explicit per-item sharing with accounts (phases 9–10); privacy enforced by an e2e test | [ADR 0002](../adr/0002-identity-ownership-privacy.md) |
+| TD-2 images inline in document content | ⬜ Phase 4 (a document-format decision) | — |

@@ -1,10 +1,20 @@
 import type { ItemVersionSummary } from '@dcos/local-storage';
 import { Badge, Button, Dialog, IconButton, useToast } from '@dcos/ui';
-import { AlertTriangle, ArrowLeft, Check, CloudOff, History, LifeBuoy, Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, CloudOff, HardDrive, History, LifeBuoy, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { relativeTime } from '../lib/format';
-import { flushAll, notifyStorageChanged, storage, useOnline, useStorageEvents, type FlushOutcome, type SaveStatus } from '../lib/storage';
+import {
+  flushAll,
+  notifyStorageChanged,
+  storage,
+  useOnline,
+  useStorageEvents,
+  type FlushOutcome,
+  type KeptState,
+  type SaveProblem,
+  type SaveStatus,
+} from '../lib/storage';
 import { itemHref, type ModuleDef } from '../modules';
 import { ThemeSwitcher } from './AppShell';
 
@@ -23,6 +33,15 @@ function StatusIndicator({ status, error }: { status: SaveStatus; error: string 
         <span className="sm:hidden">Not saved</span>
         <span className="sr-only">{error}</span>
       </Badge>
+    );
+  // Saving stopped: no retry is scheduled, so the text must not promise one.
+  if (status === 'not-saved' || status === 'deleted')
+    return (
+      <span role="status" aria-label="Not saved" title={error ?? undefined}>
+        <Badge tone="danger">
+          <AlertTriangle size={12} /> Not saved
+        </Badge>
+      </span>
     );
   if (status === 'conflict') return <Badge tone="warning">Changed elsewhere</Badge>;
   if (status === 'reload-required') return <Badge tone="warning">Reload needed</Badge>;
@@ -54,6 +73,16 @@ interface EditorFrameProps {
   onResolveConflict: (choice: 'save-copy' | 'load-latest') => Promise<{ id: string } | null>;
   onRecoverDraft: () => Promise<{ appliedTo: 'item' | 'copy'; id: string } | null>;
   onDiscardDraft: () => Promise<void>;
+  /** Drafts from other sessions waiting to be recovered or discarded (one is offered at a time). */
+  draftCount?: number;
+  /** Why saving stopped, if it did. */
+  problem?: SaveProblem | null;
+  /** Whether unsaved edits were kept on this device as a draft. */
+  kept?: KeptState | null;
+  /** 'Try again' after saving stopped. */
+  onRetry?: () => Promise<void>;
+  /** The item was deleted elsewhere: save the edits as a new item. */
+  onSaveAsNew?: () => Promise<{ id: string } | null>;
   children: ReactNode;
 }
 
@@ -118,8 +147,78 @@ function ReloadRequired({ onUncover }: { onUncover: () => void }) {
   );
 }
 
+/** The persistent notice shown while saving has stopped. */
+function SaveProblemNotice({ problem, kept, noun, onRetry, onSaveAsNew }: { problem: SaveProblem; kept: KeptState | null; noun: string; onRetry?: () => Promise<void>; onSaveAsNew?: () => Promise<void> }) {
+  const notKept = kept === 'not-kept';
+  const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
+  const act = (fn?: () => Promise<void>) => async () => {
+    if (!fn) return;
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const retry = (
+    <Button size="sm" variant="primary" disabled={busy} onClick={act(onRetry)}>
+      Try again
+    </Button>
+  );
+  if (problem === 'quota')
+    return (
+      <Notice
+        icon={<HardDrive size={16} />}
+        actions={
+          <>
+            {retry}
+            {notKept ? (
+              // The edits exist only on this page: leaving it would lose them, so Settings opens in a new tab.
+              <Button size="sm" onClick={() => window.open('#/settings/storage', '_blank', 'noopener')}>
+                Free up space (new tab)
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => navigate('/settings/storage')}>
+                Free up space
+              </Button>
+            )}
+          </>
+        }
+      >
+        This device is out of storage space, so your latest edits were not saved.{' '}
+        {notKept
+          ? 'They could not be kept as a draft either. Copy anything you need somewhere safe before closing this page.'
+          : 'They are kept as a draft on this device for now. Free up space, then try again.'}
+      </Notice>
+    );
+  if (problem === 'deleted')
+    return (
+      <Notice
+        icon={<Trash2 size={16} />}
+        actions={
+          <Button size="sm" variant="primary" disabled={busy} onClick={act(onSaveAsNew)}>
+            Save as a new {noun}
+          </Button>
+        }
+      >
+        This {noun} was deleted in another window. Your edits are still here.{' '}
+        {notKept ? `They could not be kept as a draft, so save them as a new ${noun} before closing this page.` : `Save them as a new ${noun} to keep them.`}
+      </Notice>
+    );
+  return (
+    <Notice icon={<AlertTriangle size={16} />} actions={retry}>
+      Not saved.{' '}
+      {notKept
+        ? 'Your latest edits could not be kept as a draft either. Copy anything you need somewhere safe before closing this page.'
+        : `Your latest edits are kept as a draft on this device and will be offered again when you next open this ${noun}.`}
+    </Notice>
+  );
+}
+
 export function EditorFrame(props: EditorFrameProps) {
   const { module, id, title, status, lastError, trashed, hasDraft, hasConflict, children } = props;
+  const { problem = null, kept = null, draftCount = hasDraft ? 1 : 0 } = props;
   const [historyOpen, setHistoryOpen] = useState(false);
   const [uncovered, setUncovered] = useState(false);
   const navigate = useNavigate();
@@ -201,6 +300,34 @@ export function EditorFrame(props: EditorFrameProps) {
           </Notice>
         )}
 
+        {problem && !reloadRequired && (
+          <SaveProblemNotice
+            problem={problem}
+            kept={kept}
+            noun={noun}
+            onRetry={props.onRetry}
+            onSaveAsNew={
+              props.onSaveAsNew &&
+              (async () => {
+                try {
+                  const copy = await props.onSaveAsNew!();
+                  if (!copy) return;
+                  toast(`Saved as a new ${noun}`, 'success');
+                  navigate(itemHref(module.kind, copy.id));
+                } catch (err) {
+                  toast(`Could not save it as a new ${noun}. ${err instanceof Error ? err.message : String(err)}`, 'error');
+                }
+              })
+            }
+          />
+        )}
+
+        {!problem && kept === 'not-kept' && !reloadRequired && (
+          <Notice icon={<AlertTriangle size={16} />}>
+            Your latest edits could not be kept on this device. Copy anything you need somewhere safe before closing this page.
+          </Notice>
+        )}
+
         {hasDraft && !hasConflict && (
           <Notice
             tone="info"
@@ -230,20 +357,26 @@ export function EditorFrame(props: EditorFrameProps) {
               </>
             }
           >
-            Some changes from your last session were not saved.
+            {draftCount > 1
+              ? `Changes from ${draftCount} earlier sessions were not saved. Showing the newest first.`
+              : 'Some changes from your last session were not saved.'}
           </Notice>
         )}
 
-        {trashed && (
+        {trashed && problem !== 'deleted' && (
           <Notice
             icon={<Trash2 size={16} />}
             actions={
               <Button
                 size="sm"
                 onClick={async () => {
-                  await storage.restore(module.kind, id);
-                  notifyStorageChanged({ kind: module.kind, id });
-                  props.onRestored();
+                  try {
+                    await storage.restore(module.kind, id);
+                    notifyStorageChanged({ kind: module.kind, id });
+                    props.onRestored();
+                  } catch (err) {
+                    toast(`Could not restore it. ${err instanceof Error ? err.message : String(err)}`, 'error');
+                  }
                 }}
               >
                 Restore
@@ -266,7 +399,7 @@ export function EditorFrame(props: EditorFrameProps) {
   );
 }
 
-function VersionHistory({
+export function VersionHistory({
   module,
   id,
   onClose,
@@ -280,14 +413,26 @@ function VersionHistory({
   onRestored: () => void;
 }) {
   const [versions, setVersions] = useState<ItemVersionSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const toast = useToast();
   useEffect(() => {
-    storage.listVersions(module.kind, id).then(setVersions);
+    let current = true;
+    storage.listVersions(module.kind, id).then(
+      (list) => current && setVersions(list),
+      (err) => current && setError(err instanceof Error ? err.message : String(err)),
+    );
+    return () => {
+      current = false;
+    };
   }, [module.kind, id]);
   const labels: Record<ItemVersionSummary['reason'], string> = { create: 'Created', manual: 'Saved version', auto: 'Autosave snapshot', restore: 'Before restore' };
   return (
     <Dialog open onClose={onClose} title="Version history" description="Snapshots are taken automatically every 10 minutes of editing and whenever you press Ctrl/⌘+S. The latest 50 are kept.">
-      {!versions ? (
+      {error ? (
+        <p role="alert" className="text-sm text-danger">
+          Version history could not be loaded. {error}
+        </p>
+      ) : !versions ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : (
         <ul className="flex flex-col divide-y divide-border">

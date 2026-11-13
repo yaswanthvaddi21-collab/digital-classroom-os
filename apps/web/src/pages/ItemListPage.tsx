@@ -6,7 +6,7 @@ import { chooseDrawioFile } from '../components/DiagramDialogs';
 import { useMemo, useState, type ReactNode } from 'react';
 import { ItemRow } from '../components/ItemRow';
 import { NewItemDialog } from '../components/NewItemDialog';
-import { notifyStorageChanged, requestPersistentStorage, storage, useItems } from '../lib/storage';
+import { notifyStorageChanged, purgeItems, requestPersistentStorage, storage, useItems } from '../lib/storage';
 import { itemHref, MODULE_LIST, MODULES } from '../modules';
 
 export type ListView = { type: 'kind'; kind: ItemKind } | { type: 'files' } | { type: 'recent' } | { type: 'favorites' } | { type: 'trash' };
@@ -66,11 +66,11 @@ export function ItemListPage({ view }: { view: ListView }) {
   const purge = async () => {
     if (!purging) return;
     try {
-      for (const item of purging) await storage.purge(item.kind, item.id);
-      notifyStorageChanged();
+      // All of them or none: a failure part-way leaves everything in the trash.
+      await purgeItems(purging);
       toast(purging.length === 1 ? `“${purging[0].title}” was permanently deleted` : `${purging.length} items were permanently deleted`, 'success');
     } catch (err) {
-      toast(err instanceof Error ? err.message : String(err), 'error');
+      toast(`Nothing was deleted. ${err instanceof Error ? err.message : String(err)}`, 'error');
     }
     setPurging(null);
   };

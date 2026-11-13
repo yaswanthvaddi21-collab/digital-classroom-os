@@ -173,12 +173,17 @@ describe('useEditableItem', () => {
 
   it('retries failed writes, then keeps the edits as a draft that can be recovered (audit CODE-2 / STOR-8)', async () => {
     const doc = await newDoc();
-    const save = vi.spyOn(storage, 'save').mockRejectedValue(new Error('QuotaExceededError'));
+    const save = vi.spyOn(storage, 'save').mockRejectedValue(new Error('Disk I/O failed'));
     const first = renderHook(() => useEditableItem('document', doc.id));
     await waitFor(() => expect(first.result.current.status).toBe('saved'));
     act(() => first.result.current.updateContent({ text: 'not yet saved' }));
     await waitFor(() => expect(first.result.current.status).toBe('error'), SLOW);
-    expect(first.result.current.lastError).toMatch(/Quota/);
+    expect(first.result.current.lastError).toMatch(/Disk I\/O/);
+    // After the last retry saving stops, says so, and keeps the edits.
+    await waitFor(() => expect(first.result.current.status).toBe('not-saved'), { timeout: 16_000 });
+    expect(save).toHaveBeenCalledTimes(4);
+    expect(first.result.current.problem).toBe('failed');
+    expect(first.result.current.kept).toBe('kept');
     first.unmount();
     await waitFor(async () => expect(await storage.getDraft('document', doc.id)).toBeTruthy(), SLOW);
     save.mockRestore();
@@ -192,7 +197,7 @@ describe('useEditableItem', () => {
     expect(outcome).toEqual({ appliedTo: 'item', id: doc.id });
     expect((await storage.get('document', doc.id))?.content).toEqual({ text: 'not yet saved' });
     expect(await storage.getDraft('document', doc.id)).toBeUndefined();
-  }, 20_000);
+  }, 30_000);
 
   it('keeps edits made during a conflict as a draft and recovers them as a copy', async () => {
     const doc = await newDoc();
@@ -267,7 +272,7 @@ describe('useEditableItem', () => {
 
   it('recovers a draft into a copy when the user typed after it was offered (STOR-RECOVER-PENDING)', async () => {
     const doc = await newDoc({ text: 'original' });
-    await storage.saveDraft({ kind: 'document', itemId: doc.id, baseVersion: doc.version, content: { text: 'draft from last session' } });
+    await storage.saveDraft({ kind: 'document', itemId: doc.id, session: 'earlier session', baseVersion: doc.version, content: { text: 'draft from last session' } });
     const { result } = renderHook(() => useEditableItem('document', doc.id));
     await waitFor(() => expect(result.current.draft).not.toBeNull());
     act(() => result.current.updateContent({ text: 'original + typed' }));
@@ -285,7 +290,7 @@ describe('useEditableItem', () => {
   it('keeps the state a recovered draft replaces in version history (STOR-RECOVER-PENDING)', async () => {
     const doc = await newDoc({ text: 'v1' });
     const v2 = await storage.save('document', doc.id, { content: { text: 'v2' } }, doc.version);
-    await storage.saveDraft({ kind: 'document', itemId: doc.id, baseVersion: v2.version, content: { text: 'draft' } });
+    await storage.saveDraft({ kind: 'document', itemId: doc.id, session: 'earlier session', baseVersion: v2.version, content: { text: 'draft' } });
     const { result } = renderHook(() => useEditableItem('document', doc.id));
     await waitFor(() => expect(result.current.draft).not.toBeNull());
     let outcome: Awaited<ReturnType<typeof result.current.recoverDraft>> = null;

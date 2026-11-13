@@ -1,6 +1,11 @@
 import {
   ConflictError,
   IndexedDbAdapter,
+  ITEM_KINDS,
+  isNotFoundError,
+  isQuotaError,
+  uuid,
+  type CleanUpReport,
   type Draft,
   type ItemKind,
   type ItemSummary,
@@ -10,6 +15,7 @@ import {
   type WorkspaceItem,
 } from '@dcos/local-storage';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createStorage } from './platform';
 
 // ── Pending-edit registry: everything that must be saved before the page goes away ──────────────────
 
@@ -42,34 +48,83 @@ let databaseClosed = false;
 
 const EMERGENCY_PREFIX = 'dcos-emergency-draft:';
 export const emergencyDraftKey = (kind: ItemKind, id: string) => `${EMERGENCY_PREFIX}${kind}:${id}`;
-type EmergencyDraft<C> = Pick<Draft<C>, 'title' | 'content' | 'baseVersion' | 'savedAt'>;
+/**
+ * Edits larger than this (in characters) are not copied to localStorage when the page is hidden or closed: browsers
+ * give a site about 5 MB there. The copy in the database is still attempted.
+ */
+export const EMERGENCY_DRAFT_MAX_CHARS = 2 * 1024 * 1024;
+/** `session`: the editor session that kept it (absent on drafts kept before sessions existed). */
+type EmergencyDraft<C> = Pick<Draft<C>, 'title' | 'content' | 'baseVersion' | 'savedAt'> & { session?: string };
 
-function keepEmergencyDraft<C>(kind: ItemKind, id: string, draft: Omit<EmergencyDraft<C>, 'savedAt'>): boolean {
+/** Writes an emergency draft synchronously. Returns the text written, or null when it was too large or failed. */
+function writeEmergencyDraft<C>(kind: ItemKind, id: string, draft: Omit<EmergencyDraft<C>, 'savedAt'>, maxChars = Infinity): string | null {
   try {
-    localStorage.setItem(emergencyDraftKey(kind, id), JSON.stringify({ ...draft, savedAt: new Date().toISOString() }));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function readEmergencyDraft<C>(kind: ItemKind, id: string): EmergencyDraft<C> | null {
-  try {
-    const raw = localStorage.getItem(emergencyDraftKey(kind, id));
-    const parsed = raw ? (JSON.parse(raw) as EmergencyDraft<C>) : null;
-    if (!parsed || typeof parsed !== 'object' || !Number.isInteger(parsed.baseVersion)) return null;
-    return { ...parsed, savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : '' };
+    const raw = JSON.stringify({ ...draft, savedAt: new Date().toISOString() });
+    if (raw.length > maxChars) return null;
+    localStorage.setItem(emergencyDraftKey(kind, id), raw);
+    return raw;
   } catch {
     return null;
   }
 }
 
-function removeEmergencyDraft(kind: ItemKind, id: string) {
+function parseEmergencyDraft<C>(raw: string | null): EmergencyDraft<C> | null {
   try {
-    localStorage.removeItem(emergencyDraftKey(kind, id));
+    const parsed = raw ? (JSON.parse(raw) as EmergencyDraft<C>) : null;
+    if (!parsed || typeof parsed !== 'object' || !Number.isInteger(parsed.baseVersion)) return null;
+    return {
+      ...parsed,
+      savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : '',
+      session: typeof parsed.session === 'string' ? parsed.session : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readEmergencyDraft<C>(kind: ItemKind, id: string): EmergencyDraft<C> | null {
+  try {
+    return parseEmergencyDraft<C>(localStorage.getItem(emergencyDraftKey(kind, id)));
+  } catch {
+    return null;
+  }
+}
+
+/** Removes the item's emergency draft; with `onlyIf`, only while it still holds exactly that text. */
+function removeEmergencyDraft(kind: ItemKind, id: string, onlyIf?: string) {
+  try {
+    const key = emergencyDraftKey(kind, id);
+    if (onlyIf === undefined || localStorage.getItem(key) === onlyIf) localStorage.removeItem(key);
   } catch {
     // Nothing to clean up.
   }
+}
+
+/** Every emergency draft on this device, as stored text, with the item it belongs to. */
+function emergencyDraftEntries(strict = false): Array<{ kind: ItemKind; itemId: string; raw: string }> {
+  const found: Array<{ kind: ItemKind; itemId: string; raw: string }> = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith(EMERGENCY_PREFIX)) continue;
+      const rest = key.slice(EMERGENCY_PREFIX.length);
+      const colon = rest.indexOf(':');
+      const kind = rest.slice(0, colon) as ItemKind;
+      if (colon < 1 || !ITEM_KINDS.includes(kind)) continue;
+      const raw = localStorage.getItem(key);
+      if (raw !== null) found.push({ kind, itemId: rest.slice(colon + 1), raw });
+    }
+  } catch (err) {
+    // Unreadable localStorage: for listing, there are none. For clean-up (strict) an unknown set of references must
+    // stop it, so nothing an emergency draft still uses can be removed.
+    if (strict) throw err;
+  }
+  return found;
+}
+
+/** Attachment references held in emergency drafts, which the database cannot see (used by attachment clean-up). */
+export function emergencyDraftTexts(): string[] {
+  return emergencyDraftEntries(true).map((e) => e.raw);
 }
 
 // ── App-wide storage events (another tab upgrading the database, or blocking our upgrade) ───────────
@@ -91,8 +146,11 @@ export const useStorageEvents = () =>
     () => events,
   );
 
-/** The single storage adapter for this app instance. Native shells will inject a SQLite adapter here. */
-export const storage: StorageAdapter = new IndexedDbAdapter('digital-classroom-os', {
+/**
+ * The single storage adapter for this app instance. It comes from the platform's storage factory (IndexedDB on the
+ * web); native shells replace the factory before the app loads (see platform.ts).
+ */
+export const storage: StorageAdapter = createStorage({
   onVersionChange: async () => {
     await flushAll();
     // The connection closes as soon as this returns. Anything still unsaved is kept outside IndexedDB.
@@ -100,6 +158,8 @@ export const storage: StorageAdapter = new IndexedDbAdapter('digital-classroom-o
     setEvents({ versionChange: true, work: worst(Array.from(editors, (e) => e.freeze())) });
   },
   onBlocked: () => setEvents({ blocked: true }),
+  // Emergency drafts live in localStorage; images they use must not be cleaned up.
+  extraReferences: emergencyDraftTexts,
 });
 
 // ── Change notifications, within this tab and across tabs ────────────────────────────────────────────
@@ -118,7 +178,8 @@ export function notifyStorageChanged(change: StorageChange = {}) {
   channel?.postMessage(change);
 }
 
-function useStorageChanges(onChange: (change: StorageChange) => void) {
+/** Calls `onChange` whenever stored items change, in this tab or another one. */
+export function useStorageChanges(onChange: (change: StorageChange) => void) {
   const ref = useRef(onChange);
   ref.current = onChange;
   useEffect(() => {
@@ -153,6 +214,56 @@ export function useItems(kind?: ItemKind, opts: { trashed?: boolean } = {}) {
   return { items, loading, error, reload };
 }
 
+// ── Permanent deletion and attachment clean-up ───────────────────────────────────────────────────────
+
+const CLEAN_UP_META_KEY = 'lastAttachmentCleanUpAt';
+/** Unused attachments are looked for at most once a day on start-up. */
+export const CLEAN_UP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/** Removes stored images nothing uses any more (the adapter keeps anything used in the last day) and records when. */
+export async function cleanUpAttachments(): Promise<CleanUpReport> {
+  const report = await storage.cleanUpAttachments();
+  try {
+    await storage.setMeta(CLEAN_UP_META_KEY, new Date().toISOString());
+  } catch {
+    // Only the time of the last run is lost; the next start-up runs it again.
+  }
+  return report;
+}
+
+/** Runs the clean-up unless it already ran in the last day. Returns null when it did not run. */
+export async function runDailyCleanUp(now = Date.now()): Promise<CleanUpReport | null> {
+  if (databaseClosed) return null;
+  const last = Date.parse((await storage.getMeta(CLEAN_UP_META_KEY)) ?? '');
+  if (Number.isFinite(last) && last <= now && now - last < CLEAN_UP_INTERVAL_MS) return null;
+  return cleanUpAttachments();
+}
+
+/** After start-up, once the page is idle, runs the daily clean-up. Returns a function that cancels it. */
+export function scheduleDailyCleanUp(delayMs = 20_000): () => void {
+  let idle: number | undefined;
+  const run = () => void runDailyCleanUp().catch(() => undefined);
+  const timer = setTimeout(() => {
+    if (typeof requestIdleCallback === 'function') idle = requestIdleCallback(run, { timeout: 60_000 });
+    else run();
+  }, delayMs);
+  return () => {
+    clearTimeout(timer);
+    if (idle !== undefined) cancelIdleCallback(idle);
+  };
+}
+
+/**
+ * Permanently deletes items, all together or none (Empty trash), with their versions and drafts, tells every view,
+ * then frees images only they used. The clean-up runs in the background; its failure changes nothing.
+ */
+export async function purgeItems(items: ReadonlyArray<{ kind: ItemKind; id: string }>): Promise<void> {
+  await storage.purgeMany(items.map(({ kind, id }) => ({ kind, id })));
+  for (const { kind, id } of items) removeEmergencyDraft(kind, id);
+  notifyStorageChanged();
+  void cleanUpAttachments().catch(() => undefined);
+}
+
 // ── Persistent storage and backup status (audit H-1 / STOR-4) ────────────────────────────────────────
 
 export type PersistState = 'unsupported' | 'persisted' | 'not-persisted';
@@ -179,8 +290,12 @@ export async function recordBackup() {
 export function useDataSafety() {
   const [state, setState] = useState<{ persist: PersistState; lastBackupAt: string | null; itemCount: number } | null>(null);
   const refresh = useCallback(async () => {
-    const [persist, lastBackupAt, items] = await Promise.all([persistState(), storage.getMeta(BACKUP_KEY), storage.listAll()]);
-    setState({ persist, lastBackupAt: lastBackupAt ?? null, itemCount: items.length });
+    try {
+      const [persist, lastBackupAt, items] = await Promise.all([persistState(), storage.getMeta(BACKUP_KEY), storage.listAll()]);
+      setState({ persist, lastBackupAt: lastBackupAt ?? null, itemCount: items.length });
+    } catch {
+      // Storage unavailable: pages that need it report that themselves.
+    }
   }, []);
   useEffect(() => {
     void refresh();
@@ -231,27 +346,120 @@ const subscribeOnline = (cb: () => void) => {
 };
 export const useOnline = () => useSyncExternalStore(subscribeOnline, () => navigator.onLine);
 
+// ── Unsaved drafts on this device (Settings → Storage) ───────────────────────────────────────────────
+
+/** A draft kept on this device, in the database or (when that failed) in localStorage, with the item it belongs to. */
+export interface UnsavedDraft {
+  /** Unique among the listed drafts. */
+  key: string;
+  kind: ItemKind;
+  itemId: string;
+  /** Editor session that kept it ('' for drafts from before sessions); null when it is kept in localStorage. */
+  session: string | null;
+  title?: string;
+  content?: unknown;
+  savedAt: string;
+  /** The item it belongs to, or null when that item no longer exists (it was permanently deleted). */
+  item: { title: string; content: unknown; deletedAt: string | null } | null;
+}
+
+/** Every unsaved draft on this device, newest first, including drafts of items that no longer exist. */
+export async function listUnsavedDrafts(): Promise<UnsavedDraft[]> {
+  const rows: Array<Omit<UnsavedDraft, 'item'>> = [];
+  if (!databaseClosed) {
+    for (const d of await storage.listDrafts()) {
+      rows.push({ key: `db:${d.key}`, kind: d.kind, itemId: d.itemId, session: d.session ?? '', title: d.title, content: d.content, savedAt: d.savedAt });
+    }
+  }
+  const same = (a: { title?: string; content?: unknown }, b: { title?: string; content?: unknown }) =>
+    a.title === b.title && JSON.stringify(a.content) === JSON.stringify(b.content);
+  for (const e of emergencyDraftEntries()) {
+    const d = parseEmergencyDraft(e.raw);
+    if (d && rows.some((r) => r.kind === e.kind && r.itemId === e.itemId && same(r, d))) continue;
+    if (d) rows.push({ key: `local:${e.kind}:${e.itemId}`, kind: e.kind, itemId: e.itemId, session: null, title: d.title, content: d.content, savedAt: d.savedAt });
+  }
+  const items = new Map<string, UnsavedDraft['item']>();
+  for (const r of rows) {
+    const ref = `${r.kind}:${r.itemId}`;
+    if (items.has(ref)) continue;
+    const item = databaseClosed ? undefined : await storage.get(r.kind, r.itemId);
+    items.set(ref, item ? { title: item.title, content: item.content, deletedAt: item.deletedAt } : null);
+  }
+  return rows
+    .map((r) => ({ ...r, item: items.get(`${r.kind}:${r.itemId}`) ?? null }))
+    .sort((a, b) => b.savedAt.localeCompare(a.savedAt) || a.key.localeCompare(b.key));
+}
+
+/** Deletes one unsaved draft. */
+export async function discardUnsavedDraft(draft: UnsavedDraft): Promise<void> {
+  if (draft.session === null) removeEmergencyDraft(draft.kind, draft.itemId);
+  else await storage.deleteDraft(draft.kind, draft.itemId, draft.session);
+  notifyStorageChanged();
+}
+
+/** Whether a draft can become a new item: it holds content, or its item still exists to take the content from. */
+export const canSaveDraftAsNew = (draft: UnsavedDraft) => draft.content !== undefined || draft.item !== null;
+
+/** Saves an unsaved draft as a new item (its own title, marked recovered), then removes the draft. */
+export async function saveUnsavedDraftAsNew(draft: UnsavedDraft): Promise<WorkspaceItem> {
+  const content = draft.content !== undefined ? draft.content : draft.item?.content;
+  if (content === undefined) throw new Error('This draft holds only a title, so there is nothing to save as a new item.');
+  const copy = await storage.create(draft.kind, { title: `${draft.title ?? draft.item?.title ?? 'Untitled'} (recovered)`, content });
+  await discardUnsavedDraft(draft);
+  notifyStorageChanged({ kind: draft.kind, id: copy.id });
+  return copy;
+}
+
 // ── Editing one item ─────────────────────────────────────────────────────────────────────────────────
 
-/** 'reload-required': another tab upgraded the database; this editor no longer writes and must be reloaded. */
-export type SaveStatus = 'loading' | 'saved' | 'pending' | 'saving' | 'error' | 'conflict' | 'missing' | 'load-error' | 'reload-required';
+/**
+ * - 'error': the last save failed and another attempt is scheduled.
+ * - 'not-saved': saving stopped (storage full, or repeated failures); see `problem`. Edits are kept as a draft when possible.
+ * - 'deleted': the item was permanently deleted elsewhere; edits are kept and can be saved as a new item.
+ * - 'reload-required': another tab upgraded the database; this editor no longer writes and must be reloaded.
+ */
+export type SaveStatus =
+  | 'loading'
+  | 'saved'
+  | 'pending'
+  | 'saving'
+  | 'error'
+  | 'not-saved'
+  | 'deleted'
+  | 'conflict'
+  | 'missing'
+  | 'load-error'
+  | 'reload-required';
+
+/** Why saving stopped: the device is out of space, the item was deleted elsewhere, or saves kept failing. */
+export type SaveProblem = 'quota' | 'deleted' | 'failed';
+/** Whether edits that could not be saved were kept on this device as a draft. */
+export type KeptState = 'kept' | 'not-kept';
 
 export const AUTOSAVE_DELAY_MS = 600;
 const RETRY_DELAYS_MS = [1000, 3000, 10_000];
+/** Storage full: one more attempt after this delay (space may be freed meanwhile), then saving stops. */
+export const QUOTA_RETRY_DELAY_MS = 2000;
 
 interface Pending<C> {
   title?: string;
   content?: C;
 }
 
+/** A draft offered for recovery. `fromEmergency`: it could only be read from localStorage, not moved into the database. */
+type OfferedDraft<C> = Draft<C> & { fromEmergency?: boolean };
+
 /**
  * Loads one item and keeps it saved.
  * - Edits are debounced and written one at a time through a queue, with optimistic concurrency.
- * - A version conflict stops autosave until the user decides; failed writes retry with backoff.
- * - Edits that cannot be written (conflict, repeated errors, page closing) are kept as a recovery draft.
+ * - A version conflict stops autosave until the user decides; other failed writes retry with backoff, a full disk
+ *   once. When saving stops, `problem` says why and `kept` whether the edits were kept as a draft.
+ * - Each editor instance is its own draft session: its drafts never replace another session's. Drafts from other
+ *   sessions are offered one at a time, newest first.
  * - The title shown while typing is local state, so saves never overwrite what the user is typing.
  * - After another tab upgrades the database the editor stops writing ('reload-required') and keeps
  *   unsaved edits in localStorage; they are offered as a recovery draft after the reload.
+ * - Moving the item to the trash in another tab shows here; deleting it permanently there stops saving ('deleted').
  */
 export function useEditableItem<C>(kind: ItemKind, id: string) {
   const [item, setItem] = useState<WorkspaceItem<C> | null>(null);
@@ -259,13 +467,22 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
   const [status, setStatus] = useState<SaveStatus>('loading');
   const [conflict, setConflict] = useState<WorkspaceItem<C> | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Draft<C> | null>(null);
+  const [drafts, setDrafts] = useState<OfferedDraft<C>[]>([]);
+  const [problem, setProblem] = useState<SaveProblem | null>(null);
+  const [kept, setKept] = useState<KeptState | null>(null);
   const [reloadRequired, setReloadRequired] = useState(databaseClosed);
   /** Bumped when the stored item changed underneath an idle editor (another tab), so the page remounts it. */
   const [externalRevision, setExternalRevision] = useState(0);
+  /** This editor's draft session. */
+  const [session] = useState(uuid);
 
   const version = useRef(0);
+  const itemRef = useRef<WorkspaceItem<C> | null>(null);
+  itemRef.current = item;
+  const loaded = useRef(false);
   const pending = useRef<Pending<C> | null>(null);
+  /** The edits of the save in flight, until it lands or fails. */
+  const inFlight = useRef<Pending<C> | null>(null);
   const lastSavedContent = useRef<string>('');
   /** Serialized content of the save in flight, if it carries content: what storage will hold once it lands. */
   const writing = useRef<string | null>(null);
@@ -273,46 +490,59 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
   const queue = useRef<Promise<void>>(Promise.resolve());
   const blocked = useRef(databaseClosed);
   const attempts = useRef(0);
+  const quotaRetried = useRef(false);
   const holds = useRef(0);
   const statusRef = useRef(status);
   statusRef.current = status;
+  /** Set once this session kept a draft (database or localStorage), so a later complete save can remove it. */
+  const keptDraft = useRef(false);
+  /** The text of this session's last emergency draft, so only that one is removed (another tab may share the key). */
+  const emergencyWritten = useRef<string | null>(null);
+  /** Set when the editor unmounts: a failed final save is kept as a draft instead of being retried later. */
+  const disposed = useRef(false);
 
   const load = useCallback(async () => {
     try {
-      const loaded = await storage.get<C>(kind, id);
-      if (!loaded) {
+      const stored = await storage.get<C>(kind, id);
+      if (!stored) {
         setStatus('missing');
         return;
       }
-      version.current = loaded.version;
-      lastSavedContent.current = JSON.stringify(loaded.content);
-      setItem(loaded);
-      setTitle(loaded.title);
+      version.current = stored.version;
+      lastSavedContent.current = JSON.stringify(stored.content);
+      setItem(stored);
+      setTitle(stored.title);
       setStatus('saved');
-      let existing = await storage.getDraft<C>(kind, id);
-      // Edits kept in localStorage when the database was closed join the normal draft flow.
+      loaded.current = true;
+      const same = (d: Pending<C>) =>
+        (d.content === undefined || JSON.stringify(d.content) === lastSavedContent.current) && (d.title === undefined || d.title === stored.title);
+      // Drafts that cannot be read now stay stored (Settings → Storage lists them); the item still opens.
+      let offered: OfferedDraft<C>[] = await storage.listDrafts<C>({ kind, itemId: id }).catch(() => []);
+      // Edits kept in localStorage (database closed, or failing) join the normal draft flow.
       const emergency = readEmergencyDraft<C>(kind, id);
       if (emergency) {
-        if (!existing || emergency.savedAt >= existing.savedAt) {
-          const { savedAt: _savedAt, ...kept } = emergency;
+        const { savedAt, session: from = '', ...rest } = emergency;
+        const sameSession = offered.find((d) => d.session === from);
+        if (same(emergency) || (sameSession && sameSession.savedAt > savedAt)) removeEmergencyDraft(kind, id);
+        else {
           try {
-            await storage.saveDraft<C>({ ...kept, kind, itemId: id });
-            existing = await storage.getDraft<C>(kind, id);
+            await storage.saveDraft<C>({ ...rest, kind, itemId: id, session: from });
             removeEmergencyDraft(kind, id);
+            offered = await storage.listDrafts<C>({ kind, itemId: id }).catch(() => offered);
           } catch {
-            existing = { ...emergency, key: `${kind}:${id}`, kind, itemId: id };
+            const fallback: OfferedDraft<C> = { ...emergency, key: emergencyDraftKey(kind, id), kind, itemId: id, session: from, fromEmergency: true };
+            offered = [fallback, ...offered.filter((d) => d.session !== from)].sort((a, b) => b.savedAt.localeCompare(a.savedAt));
           }
-        } else removeEmergencyDraft(kind, id);
+        }
       }
-      const differs =
-        existing &&
-        ((existing.content !== undefined && JSON.stringify(existing.content) !== lastSavedContent.current) ||
-          (existing.title !== undefined && existing.title !== loaded.title));
-      if (differs) setDraft(existing ?? null);
-      else if (existing) {
-        await storage.deleteDraft(kind, id);
-        removeEmergencyDraft(kind, id);
+      // Drafts that hold nothing beyond what is stored are removed without asking.
+      const differing: OfferedDraft<C>[] = [];
+      for (const d of offered) {
+        if (!same(d)) differing.push(d);
+        else if (d.fromEmergency) removeEmergencyDraft(kind, id);
+        else await storage.deleteDraft(kind, id, d.session).catch(() => undefined);
       }
+      setDrafts(differing);
     } catch (err) {
       setLastError(err instanceof Error ? err.message : String(err));
       setStatus('load-error');
@@ -323,26 +553,75 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
     void load();
   }, [load]);
 
+  /** Keeps this session's unsaved edits in localStorage, synchronously. Returns false when they could not be kept. */
+  const keepEmergency = useCallback(
+    (maxChars?: number): boolean => {
+      if (!pending.current && !inFlight.current) return true;
+      // Include a save still in flight: if the page goes away before it lands, it is not lost.
+      const edits = { ...inFlight.current, ...pending.current };
+      const raw = writeEmergencyDraft(kind, id, { baseVersion: version.current, session, ...edits }, maxChars);
+      if (raw === null) return false;
+      emergencyWritten.current = raw;
+      keptDraft.current = true;
+      return true;
+    },
+    [kind, id, session],
+  );
+
   /**
    * Keeps edits that could not be written so they can be recovered next time the item is opened. Falls back
-   * to localStorage when IndexedDB is closed or failing. Returns false only when the edits could not be kept.
+   * to localStorage when IndexedDB is closed or failing. Returns false only when the edits could not be kept,
+   * and says so through `kept`.
    */
   const keepAsDraft = useCallback(async (): Promise<boolean> => {
     const p = pending.current;
     if (!p) return true;
-    const kept = { baseVersion: version.current, ...p };
+    let ok = false;
     if (!databaseClosed) {
       try {
-        await storage.saveDraft<C>({ ...kept, kind, itemId: id });
-        return true;
+        await storage.saveDraft<C>({ baseVersion: version.current, ...p, kind, itemId: id, session });
+        keptDraft.current = true;
+        ok = true;
       } catch {
         // Fall back to localStorage below.
       }
     }
-    const ok = keepEmergencyDraft(kind, id, kept);
+    if (!ok) ok = keepEmergency();
     if (databaseClosed && events.versionChange) setEvents({ work: worst([events.work, ok ? 'kept' : 'failed']) });
+    setKept(ok ? 'kept' : 'not-kept');
     return ok;
-  }, [kind, id]);
+  }, [kind, id, session, keepEmergency]);
+
+  /** Everything is saved: drop the drafts this session kept along the way. */
+  const settle = useCallback(async () => {
+    setProblem(null);
+    setKept(null);
+    if (!keptDraft.current) return;
+    keptDraft.current = false;
+    if (emergencyWritten.current !== null) removeEmergencyDraft(kind, id, emergencyWritten.current);
+    emergencyWritten.current = null;
+    if (!databaseClosed) await storage.deleteDraft(kind, id, session).catch(() => undefined);
+  }, [kind, id, session]);
+
+  /** Saving stopped: say why and keep the edits as a draft. */
+  const stop = useCallback(
+    async (why: SaveProblem) => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+      setStatus(why === 'deleted' ? 'deleted' : 'not-saved');
+      setProblem(why);
+      await keepAsDraft();
+    },
+    [keepAsDraft],
+  );
+
+  /** The item no longer exists (permanently deleted in another tab): stop saving, keep the edits. */
+  const markDeleted = useCallback(async () => {
+    blocked.current = true;
+    // A conflict with an item that no longer exists has only one way out: saving the edits as a new item.
+    setConflict(null);
+    await stop('deleted');
+  }, [stop]);
 
   /** Writes pending edits. Runs strictly one at a time; reads the version only when its turn comes. */
   const flush = useCallback((): Promise<void> => {
@@ -358,18 +637,21 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
         return;
       }
       pending.current = null;
+      inFlight.current = patch;
       writing.current = patch.content !== undefined ? JSON.stringify(patch.content) : null;
       setStatus('saving');
       try {
         const saved = await storage.save<C>(kind, id, patch, version.current);
         version.current = saved.version;
         attempts.current = 0;
+        quotaRetried.current = false;
         if (patch.content !== undefined) lastSavedContent.current = JSON.stringify(patch.content);
         setItem(saved);
         setLastError(null);
         setStatus(pending.current ? 'pending' : 'saved');
         if (patch.title !== undefined) notifyStorageChanged({ kind, id });
         else channel?.postMessage({ kind, id });
+        if (!pending.current) await settle();
       } catch (err) {
         // Put the edits back, merged under anything typed while this save was in flight.
         const since = pending.current as Pending<C> | null;
@@ -382,21 +664,30 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
           return;
         }
         setLastError(err instanceof Error ? err.message : String(err));
-        setStatus('error');
         if (databaseClosed) {
+          setStatus('error');
           await keepAsDraft();
           return;
         }
-        const delay = RETRY_DELAYS_MS[attempts.current++];
-        if (delay !== undefined) timer.current = setTimeout(() => void flush(), delay);
-        else await keepAsDraft();
+        // Retrying cannot bring back a deleted item.
+        // Only a confirmed absence counts as 'deleted elsewhere'; anything else is a storage fault and is retried.
+        if (isNotFoundError(err) && !(await storage.get(kind, id).catch(() => true))) return void (await markDeleted());
+        let delay: number | undefined;
+        if (isQuotaError(err)) {
+          delay = quotaRetried.current ? undefined : QUOTA_RETRY_DELAY_MS;
+          quotaRetried.current = true;
+        } else delay = RETRY_DELAYS_MS[attempts.current++];
+        if (delay === undefined || disposed.current) return void (await stop(isQuotaError(err) ? 'quota' : 'failed'));
+        setStatus('error');
+        timer.current = setTimeout(() => void flush(), delay);
       } finally {
         writing.current = null;
+        inFlight.current = null;
       }
     };
     queue.current = queue.current.then(run, run);
     return queue.current;
-  }, [kind, id, keepAsDraft]);
+  }, [kind, id, keepAsDraft, settle, stop, markDeleted]);
 
   /** Runs `task` in the save queue, after every write queued before it. */
   const enqueue = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
@@ -412,9 +703,23 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
     if (blocked.current) return;
     setStatus('pending');
     attempts.current = 0;
+    quotaRetried.current = false;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => void flush(), AUTOSAVE_DELAY_MS);
   }, [flush]);
+
+  /** 'Try again' after saving stopped: one attempt now, no automatic retries if it fails again. */
+  const retry = useCallback(async () => {
+    if (blocked.current || databaseClosed) return;
+    attempts.current = RETRY_DELAYS_MS.length;
+    quotaRetried.current = true;
+    if (!pending.current) {
+      setStatus('saved');
+      await settle();
+      return;
+    }
+    await flush();
+  }, [flush, settle]);
 
   const updateContent = useCallback(
     (content: C) => {
@@ -448,9 +753,9 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
   /** On blur: show the title as stored (trimmed, 'Untitled' when empty) once nothing newer is pending. */
   const commitTitle = useCallback(async () => {
     await flush();
-    if (databaseClosed) return;
+    if (databaseClosed || blocked.current) return;
     if (pending.current?.title === undefined) {
-      const stored = await storage.get(kind, id);
+      const stored = await storage.get(kind, id).catch(() => undefined);
       if (stored) setTitle(stored.title);
     }
   }, [flush, kind, id]);
@@ -458,11 +763,17 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
   /** Ctrl/⌘+S: write pending edits, then record a version if anything changed since the last one. */
   const saveNow = useCallback(async () => {
     await flush();
-    if (blocked.current || statusRef.current === 'error') return false;
-    const created = await storage.snapshot(kind, id);
-    if (created) notifyStorageChanged({ kind, id });
-    return created;
-  }, [flush, kind, id]);
+    if (blocked.current || ['error', 'not-saved', 'deleted'].includes(statusRef.current)) return false;
+    try {
+      const created = await storage.snapshot(kind, id);
+      if (created) notifyStorageChanged({ kind, id });
+      return created;
+    } catch (err) {
+      if (!isNotFoundError(err)) throw err;
+      await markDeleted();
+      return false;
+    }
+  }, [flush, kind, id, markDeleted]);
 
   /** Conflict resolution: either keep the edits as a new copy, or discard them and load the stored version. */
   const resolveConflict = useCallback(
@@ -481,28 +792,63 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
       blocked.current = false;
       version.current = stored.version;
       lastSavedContent.current = JSON.stringify(stored.content);
-      await storage.deleteDraft(kind, id);
+      keptDraft.current = true;
+      await settle();
       setConflict(null);
       setItem(stored);
       setTitle(stored.title);
       setStatus('saved');
       return copy;
     },
-    [conflict, item, kind, id],
+    [conflict, item, kind, id, settle],
+  );
+
+  /**
+   * The item was deleted in another window: saves the current title and content (with unsaved edits) as a new
+   * item, and removes the draft kept for the deleted one. Returns the new item.
+   */
+  const saveAsNew = useCallback(async (): Promise<WorkspaceItem<C> | null> => {
+    const current = itemRef.current;
+    if (!current || databaseClosed) return null;
+    const copy = await storage.create<C>(kind, {
+      title: pending.current?.title ?? current.title,
+      content: (pending.current?.content !== undefined ? pending.current.content : current.content) as C,
+      templateId: current.templateId,
+    });
+    pending.current = null;
+    keptDraft.current = true;
+    await settle();
+    notifyStorageChanged({ kind, id: copy.id });
+    return copy;
+  }, [kind, settle]);
+
+  const draft = drafts[0] ?? null;
+  const dropOffered = useCallback(
+    async (d: OfferedDraft<C>) => {
+      if (d.fromEmergency) removeEmergencyDraft(kind, id);
+      else await storage.deleteDraft(kind, id, d.session);
+      setDrafts((all) => all.filter((x) => x !== d));
+    },
+    [kind, id],
   );
 
   /**
    * Recovery of edits kept from an earlier session. They are applied to the item only if nothing changed since
    * they were made: no newer save and nothing typed since. Otherwise they become a separate copy, so neither
    * version is lost. Runs in the save queue after anything already typed, and the state they replace is kept
-   * as a version first.
+   * as a version first. The next draft from another session, if any, is offered after this one.
    */
   const recoverDraft = useCallback(async (): Promise<{ appliedTo: 'item' | 'copy'; id: string } | null> => {
     if (!draft || databaseClosed) return null;
     void flush();
     const result = await enqueue(async (): Promise<{ appliedTo: 'item' | 'copy'; id: string } | null> => {
       const current = await storage.get<C>(kind, id);
-      if (!current) return null;
+      if (!current) {
+        // The item was deleted (e.g. in another window): the draft becomes a new item instead of being lost.
+        if (draft.content === undefined) return null;
+        const copy = await storage.create<C>(kind, { title: `${draft.title ?? title} (recovered)`, content: draft.content as C });
+        return { appliedTo: 'copy', id: copy.id };
+      }
       const untouched = current.version === draft.baseVersion && version.current === draft.baseVersion && !pending.current && !blocked.current;
       if (untouched) {
         await storage.snapshot(kind, id);
@@ -523,19 +869,15 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
       return { appliedTo: 'copy', id: copy.id };
     });
     if (!result) return null;
-    await storage.deleteDraft(kind, id);
-    removeEmergencyDraft(kind, id);
-    setDraft(null);
+    await dropOffered(draft);
     notifyStorageChanged({ kind, id });
     return result;
-  }, [draft, kind, id, flush, enqueue]);
+  }, [draft, kind, id, title, flush, enqueue, dropOffered]);
 
   const discardDraft = useCallback(async () => {
-    if (databaseClosed) return;
-    await storage.deleteDraft(kind, id);
-    removeEmergencyDraft(kind, id);
-    setDraft(null);
-  }, [kind, id]);
+    if (!draft || databaseClosed) return;
+    await dropOffered(draft);
+  }, [draft, dropOffered]);
 
   /** Adopts a newer stored version when this editor has nothing unsaved and nothing holds external updates. */
   const adoptExternal = useCallback(() => {
@@ -554,9 +896,33 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
       .catch(() => undefined);
   }, [kind, id]);
 
-  // Another tab changed this item: if we have nothing unsaved, adopt its version silently.
+  /**
+   * Follows changes that do not bump the version (trash, restore, favorite), and notices at once when the item
+   * was permanently deleted, instead of only after a failed save.
+   */
+  const followMetadata = useCallback(() => {
+    if (!loaded.current || databaseClosed) return;
+    void storage
+      .get<C>(kind, id)
+      .then((latest) => {
+        if (!latest) {
+          if (statusRef.current !== 'deleted') void markDeleted();
+          return;
+        }
+        setItem((prev) =>
+          prev && (prev.deletedAt !== latest.deletedAt || prev.favorite !== latest.favorite)
+            ? { ...prev, deletedAt: latest.deletedAt, favorite: latest.favorite }
+            : prev,
+        );
+      })
+      .catch(() => undefined);
+  }, [kind, id, markDeleted]);
+
+  // Another tab changed this item (or items in general): follow it, and if we have nothing unsaved, adopt its version.
   useStorageChanges((change) => {
-    if (change.id === id && change.kind === kind) adoptExternal();
+    if (change.id !== undefined && (change.id !== id || change.kind !== kind)) return;
+    followMetadata();
+    adoptExternal();
   });
 
   /**
@@ -574,24 +940,30 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
     };
   }, [adoptExternal]);
 
-  // Save when the window is hidden (tab switch, app backgrounded on Android, window closed),
-  // and warn before leaving while anything is unsaved.
+  // Save when the window is hidden (tab switch, app backgrounded on Android, window closed), keeping a synchronous
+  // copy in localStorage first in case the page is gone before the save lands; warn before leaving while anything
+  // is unsaved.
   useEffect(() => {
-    const keepNow = () => !pending.current || keepEmergencyDraft(kind, id, { baseVersion: version.current, ...pending.current });
-    const onHide = () => document.visibilityState === 'hidden' && void flush();
+    const unsaved = () => !!pending.current || !!inFlight.current;
+    const onHide = () => {
+      if (document.visibilityState !== 'hidden') return;
+      if (unsaved()) keepEmergency(EMERGENCY_DRAFT_MAX_CHARS);
+      void flush();
+    };
     const onPageHide = () => {
+      if (unsaved()) keepEmergency(EMERGENCY_DRAFT_MAX_CHARS);
       void flush();
       if (pending.current) void keepAsDraft();
     };
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (databaseClosed) {
-        if (!keepNow()) {
+        if (!keepEmergency()) {
           e.preventDefault();
           e.returnValue = '';
         }
         return;
       }
-      if (pending.current || ['pending', 'saving', 'error', 'conflict'].includes(statusRef.current)) {
+      if (pending.current || ['pending', 'saving', 'error', 'not-saved', 'deleted', 'conflict'].includes(statusRef.current)) {
         void flush();
         e.preventDefault();
         e.returnValue = '';
@@ -609,14 +981,16 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
         timer.current = null;
         setReloadRequired(true);
         if (!pending.current) return 'saved';
-        return keepNow() ? 'kept' : 'failed';
+        return keepEmergency() ? 'kept' : 'failed';
       },
     };
     document.addEventListener('visibilitychange', onHide);
     window.addEventListener('pagehide', onPageHide);
     window.addEventListener('beforeunload', onBeforeUnload);
     editors.add(editor);
+    disposed.current = false;
     return () => {
+      disposed.current = true;
       document.removeEventListener('visibilitychange', onHide);
       window.removeEventListener('pagehide', onPageHide);
       window.removeEventListener('beforeunload', onBeforeUnload);
@@ -626,7 +1000,7 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
         if (pending.current) void keepAsDraft();
       });
     };
-  }, [flush, keepAsDraft, kind, id]);
+  }, [flush, keepAsDraft, keepEmergency]);
 
   return {
     item,
@@ -635,14 +1009,22 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
     reloadRequired,
     conflict,
     lastError,
+    /** The draft from another session offered now (newest first), or null. */
     draft,
+    /** How many drafts from other sessions are waiting, including `draft`. */
+    draftCount: drafts.length,
+    problem,
+    kept,
+    session,
     externalRevision,
     updateContent,
     rename,
     commitTitle,
     flush,
+    retry,
     saveNow,
     resolveConflict,
+    saveAsNew,
     recoverDraft,
     discardDraft,
     holdExternalUpdates,
