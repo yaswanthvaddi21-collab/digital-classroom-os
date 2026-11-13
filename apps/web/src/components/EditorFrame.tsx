@@ -1,10 +1,10 @@
 import type { ItemVersionSummary } from '@dcos/local-storage';
 import { Badge, Button, Dialog, IconButton, useToast } from '@dcos/ui';
-import { AlertTriangle, ArrowLeft, Check, CloudOff, History, LifeBuoy, Loader2, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, CloudOff, History, LifeBuoy, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { relativeTime } from '../lib/format';
-import { notifyStorageChanged, storage, useOnline, type SaveStatus } from '../lib/storage';
+import { flushAll, notifyStorageChanged, storage, useOnline, useStorageEvents, type FlushOutcome, type SaveStatus } from '../lib/storage';
 import { itemHref, type ModuleDef } from '../modules';
 import { ThemeSwitcher } from './AppShell';
 
@@ -25,6 +25,7 @@ function StatusIndicator({ status, error }: { status: SaveStatus; error: string 
       </Badge>
     );
   if (status === 'conflict') return <Badge tone="warning">Changed elsewhere</Badge>;
+  if (status === 'reload-required') return <Badge tone="warning">Reload needed</Badge>;
   const label = online ? 'Saved on this device' : 'Offline · saved on this device';
   // Always visible, also on phones (audit: mobile users could not see whether their work was saved).
   return (
@@ -73,129 +74,192 @@ function Notice({ tone = 'warning', icon, children, actions }: { tone?: 'warning
   );
 }
 
+const RELOAD_TEXT: Record<FlushOutcome, string> = {
+  saved: 'Reload to keep editing. Your work is saved.',
+  kept: 'Reload to keep editing. Edits that could not be saved yet are kept on this device and will be offered for recovery after the reload.',
+  failed: 'Some recent edits could not be saved. Copy anything you need before reloading.',
+};
+
+/**
+ * Covers the editor once another tab has upgraded the database: this page can no longer save, so it must not
+ * look editable. If unsaved edits could not even be kept, the user can uncover the page to copy them.
+ */
+function ReloadRequired({ onUncover }: { onUncover: () => void }) {
+  const { work } = useStorageEvents();
+  const [reloading, setReloading] = useState(false);
+  const reload = async () => {
+    setReloading(true);
+    const outcome = await flushAll();
+    // Newly unkeepable edits: stay, so the text above can tell the user before anything is lost.
+    if (outcome === 'failed' && work !== 'failed') return setReloading(false);
+    location.reload();
+  };
+  return (
+    <div className="absolute inset-0 z-40 flex items-center justify-center bg-bg/80 p-4 backdrop-blur-sm">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="reload-required-title" aria-describedby="reload-required-text" className="w-full max-w-sm rounded-xl border border-border bg-surface p-5 shadow-2xl">
+        <h2 id="reload-required-title" className="flex items-center gap-2 text-[15px] font-semibold">
+          <RefreshCw size={16} className="text-warning" /> This app was updated in another tab
+        </h2>
+        <p id="reload-required-text" className="mt-2 text-sm text-muted">
+          {RELOAD_TEXT[work]}
+        </p>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          {work === 'failed' && (
+            <Button size="sm" onClick={onUncover}>
+              Show my work to copy it
+            </Button>
+          )}
+          <Button size="sm" variant="primary" disabled={reloading} onClick={() => void reload()}>
+            {work === 'failed' ? 'Reload anyway' : 'Reload'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function EditorFrame(props: EditorFrameProps) {
   const { module, id, title, status, lastError, trashed, hasDraft, hasConflict, children } = props;
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [uncovered, setUncovered] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
   const noun = module.label.toLowerCase();
+  const reloadRequired = status === 'reload-required';
+  const covered = reloadRequired && !uncovered;
 
   return (
-    <div className="flex h-full flex-col bg-bg">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-surface px-2 sm:px-3">
-        <Link
-          to={`/${module.route}`}
-          aria-label={`Back to ${module.plural.toLowerCase()}`}
-          title={`Back to ${module.plural.toLowerCase()}`}
-          className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-fg"
-        >
-          <ArrowLeft size={17} />
-        </Link>
-        <input
-          aria-label={`${module.label} title`}
-          value={title}
-          onChange={(e) => props.onRename(e.target.value)}
-          onBlur={props.onTitleBlur}
-          className="min-w-0 max-w-md flex-1 truncate rounded-md bg-transparent px-2 py-1 text-[15px] font-semibold hover:bg-surface-2 focus:bg-surface-2 focus:outline-none"
-        />
-        <div className="ml-auto flex items-center gap-2">
-          <StatusIndicator status={status} error={lastError} />
-          <IconButton label="Version history" onClick={() => setHistoryOpen(true)}>
-            <History size={16} />
-          </IconButton>
-          <div className="hidden md:block">
-            <ThemeSwitcher />
-          </div>
-        </div>
-      </header>
-
-      {hasConflict && (
+    <div className="relative flex h-full flex-col bg-bg">
+      {reloadRequired && uncovered && (
         <Notice
-          icon={<AlertTriangle size={16} />}
+          icon={<RefreshCw size={16} />}
           actions={
-            <>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={async () => {
-                  const copy = await props.onResolveConflict('save-copy');
-                  if (copy) navigate(itemHref(module.kind, copy.id));
-                }}
-              >
-                Keep my edits as a copy
-              </Button>
-              <Button
-                size="sm"
-                onClick={async () => {
-                  await props.onResolveConflict('load-latest');
-                  props.onRestored();
-                }}
-              >
-                Discard mine, load latest
-              </Button>
-            </>
-          }
-        >
-          This {noun} was changed in another window. Your edits are kept safely and have not been written over it.
-        </Notice>
-      )}
-
-      {hasDraft && !hasConflict && (
-        <Notice
-          tone="info"
-          icon={<LifeBuoy size={16} />}
-          actions={
-            <>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={async () => {
-                  const result = await props.onRecoverDraft();
-                  if (!result) return;
-                  if (result.appliedTo === 'copy') {
-                    toast(`Your unsaved changes were saved as a separate ${noun}`, 'success');
-                    navigate(itemHref(module.kind, result.id));
-                  } else {
-                    toast('Unsaved changes recovered', 'success');
-                    props.onRestored();
-                  }
-                }}
-              >
-                Recover them
-              </Button>
-              <Button size="sm" onClick={() => void props.onDiscardDraft()}>
-                Discard
-              </Button>
-            </>
-          }
-        >
-          Some changes from your last session were not saved.
-        </Notice>
-      )}
-
-      {trashed && (
-        <Notice
-          icon={<Trash2 size={16} />}
-          actions={
-            <Button
-              size="sm"
-              onClick={async () => {
-                await storage.restore(module.kind, id);
-                notifyStorageChanged({ kind: module.kind, id });
-                props.onRestored();
-              }}
-            >
-              Restore
+            <Button size="sm" variant="primary" onClick={() => location.reload()}>
+              Reload
             </Button>
           }
         >
-          This {noun} is in the trash. Edits are saved, but it stays in the trash until you restore it.
+          This app was updated in another tab. Edits on this page are no longer saved. Copy what you need, then reload.
         </Notice>
       )}
+      <div className="flex min-h-0 flex-1 flex-col" inert={covered || undefined}>
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-surface px-2 sm:px-3">
+          <Link
+            to={`/${module.route}`}
+            aria-label={`Back to ${module.plural.toLowerCase()}`}
+            title={`Back to ${module.plural.toLowerCase()}`}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-fg"
+          >
+            <ArrowLeft size={17} />
+          </Link>
+          <input
+            aria-label={`${module.label} title`}
+            value={title}
+            onChange={(e) => props.onRename(e.target.value)}
+            onBlur={props.onTitleBlur}
+            className="min-w-0 max-w-md flex-1 truncate rounded-md bg-transparent px-2 py-1 text-[15px] font-semibold hover:bg-surface-2 focus:bg-surface-2 focus:outline-none"
+          />
+          <div className="ml-auto flex items-center gap-2">
+            <StatusIndicator status={status} error={lastError} />
+            <IconButton label="Version history" onClick={() => setHistoryOpen(true)}>
+              <History size={16} />
+            </IconButton>
+            <div className="hidden md:block">
+              <ThemeSwitcher />
+            </div>
+          </div>
+        </header>
 
-      <div className="min-h-0 flex-1">{children}</div>
+        {hasConflict && (
+          <Notice
+            icon={<AlertTriangle size={16} />}
+            actions={
+              <>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={async () => {
+                    const copy = await props.onResolveConflict('save-copy');
+                    if (copy) navigate(itemHref(module.kind, copy.id));
+                  }}
+                >
+                  Keep my edits as a copy
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    await props.onResolveConflict('load-latest');
+                    props.onRestored();
+                  }}
+                >
+                  Discard mine, load latest
+                </Button>
+              </>
+            }
+          >
+            This {noun} was changed in another window. Your edits are kept safely and have not been written over it.
+          </Notice>
+        )}
 
-      {historyOpen && (
+        {hasDraft && !hasConflict && (
+          <Notice
+            tone="info"
+            icon={<LifeBuoy size={16} />}
+            actions={
+              <>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={async () => {
+                    const result = await props.onRecoverDraft();
+                    if (!result) return;
+                    if (result.appliedTo === 'copy') {
+                      toast(`Your unsaved changes were saved as a separate ${noun}`, 'success');
+                      navigate(itemHref(module.kind, result.id));
+                    } else {
+                      toast('Unsaved changes recovered', 'success');
+                      props.onRestored();
+                    }
+                  }}
+                >
+                  Recover them
+                </Button>
+                <Button size="sm" onClick={() => void props.onDiscardDraft()}>
+                  Discard
+                </Button>
+              </>
+            }
+          >
+            Some changes from your last session were not saved.
+          </Notice>
+        )}
+
+        {trashed && (
+          <Notice
+            icon={<Trash2 size={16} />}
+            actions={
+              <Button
+                size="sm"
+                onClick={async () => {
+                  await storage.restore(module.kind, id);
+                  notifyStorageChanged({ kind: module.kind, id });
+                  props.onRestored();
+                }}
+              >
+                Restore
+              </Button>
+            }
+          >
+            This {noun} is in the trash. Edits are saved, but it stays in the trash until you restore it.
+          </Notice>
+        )}
+
+        <div className="min-h-0 flex-1">{children}</div>
+      </div>
+
+      {covered && <ReloadRequired onUncover={() => setUncovered(true)} />}
+
+      {historyOpen && !reloadRequired && (
         <VersionHistory module={module} id={id} onClose={() => setHistoryOpen(false)} onBeforeRestore={props.onBeforeRestore} onRestored={props.onRestored} />
       )}
     </div>

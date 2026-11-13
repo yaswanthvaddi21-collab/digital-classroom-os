@@ -18,6 +18,7 @@ Baseline review, 2026-11-12:
 | html-to-image | 1.11.11 | MIT | Diagram PNG/SVG | Pinned exact; upgrade deliberately and re-test exports |
 | jspdf | 4.2.x | MIT | Diagram PDF | 3.x had critical advisories; 4.2.1+ required. Lazy-loaded |
 | idb | 8.x | ISC | IndexedDB wrapper | |
+| fflate | 0.8.x | MIT | Reading compressed diagrams.net pages | Added 2026-11-13. Small, pure JS, no network |
 | lucide-react | 0.460 | ISC | Icons | |
 | clsx | 2.x | MIT | Class names | |
 | @fontsource-variable/inter | 5.x | OFL-1.1 | Bundled UI font | OFL permits bundling; no Google Fonts requests |
@@ -25,6 +26,9 @@ Baseline review, 2026-11-12:
 | pako (via jspdf) | — | MIT AND Zlib | | Both permissive |
 | fastapi, uvicorn, pydantic | — | MIT / BSD-3-Clause | Backend | |
 | fake-indexeddb, vitest, jszip, typescript | — | Apache-2.0 / MIT / (MIT OR GPL-3.0) | Dev/test only | jszip used under MIT |
+| @playwright/test | 1.x | Apache-2.0 | Dev/test only | Browser tests (Chromium, WebKit, Firefox) |
+| @testing-library/react, /dom, /user-event | — | MIT | Dev/test only | Component tests |
+| mammoth | 1.x | BSD-2-Clause | Dev/test only | Re-reads exported DOCX files in tests |
 | @tauri-apps/cli, tauri | 2.x | MIT OR Apache-2.0 | Desktop shell | Phase 5 |
 | @capacitor/* | 7.x | MIT | Android shell | Phase 5 |
 

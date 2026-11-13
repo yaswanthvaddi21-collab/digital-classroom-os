@@ -34,6 +34,8 @@ export interface DiagramActions {
   updateNodeData: (id: string, patch: Partial<ShapeData>) => void;
   editingId: string | null;
   setEditingId: (id: string | null) => void;
+  /** The diagram is protected (saved by a newer app version): no resizing or label editing. */
+  readOnly: boolean;
 }
 
 export const DiagramActionsContext = createContext<DiagramActions | null>(null);
@@ -68,7 +70,11 @@ function LabelEditor({ id, data, onDone }: { id: string; data: ShapeData; onDone
       onBlur={commit}
       onKeyDown={(e) => {
         e.stopPropagation();
-        if (e.key === 'Escape') onDone();
+        if (e.key === 'Escape') {
+          // Inside a modal <dialog>, Escape's default action would close the whole dialog.
+          e.preventDefault();
+          onDone();
+        }
         // Structured labels (UML, ER) are multi-line: Enter adds a line, Ctrl/⌘+Enter finishes.
         const multiline = COMPARTMENT_SHAPES.has(data.shape);
         if (e.key === 'Enter' && (multiline ? e.metaKey || e.ctrlKey : !e.shiftKey)) {
@@ -87,14 +93,14 @@ function LabelEditor({ id, data, onDone }: { id: string; data: ShapeData; onDone
 }
 
 export const ShapeNode = memo(function ShapeNode({ id, data, selected, width, height }: NodeProps<ShapeNodeType>) {
-  const { snapshot, editingId, setEditingId } = useActions();
-  const editing = editingId === id;
+  const { snapshot, editingId, setEditingId, readOnly } = useActions();
+  const editing = editingId === id && !readOnly;
   const w = width ?? 160;
   const h = height ?? 70;
   return (
     <div className="dcos-shape" style={{ width: w, height: h }}>
       <NodeResizer
-        isVisible={selected && !editing}
+        isVisible={selected && !editing && !readOnly}
         minWidth={40}
         minHeight={30}
         keepAspectRatio={data.shape === 'circle'}

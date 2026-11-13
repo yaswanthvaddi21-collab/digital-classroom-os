@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { UndoStack } from './history';
+import { TextEditSession, UndoStack } from './history';
 import { layoutTree } from './layout';
 import { diagramTemplates } from './templates';
 import { deserializeDiagram, edgeMarkers, serializeDiagram, styledEdge } from './types';
@@ -22,6 +22,37 @@ describe('UndoStack', () => {
     const h = new UndoStack<number>(3);
     [1, 2, 3, 4, 5].forEach((n) => h.push(n));
     expect([h.undo(6), h.undo(5), h.undo(4), h.undo(3)]).toEqual([5, 4, 3, undefined]);
+  });
+});
+
+describe('TextEditSession', () => {
+  const state = (label: string) => ({ nodes: [label], edges: [] as string[] });
+
+  it('records the state from focus once for a burst of typing', () => {
+    const t = new TextEditSession<ReturnType<typeof state>>();
+    const before = state('A');
+    t.begin(before);
+    expect(t.stepFor(before, false)).toBe(before);
+    expect(t.stepFor(state('AB'), false)).toBeNull();
+    t.end();
+    expect(t.stepFor(state('ABC'), true)).toEqual(state('ABC'));
+  });
+
+  it('never records a focus state that other edits have overtaken', () => {
+    const t = new TextEditSession<ReturnType<typeof state>>();
+    t.begin(state('A'));
+    t.invalidate(); // another undo step or a new selection
+    const now = state('A, B');
+    expect(t.stepFor(now, true)).toBe(now);
+    expect(t.stepFor(now, false)).toBe(now);
+    expect(t.stepFor(state('A, BC'), false)).toBeNull();
+  });
+
+  it('falls back to the current state when the diagram changed without a step', () => {
+    const t = new TextEditSession<ReturnType<typeof state>>();
+    t.begin(state('A'));
+    const moved = state('A');
+    expect(t.stepFor(moved, false)).toBe(moved);
   });
 });
 

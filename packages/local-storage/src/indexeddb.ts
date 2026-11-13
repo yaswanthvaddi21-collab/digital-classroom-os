@@ -42,8 +42,20 @@ interface DcosDB extends DBSchema {
   // ── v2 ──
   item_index: { key: string; value: ItemSummary; indexes: { by_kind: string } };
   drafts: { key: string; value: Draft };
-  attachments: { key: string; value: Attachment; indexes: { by_sha256: string } };
+  attachments: { key: string; value: StoredAttachment; indexes: { by_sha256: string } };
 }
+
+/**
+ * A second id for bytes already stored under another id. It has no sha256, so the unique by_sha256 index
+ * keeps exactly one entry per content. Created when a backup refers to bytes this device holds under its own id.
+ */
+interface AttachmentAlias {
+  id: string;
+  aliasOf: string;
+  createdAt: string;
+}
+type StoredAttachment = Attachment | AttachmentAlias;
+const isAlias = (a: StoredAttachment): a is AttachmentAlias => 'aliasOf' in a;
 
 type ItemStore = 'documents' | 'diagrams';
 type VersionStore = 'document_versions' | 'diagram_versions';
@@ -89,6 +101,17 @@ const MIGRATIONS: Array<(db: IDBPDatabase<DcosDB>, tx: UpgradeTx) => Promise<voi
 async function sha256Hex(data: ArrayBuffer): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', data);
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Aliases are written out as full attachments under their own id, so every id in the backup carries its bytes. */
+function exportAttachments(stored: StoredAttachment[]) {
+  const byId = new Map(stored.map((a) => [a.id, a]));
+  return stored.flatMap((a) => {
+    const target = isAlias(a) ? byId.get(a.aliasOf) : a;
+    if (!target || isAlias(target)) return [];
+    const { data, ...rest } = target;
+    return [{ ...rest, id: a.id, createdAt: a.createdAt, base64: toBase64(data) }];
+  });
 }
 
 function summarize(item: WorkspaceItem): ItemSummary {
@@ -176,6 +199,8 @@ export interface IndexedDbAdapterOptions {
 export class IndexedDbAdapter implements StorageAdapter {
   private dbPromise: Promise<IDBPDatabase<DcosDB>>;
   private deviceIdPromise: Promise<string> | null = null;
+  /** Set once another tab's upgrade made us close the connection; every later call fails clearly. */
+  private closedForUpgrade = false;
   private readonly safetyPrefix: string;
 
   constructor(
@@ -192,6 +217,9 @@ export class IndexedDbAdapter implements StorageAdapter {
       await copyDatabase(this.dbName, `${this.safetyPrefix}${current}`, current);
     }
     const options = this.options;
+    const markClosed = () => {
+      this.closedForUpgrade = true;
+    };
     const db = await openDB<DcosDB>(this.dbName, SCHEMA_VERSION, {
       async upgrade(database, oldVersion, _newVersion, tx) {
         for (let v = oldVersion; v < SCHEMA_VERSION; v++) await MIGRATIONS[v](database, tx);
@@ -203,7 +231,10 @@ export class IndexedDbAdapter implements StorageAdapter {
         // Let the app save pending edits first; the upgrading tab waits until we close.
         Promise.resolve(options.onVersionChange?.())
           .catch(() => undefined)
-          .finally(() => db.close());
+          .finally(() => {
+            markClosed();
+            db.close();
+          });
       },
     });
     if (current > 0 && current < SCHEMA_VERSION) {
@@ -213,6 +244,7 @@ export class IndexedDbAdapter implements StorageAdapter {
   }
 
   private db() {
+    if (this.closedForUpgrade) return Promise.reject(new Error('The app was updated in another tab. Reload to keep working.'));
     return this.dbPromise;
   }
 
@@ -456,22 +488,27 @@ export class IndexedDbAdapter implements StorageAdapter {
       deviceId: await this.deviceId(),
       items,
       versions,
-      attachments: (await db.getAll('attachments')).map(({ data, ...rest }) => ({ ...rest, base64: toBase64(data) })),
+      attachments: exportAttachments(await db.getAll('attachments')),
     };
   }
 
   async importBackup(raw: unknown): Promise<ImportReport> {
     const { items, versions, unsupported, attachments } = validateBackup(raw);
+    // Hash the bytes ourselves (before the transaction: only IndexedDB requests may be awaited inside it).
+    // A missing or wrong sha256 in the file must not collide with, or impersonate, other stored bytes.
+    for (const a of attachments) a.sha256 = await sha256Hex(a.data);
     const db = await this.db();
     const report: ImportReport = { added: 0, skipped: 0, copied: 0, versionsAdded: 0, unsupported, attachmentsAdded: 0 };
     const idMap = new Map<string, string>();
     const tx = db.transaction(['documents', 'diagrams', 'document_versions', 'diagram_versions', 'item_index', 'attachments'], 'readwrite');
     const index = tx.objectStore('item_index');
     // Attachments first: content refers to them by id, which is kept so references stay valid.
+    // Bytes already stored under another id get an alias, so the import never fails on the unique hash index.
     for (const a of attachments) {
       const store = tx.objectStore('attachments');
       if (await store.get(a.id)) continue;
-      await store.add(a);
+      const sameBytes = await store.index('by_sha256').get(a.sha256);
+      await store.add(sameBytes ? { id: a.id, aliasOf: sameBytes.id, createdAt: a.createdAt } : a);
       report.attachmentsAdded++;
     }
     const restoredKeys = new Set(
@@ -523,7 +560,7 @@ export class IndexedDbAdapter implements StorageAdapter {
     const sha256 = await sha256Hex(data);
     const db = await this.db();
     const tx = db.transaction('attachments', 'readwrite');
-    const existing = await tx.store.index('by_sha256').get(sha256);
+    const existing = (await tx.store.index('by_sha256').get(sha256)) as Attachment | undefined;
     if (existing) {
       await tx.done;
       const { data: _data, ...meta } = existing;
@@ -537,7 +574,11 @@ export class IndexedDbAdapter implements StorageAdapter {
   }
 
   async getAttachment(id: string): Promise<Attachment | undefined> {
-    return (await this.db()).get('attachments', id);
+    const db = await this.db();
+    const found = await db.get('attachments', id);
+    if (!found || !isAlias(found)) return found;
+    const target = await db.get('attachments', found.aliasOf);
+    return target && !isAlias(target) ? { ...target, id } : undefined;
   }
 
   async getMeta(key: string): Promise<string | undefined> {
@@ -618,7 +659,7 @@ export class IndexedDbAdapter implements StorageAdapter {
 
   /** Closes the connection. Mainly for tests. */
   async close() {
-    (await this.db()).close();
+    (await this.dbPromise).close();
   }
 
   /** Database names, for tests and diagnostics. */

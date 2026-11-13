@@ -237,7 +237,12 @@ export function Menu({ trigger, items, align = 'start' }: { trigger: (props: { o
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // Closing the menu consumes Escape, so an enclosing modal <dialog> stays open.
+      e.preventDefault();
+      setOpen(false);
+    };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     return () => {

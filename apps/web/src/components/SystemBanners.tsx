@@ -2,7 +2,7 @@ import { Button } from '@dcos/ui';
 import { RefreshCw, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { flushAll, useStorageEvents } from '../lib/storage';
+import { flushAll, useStorageEvents, type FlushOutcome } from '../lib/storage';
 
 function Banner({ tone, children, action }: { tone: 'info' | 'warning'; children: React.ReactNode; action?: React.ReactNode }) {
   return (
@@ -21,24 +21,56 @@ function Banner({ tone, children, action }: { tone: 'info' | 'warning'; children
   );
 }
 
+const VERSION_CHANGE_TEXT: Record<FlushOutcome, string> = {
+  saved: 'Classroom OS was updated in another tab. Your work is saved. Reload to keep editing.',
+  kept: 'Classroom OS was updated in another tab. Some recent edits could not be saved yet. They are kept on this device and will be offered for recovery after you reload.',
+  failed: 'Classroom OS was updated in another tab. Some recent edits could not be saved. Copy anything you need from the open page before reloading.',
+};
+
 /**
  * App-wide notices. Updates never reload a page on their own: the user chooses when, and pending edits are
- * saved first (audit STOR-9 / CODE-10).
+ * saved first (audit STOR-9 / CODE-10). If edits could be neither saved nor kept, the page does not reload
+ * until the user confirms.
  */
 export function SystemBanners() {
-  const { versionChange, blocked } = useStorageEvents();
+  const { versionChange, blocked, work } = useStorageEvents();
   const [reloading, setReloading] = useState(false);
+  const [unsafe, setUnsafe] = useState<boolean | null>(null);
   const {
     needRefresh: [needRefresh],
     updateServiceWorker,
   } = useRegisterSW();
 
-  const reload = async (applyUpdate: boolean) => {
+  const reload = async (applyUpdate: boolean, force = false) => {
     setReloading(true);
-    await flushAll();
+    const outcome = await flushAll();
+    if (outcome === 'failed' && !force) {
+      setUnsafe(applyUpdate);
+      setReloading(false);
+      return;
+    }
     if (applyUpdate) await updateServiceWorker(true);
     else location.reload();
   };
+
+  if (unsafe !== null)
+    return (
+      <Banner
+        tone="warning"
+        action={
+          <>
+            <Button size="sm" disabled={reloading} onClick={() => setUnsafe(null)}>
+              Keep this page open
+            </Button>
+            <Button size="sm" variant="primary" disabled={reloading} onClick={() => void reload(unsafe, true)}>
+              {unsafe ? 'Update anyway' : 'Reload anyway'}
+            </Button>
+          </>
+        }
+      >
+        Some edits could not be saved, so the page was not reloaded. Copy anything you need first.
+      </Banner>
+    );
 
   return (
     <>
@@ -51,7 +83,7 @@ export function SystemBanners() {
             </Button>
           }
         >
-          Classroom OS was updated in another tab. Your work is saved — reload to keep editing.
+          {VERSION_CHANGE_TEXT[work]}
         </Banner>
       )}
       {blocked && !versionChange && (
@@ -66,7 +98,7 @@ export function SystemBanners() {
             </Button>
           }
         >
-          A new version of Classroom OS is ready. Your work is saved first.
+          A new version of Classroom OS is ready. Open work is saved before it updates.
         </Banner>
       )}
     </>

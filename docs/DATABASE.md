@@ -4,29 +4,41 @@
 
 UUID ids · `createdAt`/`updatedAt` ISO timestamps · owner device id · version numbers · soft delete (`deletedAt`) · migrations · transactional writes · backup and restore. Each device has its own database; shared records move only through explicit sync operations.
 
-## Implemented now (IndexedDB, schema v1)
+## Implemented now (IndexedDB, schema v2)
 
 Database `digital-classroom-os`:
 
-| Store | Key | Indexes | Holds |
-|---|---|---|---|
-| `documents` | `id` | — | `WorkspaceItem<DocumentContent>` |
-| `diagrams` | `id` | — | `WorkspaceItem<DiagramContent>` |
-| `document_versions` | `id` | `by_item` → `itemId` | `ItemVersion` snapshots |
-| `diagram_versions` | `id` | `by_item` → `itemId` | `ItemVersion` snapshots |
-| `meta` | `key` | — | `deviceId` |
+| Store | Since | Key | Indexes | Holds |
+|---|---|---|---|---|
+| `documents` | v1 | `id` | — | `WorkspaceItem<DocumentContent>` |
+| `diagrams` | v1 | `id` | — | `WorkspaceItem<DiagramContent>` |
+| `document_versions` | v1 | `id` | `by_item` → `itemId` | `ItemVersion` snapshots |
+| `diagram_versions` | v1 | `id` | `by_item` → `itemId` | `ItemVersion` snapshots |
+| `meta` | v1 | `key` | — | `deviceId`, `lastBackupAt`, other small settings |
+| `item_index` | v2 | `id` | `by_kind` → `kind` | Lightweight list rows (title, dates, favourite, trash) so lists don't load full content |
+| `drafts` | v2 | `id` | — | Unsaved edits kept after a save failed, offered back when the item reopens |
+| `attachments` | v2 | `id` | `by_sha256` (unique) | Binary files, deduplicated by hash. Today: PNG previews of diagrams embedded in documents. When a backup brings bytes this device already has under another id, an alias record `{ id, aliasOf }` is stored instead; `getAttachment` follows it |
 
-`diagram_versions` extends the PRD's entity list so diagrams get the same history guarantees as documents.
+`diagram_versions` extends the PRD's entity list so diagrams get the same history guarantees as documents. The v1 stores are frozen: v2 only adds stores.
 
 ```ts
 WorkspaceItem { id, kind: 'document'|'diagram', title, content, version, createdAt, updatedAt,
-                deletedAt|null, ownerDeviceId, favorite, templateId|null, lastSnapshotAt|null }
+                deletedAt|null, ownerDeviceId, favorite, templateId|null, lastSnapshotAt|null, restoredFrom? }
 ItemVersion   { id, itemId, kind, version, title, content, createdAt, reason: 'create'|'manual'|'auto'|'restore' }
+Attachment    { id, sha256, mimeType, sizeBytes, createdAt, data: ArrayBuffer }
 ```
 
-**Migrations:** `MIGRATIONS[i]` upgrades version *i* → *i+1* inside IndexedDB's `upgrade` transaction. Shipped migrations are never edited.
+**Writes:** `save(kind, id, patch, expectedVersion)` checks the version and writes the record, its index row and any version snapshot in one transaction. A stale `expectedVersion` throws `ConflictError`. Favourite and trash changes are metadata: they update the index row but don't bump `version` or `updatedAt`.
 
-**Backup file:** `{ format: 'dcos-backup', schemaVersion, exportedAt, deviceId, items[], versions[] }`. Import validates the file and rejects newer schemas. Unknown ids are added, identical items are skipped, and divergent items are added as "(restored)" copies, never overwriting local work.
+**Version history:** snapshots on create, on Ctrl/⌘+S (`snapshot()`, which doesn't bump the item), at most every 10 minutes of editing, and before a restore. Pruning keeps exactly 50 per item and never evicts the create version, the newest manual version or the newest pre-restore version.
+
+**Migrations:** `MIGRATIONS[i](db, tx)` upgrades version *i* → *i+1* inside IndexedDB's `upgrade` transaction, and backfills new stores from existing data. Before any upgrade, the adapter copies the whole old database to `digital-classroom-os-backup-v<old>`. Settings → Storage lists these safety copies and can export one as a backup file or delete it. Shipped migrations are never edited. Tests open a real v0.1.0 database (fixtures in `tests/fixtures/v0.1.0`) and check that it upgrades without loss.
+
+**Content schemas** are versioned separately from the database: documents are schema 1, or 2 when they contain an embedded diagram (so documents without diagrams still open in v0.1.0); diagrams are schema 2. Content from a newer app opens read-only rather than being rewritten.
+
+**Backup file (format 2):** `{ format: 'dcos-backup', formatVersion: 2, schemaVersion, exportedAt, deviceId, items[], versions[], attachments[] }`, with attachments as base64. `schemaVersion` is the highest content schema in the file, not the database version. Import validates every record first and imports nothing if the file is malformed. Unknown ids are added, identical items are skipped, and divergent items are added as "(restored)" copies, never overwriting local work. Copies remember `restoredFrom`, so importing the same file twice adds nothing. Items needing a newer app are left out and counted. Import hashes attachment bytes itself, so a missing or wrong `sha256` in the file can't cause a collision.
+
+**When another tab upgrades the database:** this tab saves what it can, closes its connection and stops editing behind a clear message. Edits that could not be written are kept synchronously in `localStorage` (`dcos-emergency-draft:<kind>:<id>`) and offered back through the normal draft recovery on the next load.
 
 ## Native target (SQLite, Phase 5)
 

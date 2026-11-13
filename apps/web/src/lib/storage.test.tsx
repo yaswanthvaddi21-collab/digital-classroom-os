@@ -1,15 +1,22 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
-import { IndexedDbAdapter } from '@dcos/local-storage';
+import { IndexedDbAdapter, SCHEMA_VERSION, type WorkspaceItem } from '@dcos/local-storage';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { openDB } from 'idb';
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import { storage, useEditableItem } from './storage';
+import { emergencyDraftKey, flushAll, storage, useEditableItem, useStorageEvents } from './storage';
 
 // A second connection to the same database plays "another window".
 const otherWindow = new IndexedDbAdapter();
 afterAll(() => otherWindow.close());
 
 const SLOW = { timeout: 4000 };
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const announce = (id: string) => {
+  const tab = new BroadcastChannel('dcos-storage');
+  tab.postMessage({ kind: 'document', id });
+  tab.close();
+};
 
 async function newDoc(content: unknown = { text: 'v1' }) {
   return storage.create('document', { title: 'Doc', content });
@@ -228,5 +235,173 @@ describe('useEditableItem', () => {
     act(() => result.current.updateContent({ text: 'backgrounded' }));
     window.dispatchEvent(new Event('pagehide'));
     await waitFor(async () => expect((await storage.get('document', doc.id))?.content).toEqual({ text: 'backgrounded' }), { timeout: 400 });
+  });
+
+  it('saves an undo back to the stored content while a save is in flight (STOR-REVERT-INFLIGHT)', async () => {
+    const doc = await newDoc({ text: 'S0' });
+    const { result } = renderHook(() => useEditableItem('document', doc.id));
+    await waitFor(() => expect(result.current.status).toBe('saved'));
+    const realSave = storage.save.bind(storage);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const save = vi.spyOn(storage, 'save').mockImplementation(async (...args: Parameters<typeof storage.save>) => {
+      await gate;
+      return realSave(...args);
+    });
+    act(() => result.current.updateContent({ text: 'S1' }));
+    let inFlight!: Promise<void>;
+    act(() => {
+      inFlight = result.current.flush();
+    });
+    await waitFor(() => expect(result.current.status).toBe('saving'));
+    act(() => result.current.updateContent({ text: 'S0' })); // undo while S1 is being written
+    release();
+    await act(async () => {
+      await inFlight;
+      await result.current.flush();
+    });
+    save.mockRestore();
+    expect((await storage.get('document', doc.id))?.content).toEqual({ text: 'S0' });
+    expect(result.current.status).toBe('saved');
+  });
+
+  it('recovers a draft into a copy when the user typed after it was offered (STOR-RECOVER-PENDING)', async () => {
+    const doc = await newDoc({ text: 'original' });
+    await storage.saveDraft({ kind: 'document', itemId: doc.id, baseVersion: doc.version, content: { text: 'draft from last session' } });
+    const { result } = renderHook(() => useEditableItem('document', doc.id));
+    await waitFor(() => expect(result.current.draft).not.toBeNull());
+    act(() => result.current.updateContent({ text: 'original + typed' }));
+    let outcome: Awaited<ReturnType<typeof result.current.recoverDraft>> = null;
+    await act(async () => {
+      outcome = await result.current.recoverDraft();
+    });
+    expect(outcome!.appliedTo).toBe('copy');
+    await sleep(900); // nothing left to save over the item later
+    expect((await storage.get('document', doc.id))?.content).toEqual({ text: 'original + typed' });
+    expect((await storage.get('document', outcome!.id))?.content).toEqual({ text: 'draft from last session' });
+    expect(await storage.getDraft('document', doc.id)).toBeUndefined();
+  });
+
+  it('keeps the state a recovered draft replaces in version history (STOR-RECOVER-PENDING)', async () => {
+    const doc = await newDoc({ text: 'v1' });
+    const v2 = await storage.save('document', doc.id, { content: { text: 'v2' } }, doc.version);
+    await storage.saveDraft({ kind: 'document', itemId: doc.id, baseVersion: v2.version, content: { text: 'draft' } });
+    const { result } = renderHook(() => useEditableItem('document', doc.id));
+    await waitFor(() => expect(result.current.draft).not.toBeNull());
+    let outcome: Awaited<ReturnType<typeof result.current.recoverDraft>> = null;
+    await act(async () => {
+      outcome = await result.current.recoverDraft();
+    });
+    expect(outcome).toEqual({ appliedTo: 'item', id: doc.id });
+    expect((await storage.get('document', doc.id))?.content).toEqual({ text: 'draft' });
+    const kept = (await storage.listVersions('document', doc.id)).find((v) => v.reason === 'manual');
+    expect(kept?.version).toBe(v2.version);
+    await storage.restoreVersion('document', doc.id, kept!.id);
+    expect((await storage.get('document', doc.id))?.content).toEqual({ text: 'v2' });
+  });
+
+  it('holds back changes from another tab until released, then adopts them (holdExternalUpdates)', async () => {
+    const doc = await newDoc();
+    const { result } = renderHook(() => useEditableItem('document', doc.id));
+    await waitFor(() => expect(result.current.status).toBe('saved'));
+    let release!: () => void;
+    act(() => {
+      release = result.current.holdExternalUpdates();
+    });
+    await otherWindow.save('document', doc.id, { content: { text: 'edited elsewhere' } }, doc.version);
+    announce(doc.id);
+    await sleep(200);
+    expect(result.current.item?.content).toEqual({ text: 'v1' });
+    expect(result.current.externalRevision).toBe(0);
+
+    act(() => release());
+    await waitFor(() => expect(result.current.item?.content).toEqual({ text: 'edited elsewhere' }));
+    expect(result.current.externalRevision).toBe(1);
+
+    // Releasing twice does not cancel a later hold.
+    act(() => release());
+    act(() => {
+      release = result.current.holdExternalUpdates();
+    });
+    const latest = (await storage.get('document', doc.id))!;
+    await otherWindow.save('document', doc.id, { content: { text: 'again' } }, latest.version);
+    announce(doc.id);
+    await sleep(200);
+    expect(result.current.item?.content).toEqual({ text: 'edited elsewhere' });
+    act(() => release());
+    await waitFor(() => expect(result.current.item?.content).toEqual({ text: 'again' }));
+  });
+
+  it('does not adopt on release while edits are pending; they meet a conflict instead (holdExternalUpdates)', async () => {
+    const doc = await newDoc();
+    const { result } = renderHook(() => useEditableItem('document', doc.id));
+    await waitFor(() => expect(result.current.status).toBe('saved'));
+    let release!: () => void;
+    act(() => {
+      release = result.current.holdExternalUpdates();
+    });
+    await otherWindow.save('document', doc.id, { content: { text: 'theirs' } }, doc.version);
+    announce(doc.id);
+    act(() => result.current.updateContent({ text: 'mine' }));
+    act(() => release());
+    await waitFor(() => expect(result.current.status).toBe('conflict'), SLOW);
+    expect(result.current.externalRevision).toBe(0);
+    expect((await storage.get('document', doc.id))?.content).toEqual({ text: 'theirs' });
+  });
+
+  it('offers edits kept in localStorage through the normal draft recovery (STOR-VERSIONCHANGE-CLOSED)', async () => {
+    const doc = await newDoc({ text: 'stored' });
+    const key = emergencyDraftKey('document', doc.id);
+    localStorage.setItem(key, JSON.stringify({ baseVersion: doc.version, content: { text: 'kept while closed' }, savedAt: new Date().toISOString() }));
+    const { result } = renderHook(() => useEditableItem('document', doc.id));
+    await waitFor(() => expect(result.current.draft?.content).toEqual({ text: 'kept while closed' }));
+    expect(localStorage.getItem(key)).toBeNull();
+    expect((await storage.getDraft('document', doc.id))?.content).toEqual({ text: 'kept while closed' });
+    let outcome: Awaited<ReturnType<typeof result.current.recoverDraft>> = null;
+    await act(async () => {
+      outcome = await result.current.recoverDraft();
+    });
+    expect(outcome).toEqual({ appliedTo: 'item', id: doc.id });
+    expect((await storage.get('document', doc.id))?.content).toEqual({ text: 'kept while closed' });
+  });
+
+  // Must stay last: it upgrades the shared database, which closes this file's connections for good.
+  it('stops editing after another tab upgrades the database and keeps unsaved edits in localStorage (STOR-VERSIONCHANGE-CLOSED)', async () => {
+    const ok = await newDoc({ text: 'a' });
+    const failing = await newDoc({ text: 'b' });
+    const a = renderHook(() => useEditableItem('document', ok.id));
+    const b = renderHook(() => useEditableItem('document', failing.id));
+    const banner = renderHook(() => useStorageEvents());
+    await waitFor(() => expect([a.result.current.status, b.result.current.status]).toEqual(['saved', 'saved']));
+    const realSave = storage.save.bind(storage);
+    const save = vi.spyOn(storage, 'save').mockImplementation(async (...args: Parameters<typeof storage.save>) => {
+      if (args[1] === failing.id) throw new Error('QuotaExceededError');
+      return realSave(...args);
+    });
+    act(() => {
+      a.result.current.updateContent({ text: 'a typed before upgrade' });
+      b.result.current.updateContent({ text: 'b typed before upgrade' });
+    });
+
+    const newer = await openDB('digital-classroom-os', SCHEMA_VERSION + 1);
+    await waitFor(() => expect(b.result.current.status).toBe('reload-required'));
+    expect(a.result.current.status).toBe('reload-required');
+    expect(a.result.current.reloadRequired).toBe(true);
+    expect(banner.result.current).toMatchObject({ versionChange: true, work: 'kept' });
+    expect(((await newer.get('documents', ok.id)) as WorkspaceItem).content).toEqual({ text: 'a typed before upgrade' });
+    const kept = () => JSON.parse(localStorage.getItem(emergencyDraftKey('document', failing.id)) ?? 'null');
+    expect(kept()).toMatchObject({ baseVersion: failing.version, content: { text: 'b typed before upgrade' } });
+    expect(localStorage.getItem(emergencyDraftKey('document', ok.id))).toBeNull();
+
+    // Edits that still arrive are kept synchronously, never sent to the closed database.
+    save.mockClear();
+    act(() => a.result.current.updateContent({ text: 'a typed after upgrade' }));
+    expect(JSON.parse(localStorage.getItem(emergencyDraftKey('document', ok.id))!)).toMatchObject({ content: { text: 'a typed after upgrade' } });
+    expect(await flushAll()).toBe('kept');
+    expect(save).not.toHaveBeenCalled();
+    expect(banner.result.current.work).toBe('kept');
+    save.mockRestore();
+    await expect(storage.get('document', ok.id)).rejects.toThrow(/updated in another tab/);
+    newer.close();
   });
 });

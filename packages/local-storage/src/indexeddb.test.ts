@@ -291,6 +291,55 @@ describe('attachments (embedded diagram previews)', () => {
     await other.close();
   });
 
+  it('imports bytes this device already holds under another id, and keeps both ids working (STOR-IMPORT-ATTACH-SHA)', async () => {
+    const a = await store.putAttachment(png(3), 'image/png');
+    await store.create('document', { title: 'From A', content: { schemaVersion: 1, previewId: a.id } });
+    const backup = JSON.parse(JSON.stringify(await store.exportBackup()));
+
+    const deviceB = new IndexedDbAdapter(`${name}-b`);
+    const b = await deviceB.putAttachment(png(3), 'image/png');
+    expect(b.id).not.toBe(a.id);
+    expect(await deviceB.importBackup(backup)).toMatchObject({ added: 1, attachmentsAdded: 1 });
+    expect(await deviceB.listAll()).toHaveLength(1);
+    expect(new Uint8Array((await deviceB.getAttachment(a.id))!.data)).toEqual(new Uint8Array(png(3)));
+    expect((await deviceB.getAttachment(a.id))!.id).toBe(a.id);
+    expect(new Uint8Array((await deviceB.getAttachment(b.id))!.data)).toEqual(new Uint8Array(png(3)));
+    // Still one stored copy per content, and re-importing is a no-op.
+    expect((await deviceB.putAttachment(png(3), 'image/png')).id).toBe(b.id);
+    expect(await deviceB.importBackup(backup)).toMatchObject({ attachmentsAdded: 0, skipped: 1 });
+
+    // A backup of device B carries bytes for both ids into a third device.
+    const fromB = JSON.parse(JSON.stringify(await deviceB.exportBackup()));
+    expect(fromB.attachments.map((x: { id: string }) => x.id).sort()).toEqual([a.id, b.id].sort());
+    const deviceC = new IndexedDbAdapter(`${name}-c`);
+    expect(await deviceC.importBackup(fromB)).toMatchObject({ added: 1, attachmentsAdded: 2 });
+    for (const id of [a.id, b.id]) expect(new Uint8Array((await deviceC.getAttachment(id))!.data)).toEqual(new Uint8Array(png(3)));
+    await deviceB.close();
+    await deviceC.close();
+  });
+
+  it('hashes imported bytes itself, so a missing or wrong sha256 cannot collide (STOR-IMPORT-ATTACH-SHA)', async () => {
+    const b64 = (seed: number) => Buffer.from(new Uint8Array(png(seed))).toString('base64');
+    const file = {
+      format: 'dcos-backup', formatVersion: 2, schemaVersion: 1, exportedAt: '2026-01-01T00:00:00Z', deviceId: 'd',
+      items: [{ id: 'x', kind: 'document', title: 'X', version: 1, content: {} }],
+      versions: [],
+      attachments: [
+        { id: 'no-sha-1', base64: b64(4) },
+        { id: 'no-sha-2', base64: b64(5) },
+        { id: 'wrong-sha', sha256: 'f'.repeat(64), base64: b64(6) },
+      ],
+    };
+    expect(await store.importBackup(file)).toMatchObject({ added: 1, attachmentsAdded: 3 });
+    for (const [id, seed] of [['no-sha-1', 4], ['no-sha-2', 5], ['wrong-sha', 6]] as const) {
+      const got = (await store.getAttachment(id))!;
+      expect(new Uint8Array(got.data)).toEqual(new Uint8Array(png(seed)));
+      expect(got.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(got.sha256).not.toBe('f'.repeat(64));
+    }
+    expect((await store.putAttachment(png(4), 'image/png')).id).toBe('no-sha-1');
+  });
+
   it('rejects damaged attachment data without importing anything', async () => {
     const bad = { format: 'dcos-backup', formatVersion: 2, schemaVersion: 1, exportedAt: '2026-01-01T00:00:00Z', deviceId: 'd', items: [{ id: 'x', kind: 'document', title: 'X', version: 1, content: {} }], versions: [], attachments: [{ id: 'a', base64: '!!!not base64' }] };
     await expect(store.importBackup(bad)).rejects.toThrow(/damaged/);
@@ -376,6 +425,16 @@ describe('IndexedDB v1 → v2 upgrade (MIGRATION-PLAN §4)', () => {
     await a.listAll();
     const newer = await openDB(db, SCHEMA_VERSION + 1);
     expect(onVersionChange).toHaveBeenCalledTimes(1);
+    newer.close();
+  });
+
+  it('fails clearly, instead of with a closed-connection error, after giving the database away (STOR-VERSIONCHANGE-CLOSED)', async () => {
+    const db = `blocking-closed-${n}`;
+    const a = new IndexedDbAdapter(db, { onVersionChange: () => undefined });
+    const doc = await a.create('document', { title: 'A', content: 1 });
+    const newer = await openDB(db, SCHEMA_VERSION + 1);
+    await expect(a.save('document', doc.id, { content: 2 }, doc.version)).rejects.toThrow(/updated in another tab/);
+    await expect(a.saveDraft({ kind: 'document', itemId: doc.id, baseVersion: 1, content: 2 })).rejects.toThrow(/updated in another tab/);
     newer.close();
   });
 

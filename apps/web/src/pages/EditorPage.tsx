@@ -16,8 +16,12 @@ export function EditorPage({ module }: { module: ModuleDef }) {
 
 function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string; reload: () => void }) {
   const editable = useEditableItem<unknown>(module.kind, id);
-  const { host: diagramHost, dialogs } = useDiagramHost();
-  const { item, status, saveNow } = editable;
+  const { host: diagramHost, dialogs, active: diagramDialogOpen } = useDiagramHost();
+  const { item, status, saveNow, holdExternalUpdates } = editable;
+
+  // A diagram dialog writes into the editor it was opened from. Remounting that editor for another tab's save would
+  // drop the diagram, so while one is open external versions wait and later edits go through the conflict flow.
+  useEffect(() => (diagramDialogOpen ? holdExternalUpdates() : undefined), [diagramDialogOpen, holdExternalUpdates]);
 
   // Ctrl/⌘+S saves a version; held keys do not repeat it (audit CODE-1).
   useEffect(() => {
@@ -32,6 +36,8 @@ function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string
   }, [saveNow]);
 
   if (status === 'missing' || status === 'load-error') return <MissingItem module={module} error={status === 'load-error' ? editable.lastError : null} />;
+  // Opened after another tab upgraded the database: nothing could load, so say why (the app banner offers Reload).
+  if (!item && status === 'reload-required') return <MissingItem module={module} error="The app was updated in another tab. Reload this page to open it." />;
   if (!item) return null;
 
   return (

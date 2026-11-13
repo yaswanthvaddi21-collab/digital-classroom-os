@@ -106,3 +106,168 @@ describe('importing files drawn in diagrams.net', () => {
     expect(htmlToText(null)).toBe('');
   });
 });
+
+const page = (cells: string) => `<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>${cells}</root></mxGraphModel>`;
+
+describe('cells wrapped in <UserObject> / <object>', () => {
+  // diagrams.net wraps a cell that has a link, tooltip or custom properties; the wrapper holds the id and label.
+  const xml = page(`
+    <UserObject label="Alpha" link="https://example.com" id="a"><mxCell style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1"><mxGeometry x="0" y="0" width="100" height="50" as="geometry"/></mxCell></UserObject>
+    <object label="&lt;b&gt;Beta&lt;/b&gt;" tooltip="Second step" owner="sam" id="b"><mxCell style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1"><mxGeometry x="200" y="0" width="100" height="50" as="geometry"/></mxCell></object>
+    <UserObject label="" id="box"><mxCell style="rounded=0;container=1;" vertex="1" parent="1"><mxGeometry x="400" y="100" width="200" height="120" as="geometry"/></mxCell></UserObject>
+    <mxCell id="inner" value="Inner" style="rounded=1;" vertex="1" parent="box"><mxGeometry x="20" y="30" width="80" height="40" as="geometry"/></mxCell>
+    <UserObject label="Book" id="cls"><mxCell style="swimlane;fontStyle=1;childLayout=stackLayout;startSize=26;" vertex="1" parent="1"><mxGeometry x="0" y="200" width="160" height="60" as="geometry"/></mxCell></UserObject>
+    <UserObject label="+ title: String" id="row"><mxCell style="text;align=left;" vertex="1" parent="cls"><mxGeometry y="26" width="160" height="30" as="geometry"/></mxCell></UserObject>
+    <mxCell id="e1" edge="1" source="a" target="b" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+    <UserObject label="checks" link="https://example.com/rule" id="e2"><mxCell edge="1" source="b" target="inner" parent="1" style="endArrow=block;"><mxGeometry relative="1" as="geometry"/></mxCell></UserObject>
+    <mxCell id="e3" edge="1" source="inner" target="row" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>`);
+
+  it('takes the id and label from the wrapper, so shapes and connectors are kept', () => {
+    const { content, report } = fromDrawio(xml);
+    expect(content.nodes.map((n) => [n.id, n.data.label])).toEqual([
+      ['a', 'Alpha'],
+      ['b', 'Beta'],
+      ['box', ''],
+      ['inner', 'Inner'],
+      ['cls', 'Book\n+ title: String'],
+    ]);
+    expect(content.nodes.find((n) => n.id === 'inner')!.position).toEqual({ x: 420, y: 130 });
+    expect(content.edges.map((e) => [e.id, e.source, e.target, e.label])).toEqual([
+      ['e1', 'a', 'b', ''],
+      ['e2', 'b', 'inner', 'checks'],
+      ['e3', 'inner', 'cls', ''],
+    ]);
+    expect(report.notes).toEqual([]);
+    const state = deserializeDiagram(content);
+    expect(state.nodes).toHaveLength(5);
+    expect(state.edges).toHaveLength(3);
+  });
+
+  it('round-trips through export unchanged', () => {
+    const first = fromDrawio(xml).content;
+    const again = fromDrawio(toDrawio(first)).content;
+    expect(again.nodes.map((n) => [n.id, n.data.shape, n.data.label, n.position])).toEqual(first.nodes.map((n) => [n.id, n.data.shape, n.data.label, n.position]));
+    expect(again.edges.map((e) => [e.id, e.source, e.target, e.label])).toEqual(first.edges.map((e) => [e.id, e.source, e.target, e.label]));
+  });
+});
+
+describe('swimlanes and containers', () => {
+  it('imports a process lane as a box behind its shapes, not as a class', () => {
+    const { content, report } = fromDrawio(
+      page(`
+      <mxCell id="lane" value="Student" style="swimlane;startSize=20;fillColor=#dae8fc;" vertex="1" parent="1"><mxGeometry x="100" y="50" width="400" height="200" as="geometry"/></mxCell>
+      <mxCell id="s" value="Submit" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="lane"><mxGeometry x="20" y="40" width="100" height="50" as="geometry"/></mxCell>
+      <mxCell id="r" value="Review" style="rhombus;whiteSpace=wrap;" vertex="1" parent="lane"><mxGeometry x="200" y="40" width="100" height="80" as="geometry"/></mxCell>
+      <mxCell id="e" edge="1" source="s" target="r" parent="lane"><mxGeometry relative="1" as="geometry"/></mxCell>`),
+    );
+    expect(content.nodes.map((n) => [n.id, n.data.shape, n.data.label, n.position])).toEqual([
+      ['lane', 'rectangle', 'Student', { x: 100, y: 50 }],
+      ['s', 'rounded', 'Submit', { x: 120, y: 90 }],
+      ['r', 'diamond', 'Review', { x: 300, y: 90 }],
+    ]);
+    expect(content.nodes[0]).toMatchObject({ width: 400, height: 200 });
+    // Transparent, so connectors between the shapes inside stay visible.
+    expect(content.nodes[0].data.fill).toBe('transparent');
+    expect(content.edges.map((e) => [e.source, e.target])).toEqual([['s', 'r']]);
+    expect(report.notes.join(' ')).toMatch(/Swimlanes were imported as plain boxes/);
+  });
+
+  it('keeps everything in a pool of lanes, at absolute positions, containers first', () => {
+    // Pools in diagrams.net use a stack layout for their lanes; that alone must not make them a class.
+    const { content } = fromDrawio(
+      page(`
+      <mxCell id="b" value="Done" style="ellipse;" vertex="1" parent="lane2"><mxGeometry x="60" y="10" width="80" height="40" as="geometry"/></mxCell>
+      <mxCell id="pool" value="Admissions" style="swimlane;childLayout=stackLayout;resizeParent=1;horizontal=0;startSize=20;horizontalStack=0;html=1;" vertex="1" parent="1"><mxGeometry x="40" y="40" width="500" height="240" as="geometry"/></mxCell>
+      <mxCell id="lane1" value="Applicant" style="swimlane;startSize=20;horizontal=0;html=1;" vertex="1" parent="pool"><mxGeometry x="20" width="480" height="120" as="geometry"/></mxCell>
+      <mxCell id="lane2" value="Office" style="swimlane;startSize=20;horizontal=0;html=1;" vertex="1" parent="pool"><mxGeometry x="20" y="120" width="480" height="120" as="geometry"/></mxCell>
+      <mxCell id="a" value="Apply" style="rounded=1;" vertex="1" parent="lane1"><mxGeometry x="40" y="30" width="100" height="50" as="geometry"/></mxCell>
+      <mxCell id="e" edge="1" source="a" target="b" parent="pool"><mxGeometry relative="1" as="geometry"/></mxCell>`),
+    );
+    expect(content.nodes.map((n) => [n.id, n.data.shape, n.data.label, n.position])).toEqual([
+      ['pool', 'rectangle', 'Admissions', { x: 40, y: 40 }],
+      ['lane1', 'rectangle', 'Applicant', { x: 60, y: 40 }],
+      ['a', 'rounded', 'Apply', { x: 100, y: 70 }],
+      ['lane2', 'rectangle', 'Office', { x: 60, y: 160 }],
+      ['b', 'ellipse', 'Done', { x: 120, y: 170 }],
+    ]);
+    expect(content.edges.map((e) => [e.source, e.target])).toEqual([['a', 'b']]);
+  });
+
+  it('keeps a connector the diagram really draws from a shape back to itself', () => {
+    const d = deserializeDiagram({
+      schemaVersion: 2,
+      nodes: [{ id: 'n1', type: 'shape', position: { x: 0, y: 0 }, width: 160, height: 70, data: { shape: 'rounded', label: 'Loop' } }],
+      edges: [{ id: 'e1', source: 'n1', target: 'n1', sourceHandle: 'r', targetHandle: 't', type: 'smoothstep' }],
+    });
+    expect(d.edges).toHaveLength(1);
+    const { content, report } = fromDrawio(toDrawio(serializeDiagram(d.nodes, d.edges, d.viewport, d.settings), 'Loop'));
+    expect(content.edges.map((e) => [e.source, e.target])).toEqual([['n1', 'n1']]);
+    expect(report.notes.join(' ')).not.toMatch(/left out/);
+  });
+
+  it('says so when shapes nested inside a class row are left out', () => {
+    const { content, report } = fromDrawio(
+      page(`
+      <mxCell id="cls" value="C" style="swimlane;childLayout=stackLayout;startSize=26;" vertex="1" parent="1"><mxGeometry width="160" height="56" as="geometry"/></mxCell>
+      <mxCell id="r" value="r" style="text;" vertex="1" parent="cls"><mxGeometry y="26" width="160" height="30" as="geometry"/></mxCell>
+      <mxCell id="hidden" value="hidden" style="rounded=1;" vertex="1" parent="r"><mxGeometry width="40" height="20" as="geometry"/></mxCell>`),
+    );
+    expect(content.nodes.map((n) => n.data.label)).toEqual(['C\nr']);
+    expect(report.notes).toContain('Shapes nested inside the rows of some class or entity boxes were left out.');
+  });
+
+  it('still folds a class stack, and never emits a connector from a shape to itself', () => {
+    const { content, report } = fromDrawio(
+      page(`
+      <mxCell id="cls" value="Node" style="swimlane;fontStyle=1;childLayout=stackLayout;startSize=26;" vertex="1" parent="1"><mxGeometry width="160" height="86" as="geometry"/></mxCell>
+      <mxCell id="f1" value="+ next: Node" style="text;align=left;" vertex="1" parent="cls"><mxGeometry y="26" width="160" height="30" as="geometry"/></mxCell>
+      <mxCell id="f2" value="+ value: int" style="text;align=left;" vertex="1" parent="cls"><mxGeometry y="56" width="160" height="30" as="geometry"/></mxCell>
+      <mxCell id="loop" edge="1" source="f1" target="f2" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>`),
+    );
+    expect(content.nodes.map((n) => [n.id, n.data.shape, n.data.label])).toEqual([['cls', 'umlClass', 'Node\n+ next: Node\n+ value: int']]);
+    expect(content.edges).toEqual([]);
+    expect(report.notes).toEqual(['1 connector between rows of the same class or entity was left out.']);
+  });
+});
+
+describe('ER tables', () => {
+  it('reads column text from the row cells and keeps connectors to rows', () => {
+    const { content, report } = fromDrawio(
+      page(`
+      <mxCell id="t" value="Users" style="shape=table;startSize=30;container=1;collapsible=1;childLayout=tableLayout;fixedRows=1;rowLines=0;fontStyle=1;align=center;resizeLast=1;html=1;" vertex="1" parent="1"><mxGeometry x="0" y="0" width="180" height="90" as="geometry"/></mxCell>
+      <mxCell id="r1" value="" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;top=0;left=0;right=0;bottom=1;" vertex="1" parent="t"><mxGeometry y="30" width="180" height="30" as="geometry"/></mxCell>
+      <mxCell id="c1b" value="id" style="shape=partialRectangle;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=0;align=left;spacingLeft=6;fontStyle=5;overflow=hidden;whiteSpace=wrap;html=1;" vertex="1" parent="r1"><mxGeometry x="30" width="150" height="30" as="geometry"/></mxCell>
+      <mxCell id="c1a" value="PK" style="shape=partialRectangle;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=0;fontStyle=1;overflow=hidden;whiteSpace=wrap;html=1;" vertex="1" parent="r1"><mxGeometry width="30" height="30" as="geometry"/></mxCell>
+      <mxCell id="r2" value="" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;top=0;left=0;right=0;bottom=0;" vertex="1" parent="t"><mxGeometry y="60" width="180" height="30" as="geometry"/></mxCell>
+      <mxCell id="c2a" value="" style="shape=partialRectangle;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=0;html=1;" vertex="1" parent="r2"><mxGeometry width="30" height="30" as="geometry"/></mxCell>
+      <mxCell id="c2b" value="email" style="shape=partialRectangle;connectable=0;fillColor=none;top=0;left=0;bottom=0;right=0;align=left;spacingLeft=6;html=1;" vertex="1" parent="r2"><mxGeometry x="30" width="150" height="30" as="geometry"/></mxCell>
+      <mxCell id="o" value="Orders" style="rounded=0;" vertex="1" parent="1"><mxGeometry x="300" y="0" width="100" height="50" as="geometry"/></mxCell>
+      <mxCell id="e1" style="edgeStyle=entityRelationEdgeStyle;endArrow=ERmany;startArrow=ERmandOne;" edge="1" source="r1" target="o" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>`),
+    );
+    expect(content.nodes.map((n) => [n.id, n.data.shape, n.data.label])).toEqual([
+      ['t', 'erEntity', 'Users\nPK id\nemail'],
+      ['o', 'rectangle', 'Orders'],
+    ]);
+    expect(content.edges.map((e) => [e.source, e.target])).toEqual([['t', 'o']]);
+    expect(report.notes.join(' ')).toMatch(/Tables were imported as entities/);
+    // Exported, it comes back as the same entity.
+    const again = fromDrawio(toDrawio(content)).content;
+    expect(again.nodes.map((n) => [n.id, n.data.shape, n.data.label])).toEqual(content.nodes.map((n) => [n.id, n.data.shape, n.data.label]));
+  });
+});
+
+describe('characters XML cannot hold', () => {
+  it('drops forbidden control characters and keeps tabs and carriage returns', () => {
+    const original = diagramTemplates.find((t) => t.id === 'flowchart')!.build();
+    original.nodes[0].data.label = 'a\u0000\u000Bb\tc\u001F\uFFFE';
+    original.nodes[1].data.label = 'x\ry';
+    const xml = toDrawio(original, 'Title\u0007 one');
+    expect(xml).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/);
+    expect(xml).toContain('b&#9;c');
+    expect(xml).toContain('x&#13;y');
+    const { content, report } = fromDrawio(xml);
+    expect(report.title).toBe('Title one');
+    expect(content.nodes[0].data.label).toBe('ab\tc');
+    expect(content.nodes[1].data.label).toBe('x\ry');
+  });
+});

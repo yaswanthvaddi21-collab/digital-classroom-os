@@ -1,6 +1,11 @@
+import { useToast } from '@dcos/ui';
 import { mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+
+/** Shown when the editor a diagram dialog was opened from went away (the document was reloaded) before it closed. */
+export const RELOADED_NOT_INSERTED = 'The document was reloaded while you were editing. Your diagram was not inserted.';
+export const RELOADED_NOT_APPLIED = 'The document was reloaded while you were editing. Your changes to the diagram were not applied.';
 
 /** What the app hands back after a diagram has been created or edited. */
 export interface EmbeddedDiagram {
@@ -72,6 +77,7 @@ function previewUrl(host: DiagramHost | null, id: string | null): Promise<string
 
 function DiagramView({ node, selected, updateAttributes, editor, extension, getPos }: ReactNodeViewProps) {
   const host = (extension.options as { host: DiagramHost | null }).host;
+  const toast = useToast();
   const attrs = node.attrs as DiagramAttrs;
   const [url, setUrl] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -92,6 +98,10 @@ function DiagramView({ node, selected, updateAttributes, editor, extension, getP
     setBusy(true);
     try {
       const next = await host.edit({ source: attrs.source, previewId: attrs.previewId, naturalWidth: attrs.naturalWidth, naturalHeight: attrs.naturalHeight, title: attrs.title });
+      if (next && editor.isDestroyed) {
+        toast(RELOADED_NOT_APPLIED, 'error');
+        return;
+      }
       // Keep the width the user chose; the height follows the edited diagram's new shape.
       if (next) updateAttributes({ ...next, ...fitSize(next.naturalWidth, next.naturalHeight, attrs.width, Number.MAX_SAFE_INTEGER) });
     } finally {
@@ -147,6 +157,37 @@ function DiagramView({ node, selected, updateAttributes, editor, extension, getP
 }
 
 /**
+ * Clipboard form of a diagram. Copy, cut and paste go through HTML, so every attribute travels as JSON in
+ * `data-diagram`; the stored document keeps its attributes in the ProseMirror JSON as before.
+ */
+function toCopy(attrs: Record<string, unknown>): string | undefined {
+  const { source, previewId, naturalWidth, naturalHeight, width, height, title } = attrs;
+  try {
+    return JSON.stringify({ source, previewId, naturalWidth, naturalHeight, width, height, title });
+  } catch {
+    return undefined;
+  }
+}
+
+const pasted = new WeakMap<HTMLElement, Record<string, unknown>>();
+/** Reads `data-diagram` once per element. Missing or malformed data gives the defaults, never an error. */
+function copied(el: HTMLElement): Record<string, unknown> {
+  let data = pasted.get(el);
+  if (!data) {
+    try {
+      const v: unknown = JSON.parse(el.getAttribute('data-diagram') ?? '');
+      data = v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+    } catch {
+      data = {};
+    }
+    pasted.set(el, data);
+  }
+  return data;
+}
+const positive = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null);
+const text = (v: unknown) => (typeof v === 'string' ? v : null);
+
+/**
  * An editable diagram inside a document. The diagram's own data lives in `source`; the image shown and exported
  * is a separate PNG attachment (`previewId`) re-rendered whenever the diagram is edited.
  */
@@ -162,14 +203,15 @@ export const DiagramEmbed = Node.create<{ host: DiagramHost | null }>({
   },
 
   addAttributes() {
+    // Not rendered as plain HTML attributes: copy and paste carry them all in `data-diagram` instead (see renderHTML).
     return {
-      source: { default: null, rendered: false },
-      previewId: { default: null, rendered: false },
-      naturalWidth: { default: 400, rendered: false },
-      naturalHeight: { default: 300, rendered: false },
-      width: { default: 400, rendered: false },
-      height: { default: 300, rendered: false },
-      title: { default: '', rendered: false },
+      source: { default: null, rendered: false, parseHTML: (el) => copied(el).source ?? null },
+      previewId: { default: null, rendered: false, parseHTML: (el) => text(copied(el).previewId) || null },
+      naturalWidth: { default: 400, rendered: false, parseHTML: (el) => positive(copied(el).naturalWidth) },
+      naturalHeight: { default: 300, rendered: false, parseHTML: (el) => positive(copied(el).naturalHeight) },
+      width: { default: 400, rendered: false, parseHTML: (el) => positive(copied(el).width) },
+      height: { default: 300, rendered: false, parseHTML: (el) => positive(copied(el).height) },
+      title: { default: '', rendered: false, parseHTML: (el) => text(copied(el).title) },
     };
   },
 
@@ -178,7 +220,7 @@ export const DiagramEmbed = Node.create<{ host: DiagramHost | null }>({
   },
 
   renderHTML({ HTMLAttributes, node }) {
-    return ['figure', mergeAttributes(HTMLAttributes, { 'data-type': 'diagram', 'aria-label': node.attrs.title || 'Diagram' })];
+    return ['figure', mergeAttributes(HTMLAttributes, { 'data-type': 'diagram', 'aria-label': node.attrs.title || 'Diagram', 'data-diagram': toCopy(node.attrs) })];
   },
 
   addNodeView() {
@@ -189,8 +231,11 @@ export const DiagramEmbed = Node.create<{ host: DiagramHost | null }>({
     return {
       insertDiagram:
         (diagram, maxWidth) =>
-        ({ commands }) =>
-          commands.insertContent({ type: this.name, attrs: { ...diagram, ...fitSize(diagram.naturalWidth, diagram.naturalHeight, diagram.naturalWidth, maxWidth) } }),
+        ({ state, commands }) => {
+          const content = { type: this.name, attrs: { ...diagram, ...fitSize(diagram.naturalWidth, diagram.naturalHeight, diagram.naturalWidth, maxWidth) } };
+          // Never replace what is selected (such as a diagram the user clicked): place the new one after it.
+          return state.selection.empty ? commands.insertContent(content) : commands.insertContentAt(state.selection.to, content);
+        },
     };
   },
 });

@@ -70,6 +70,7 @@ export function QuickConnect({ node, nodes, onCreate, onDrop }: QuickConnectProp
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressed = useRef<{ dir: Direction; x: number; y: number; moved: boolean } | null>(null);
   const arrows = useRef<Partial<Record<Direction, HTMLButtonElement | null>>>({});
+  const refocusing = useRef(false);
   const [paletteStyle, setPaletteStyle] = useState<CSSProperties | null>(null);
   useLayoutEffect(() => {
     const el = palette ? arrows.current[palette] : null;
@@ -166,12 +167,16 @@ export function QuickConnect({ node, nodes, onCreate, onDrop }: QuickConnectProp
                 if (e.detail === 0) onCreate(dir);
               }}
               onFocus={() => {
+                // Focus coming back from Escape in the palette must not reopen it.
+                if (refocusing.current) return void (refocusing.current = false);
                 setHover({ dir });
                 setPalette(dir);
               }}
               onKeyDown={(e) => {
                 e.stopPropagation();
-                if (e.key === 'Escape') {
+                // Only when there is something to close: otherwise Escape keeps its normal meaning (closing a dialog).
+                if (e.key === 'Escape' && (palette || hover)) {
+                  e.preventDefault();
                   setPalette(null);
                   setHover(null);
                 }
@@ -192,9 +197,12 @@ export function QuickConnect({ node, nodes, onCreate, onDrop }: QuickConnectProp
                 onKeyDown={(e) => {
                   e.stopPropagation();
                   if (e.key === 'Escape') {
+                    e.preventDefault();
                     setPalette(null);
                     setHover(null);
+                    refocusing.current = true;
                     arrows.current[dir]?.focus();
+                    refocusing.current = false;
                   }
                 }}
               >

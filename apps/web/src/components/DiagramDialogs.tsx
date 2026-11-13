@@ -35,7 +35,7 @@ interface EditRequest {
  * The app's side of embedded diagrams: owns the diagram editor dialog, the library picker and storage, and
  * gives Document Studio a small interface to them. Render `dialogs` once inside the page.
  */
-export function useDiagramHost(): { host: DiagramHost; dialogs: React.ReactNode } {
+export function useDiagramHost(): { host: DiagramHost; dialogs: React.ReactNode; active: boolean } {
   const toast = useToast();
   const [editing, setEditing] = useState<EditRequest | null>(null);
   const [picking, setPicking] = useState<((r: DiagramStart | null) => void) | null>(null);
@@ -91,7 +91,8 @@ export function useDiagramHost(): { host: DiagramHost; dialogs: React.ReactNode 
       )}
     </>
   );
-  return { host, dialogs };
+  // While a dialog is open, the page must keep the editor it will write into (see EditorPage).
+  return { host, dialogs, active: !!editing || !!picking };
 }
 
 type Studio = Awaited<ReturnType<typeof loadDiagramStudio>>;
@@ -102,9 +103,23 @@ function DiagramEditDialog({ request, onDone }: { request: EditRequest; onDone: 
   const api = useRef<DiagramEditorApi>(null);
   const [studio, setStudio] = useState<Studio | null>(null);
   const [title, setTitle] = useState(request.current?.title ?? request.start?.title ?? 'Diagram');
-  const [dirty, setDirty] = useState(!request.current);
+  // Changed from what the dialog opened with: a new diagram fresh from its template or import is not yet a change.
+  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
   const isNew = !request.current;
+  const finished = useRef(false);
+  const finish = useCallback(
+    (r: EmbeddedDiagram | null) => {
+      finished.current = true;
+      onDone(r);
+    },
+    [onDone],
+  );
+  const apiRef = useCallback((a: DiagramEditorApi | null) => {
+    api.current = a;
+    setReadOnly(!!a?.isReadOnly());
+  }, []);
 
   const initial = useMemo(() => {
     if (!studio) return null;
@@ -117,20 +132,22 @@ function DiagramEditDialog({ request, onDone }: { request: EditRequest; onDone: 
   useEffect(() => {
     loadDiagramStudio().then(setStudio, (err) => {
       toast(`The diagram editor could not be loaded: ${err instanceof Error ? err.message : String(err)}`, 'error');
-      onDone(null);
+      finish(null);
     });
     ref.current?.showModal();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cancel = useCallback(() => {
-    if (dirty && !isNew && !confirm('Discard your changes to this diagram?')) return false;
-    onDone(null);
+    const question = isNew ? 'Discard this new diagram? It has not been added to your document.' : 'Discard your changes to this diagram?';
+    if (dirty && !confirm(question)) return false;
+    finish(null);
     return true;
-  }, [dirty, isNew, onDone]);
+  }, [dirty, isNew, finish]);
 
   const save = async () => {
     const editor = api.current;
-    if (!editor) return;
+    // Saving a diagram from a newer version would rewrite it in this version's older format.
+    if (!editor || editor.isReadOnly()) return;
     const content = editor.getContent();
     if (!content.nodes.length) {
       toast('Add at least one shape before saving the diagram.', 'error');
@@ -141,7 +158,7 @@ function DiagramEditDialog({ request, onDone }: { request: EditRequest; onDone: 
       // The diagram data and its rendered preview are stored separately: data in the document, PNG as an attachment.
       const png = await editor.renderPng(2);
       const attachment = await storage.putAttachment(png.blob, 'image/png');
-      onDone({ source: content, previewId: attachment.id, naturalWidth: png.width, naturalHeight: png.height, title: title.trim() || 'Diagram' });
+      finish({ source: content, previewId: attachment.id, naturalWidth: png.width, naturalHeight: png.height, title: title.trim() || 'Diagram' });
     } catch (err) {
       toast(`The diagram could not be saved: ${err instanceof Error ? err.message : String(err)}`, 'error');
       setSaving(false);
@@ -149,6 +166,11 @@ function DiagramEditDialog({ request, onDone }: { request: EditRequest; onDone: 
   };
 
   const Editor = studio?.DiagramEditor as ComponentType<{ initialContent: unknown; title: string; onChange: () => void; apiRef: React.Ref<DiagramEditorApi> }> | undefined;
+  const hint = readOnly
+    ? "This diagram was made with a newer version of Classroom OS and can't be changed here."
+    : isNew
+      ? 'This diagram will be placed in your document.'
+      : 'Changes appear in your document when you save.';
   return (
     <dialog
       ref={ref}
@@ -158,17 +180,24 @@ function DiagramEditDialog({ request, onDone }: { request: EditRequest; onDone: 
         e.preventDefault();
         cancel();
       }}
+      // Browsers may close the dialog anyway (a repeated Escape cannot always be cancelled). Unless the user agreed
+      // to discard, bring it back so the diagram stays open and editable.
+      onClose={() => {
+        if (!finished.current && ref.current?.isConnected && !ref.current.open) ref.current.showModal();
+      }}
     >
       <div className="flex h-full flex-col">
         <header className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
           <GitFork size={16} className="text-accent" />
-          <Input aria-label="Diagram title" value={title} onChange={(e) => (setTitle(e.target.value), setDirty(true))} className="h-8 max-w-xs" />
-          <span className="hidden text-xs text-muted md:inline">{isNew ? 'This diagram will be placed in your document.' : 'Changes appear in your document when you save.'}</span>
+          <Input aria-label="Diagram title" value={title} disabled={readOnly} onChange={(e) => (setTitle(e.target.value), setDirty(true))} className="h-8 max-w-xs" />
+          <span role={readOnly ? 'status' : undefined} className={readOnly ? 'text-xs text-warning' : 'hidden text-xs text-muted md:inline'}>
+            {hint}
+          </span>
           <div className="ml-auto flex gap-2">
             <Button size="sm" onClick={cancel} disabled={saving}>
               Cancel
             </Button>
-            <Button size="sm" variant="primary" onClick={save} disabled={saving || !studio} icon={saving ? <Loader2 size={14} className="animate-spin" /> : undefined}>
+            <Button size="sm" variant="primary" onClick={save} disabled={saving || !studio || readOnly} icon={saving ? <Loader2 size={14} className="animate-spin" /> : undefined}>
               {isNew ? 'Insert into document' : 'Save changes'}
             </Button>
           </div>
@@ -188,7 +217,7 @@ function DiagramEditDialog({ request, onDone }: { request: EditRequest; onDone: 
         )}
         <div className="min-h-0 flex-1">
           {Editor && initial ? (
-            <Editor initialContent={initial} title={title} onChange={() => setDirty(true)} apiRef={api} />
+            <Editor initialContent={initial} title={title} onChange={() => setDirty(true)} apiRef={apiRef} />
           ) : (
             <div className="p-6 text-sm text-muted">Opening the diagram editor…</div>
           )}

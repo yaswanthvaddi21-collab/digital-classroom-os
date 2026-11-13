@@ -21,6 +21,8 @@ const STROKES = ['#334155', '#94a3b8', '#4f46e5', '#15803d', '#b45309', '#be185d
 const TEXT = ['#0f172a', '#475569', '#ffffff', '#4f46e5', '#15803d', '#b45309', '#be185d', '#dc2626'];
 
 export type PatchOpts = { snapshot: boolean };
+/** Called with true when a text field gains focus and false when it loses it, so its keystrokes form one undo step. */
+export type TextFocus = (focused: boolean) => void;
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -62,7 +64,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
-export function NodeInspector({ nodes, onPatch }: { nodes: ShapeNode[]; onPatch: (patch: Partial<ShapeData>, opts: PatchOpts) => void }) {
+export function NodeInspector({ nodes, onPatch, onTextFocus }: { nodes: ShapeNode[]; onPatch: (patch: Partial<ShapeData>, opts: PatchOpts) => void; onTextFocus: TextFocus }) {
   const d = nodes[0].data;
   const set = (patch: Partial<ShapeData>) => onPatch(patch, { snapshot: true });
   return (
@@ -72,7 +74,8 @@ export function NodeInspector({ nodes, onPatch }: { nodes: ShapeNode[]; onPatch:
         <Row label="Text">
           <textarea
             value={d.label}
-            onFocus={() => onPatch({}, { snapshot: true })}
+            onFocus={() => onTextFocus(true)}
+            onBlur={() => onTextFocus(false)}
             onChange={(e) => onPatch({ label: e.target.value }, { snapshot: false })}
             onKeyDown={(e) => e.stopPropagation()}
             rows={2}
@@ -119,7 +122,7 @@ export interface EdgePatch {
   data?: Partial<ConnectorData>;
 }
 
-export function EdgeInspector({ edges, onPatch }: { edges: Connector[]; onPatch: (patch: EdgePatch, opts: PatchOpts) => void }) {
+export function EdgeInspector({ edges, onPatch, onTextFocus }: { edges: Connector[]; onPatch: (patch: EdgePatch, opts: PatchOpts) => void; onTextFocus: TextFocus }) {
   const e = edges[0];
   const d = e.data!;
   const markers = edgeMarkers(d);
@@ -132,7 +135,8 @@ export function EdgeInspector({ edges, onPatch }: { edges: Connector[]; onPatch:
           <Input
             value={typeof e.label === 'string' ? e.label : ''}
             placeholder="e.g. Yes"
-            onFocus={() => onPatch({}, { snapshot: true })}
+            onFocus={() => onTextFocus(true)}
+            onBlur={() => onTextFocus(false)}
             onChange={(ev) => onPatch({ label: ev.target.value }, { snapshot: false })}
             onKeyDown={(ev) => ev.stopPropagation()}
             className="h-8"

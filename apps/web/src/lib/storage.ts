@@ -11,16 +11,70 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 
 // ── Pending-edit registry: everything that must be saved before the page goes away ──────────────────
 
-const flushers = new Set<() => Promise<void>>();
+/**
+ * Where an editor's edits stand after a flush: all written ('saved'), some not written but kept as a draft
+ * that is offered the next time the item is opened ('kept'), or some not even kept ('failed').
+ */
+export type FlushOutcome = 'saved' | 'kept' | 'failed';
+const worst = (outcomes: FlushOutcome[]): FlushOutcome =>
+  outcomes.includes('failed') ? 'failed' : outcomes.includes('kept') ? 'kept' : 'saved';
+
+interface OpenEditor {
+  /** Writes pending edits, keeping as a draft whatever could not be written. */
+  secure: () => Promise<FlushOutcome>;
+  /** The database is closing: stop writing to it and keep unsaved edits without it, synchronously. */
+  freeze: () => FlushOutcome;
+}
+const editors = new Set<OpenEditor>();
+
 /** Saves every open editor's pending edits. Called before reloads, app updates and schema upgrades. */
-export async function flushAll() {
-  await Promise.allSettled(Array.from(flushers, (f) => f()));
+export async function flushAll(): Promise<FlushOutcome> {
+  const results = await Promise.allSettled(Array.from(editors, (e) => e.secure()));
+  return worst(results.map((r) => (r.status === 'fulfilled' ? r.value : 'failed')));
+}
+
+/** Set when another tab upgraded the database and this tab's connection was closed. Only a reload clears it. */
+let databaseClosed = false;
+
+// ── Emergency drafts: kept in localStorage when IndexedDB cannot take them ───────────────────────────
+
+const EMERGENCY_PREFIX = 'dcos-emergency-draft:';
+export const emergencyDraftKey = (kind: ItemKind, id: string) => `${EMERGENCY_PREFIX}${kind}:${id}`;
+type EmergencyDraft<C> = Pick<Draft<C>, 'title' | 'content' | 'baseVersion' | 'savedAt'>;
+
+function keepEmergencyDraft<C>(kind: ItemKind, id: string, draft: Omit<EmergencyDraft<C>, 'savedAt'>): boolean {
+  try {
+    localStorage.setItem(emergencyDraftKey(kind, id), JSON.stringify({ ...draft, savedAt: new Date().toISOString() }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readEmergencyDraft<C>(kind: ItemKind, id: string): EmergencyDraft<C> | null {
+  try {
+    const raw = localStorage.getItem(emergencyDraftKey(kind, id));
+    const parsed = raw ? (JSON.parse(raw) as EmergencyDraft<C>) : null;
+    if (!parsed || typeof parsed !== 'object' || !Number.isInteger(parsed.baseVersion)) return null;
+    return { ...parsed, savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : '' };
+  } catch {
+    return null;
+  }
+}
+
+function removeEmergencyDraft(kind: ItemKind, id: string) {
+  try {
+    localStorage.removeItem(emergencyDraftKey(kind, id));
+  } catch {
+    // Nothing to clean up.
+  }
 }
 
 // ── App-wide storage events (another tab upgrading the database, or blocking our upgrade) ───────────
 
-type StorageEvents = { versionChange: boolean; blocked: boolean };
-let events: StorageEvents = { versionChange: false, blocked: false };
+/** `work`: after a version change, whether this tab's edits were all saved, kept as drafts, or not kept. */
+type StorageEvents = { versionChange: boolean; blocked: boolean; work: FlushOutcome };
+let events: StorageEvents = { versionChange: false, blocked: false, work: 'saved' };
 const eventListeners = new Set<() => void>();
 function setEvents(patch: Partial<StorageEvents>) {
   events = { ...events, ...patch };
@@ -39,7 +93,9 @@ export const useStorageEvents = () =>
 export const storage: StorageAdapter = new IndexedDbAdapter('digital-classroom-os', {
   onVersionChange: async () => {
     await flushAll();
-    setEvents({ versionChange: true });
+    // The connection closes as soon as this returns. Anything still unsaved is kept outside IndexedDB.
+    databaseClosed = true;
+    setEvents({ versionChange: true, work: worst(Array.from(editors, (e) => e.freeze())) });
   },
   onBlocked: () => setEvents({ blocked: true }),
 });
@@ -154,7 +210,8 @@ export const useOnline = () => useSyncExternalStore(subscribeOnline, () => navig
 
 // ── Editing one item ─────────────────────────────────────────────────────────────────────────────────
 
-export type SaveStatus = 'loading' | 'saved' | 'pending' | 'saving' | 'error' | 'conflict' | 'missing' | 'load-error';
+/** 'reload-required': another tab upgraded the database; this editor no longer writes and must be reloaded. */
+export type SaveStatus = 'loading' | 'saved' | 'pending' | 'saving' | 'error' | 'conflict' | 'missing' | 'load-error' | 'reload-required';
 
 export const AUTOSAVE_DELAY_MS = 600;
 const RETRY_DELAYS_MS = [1000, 3000, 10_000];
@@ -170,6 +227,8 @@ interface Pending<C> {
  * - A version conflict stops autosave until the user decides; failed writes retry with backoff.
  * - Edits that cannot be written (conflict, repeated errors, page closing) are kept as a recovery draft.
  * - The title shown while typing is local state, so saves never overwrite what the user is typing.
+ * - After another tab upgrades the database the editor stops writing ('reload-required') and keeps
+ *   unsaved edits in localStorage; they are offered as a recovery draft after the reload.
  */
 export function useEditableItem<C>(kind: ItemKind, id: string) {
   const [item, setItem] = useState<WorkspaceItem<C> | null>(null);
@@ -178,16 +237,20 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
   const [conflict, setConflict] = useState<WorkspaceItem<C> | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft<C> | null>(null);
+  const [reloadRequired, setReloadRequired] = useState(databaseClosed);
   /** Bumped when the stored item changed underneath an idle editor (another tab), so the page remounts it. */
   const [externalRevision, setExternalRevision] = useState(0);
 
   const version = useRef(0);
   const pending = useRef<Pending<C> | null>(null);
   const lastSavedContent = useRef<string>('');
+  /** Serialized content of the save in flight, if it carries content: what storage will hold once it lands. */
+  const writing = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());
-  const blocked = useRef(false);
+  const blocked = useRef(databaseClosed);
   const attempts = useRef(0);
+  const holds = useRef(0);
   const statusRef = useRef(status);
   statusRef.current = status;
 
@@ -203,13 +266,30 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
       setItem(loaded);
       setTitle(loaded.title);
       setStatus('saved');
-      const existing = await storage.getDraft<C>(kind, id);
+      let existing = await storage.getDraft<C>(kind, id);
+      // Edits kept in localStorage when the database was closed join the normal draft flow.
+      const emergency = readEmergencyDraft<C>(kind, id);
+      if (emergency) {
+        if (!existing || emergency.savedAt >= existing.savedAt) {
+          const { savedAt: _savedAt, ...kept } = emergency;
+          try {
+            await storage.saveDraft<C>({ ...kept, kind, itemId: id });
+            existing = await storage.getDraft<C>(kind, id);
+            removeEmergencyDraft(kind, id);
+          } catch {
+            existing = { ...emergency, key: `${kind}:${id}`, kind, itemId: id };
+          }
+        } else removeEmergencyDraft(kind, id);
+      }
       const differs =
         existing &&
         ((existing.content !== undefined && JSON.stringify(existing.content) !== lastSavedContent.current) ||
           (existing.title !== undefined && existing.title !== loaded.title));
-      if (differs) setDraft(existing);
-      else if (existing) await storage.deleteDraft(kind, id);
+      if (differs) setDraft(existing ?? null);
+      else if (existing) {
+        await storage.deleteDraft(kind, id);
+        removeEmergencyDraft(kind, id);
+      }
     } catch (err) {
       setLastError(err instanceof Error ? err.message : String(err));
       setStatus('load-error');
@@ -220,15 +300,25 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
     void load();
   }, [load]);
 
-  /** Keeps edits that could not be written so they can be recovered next time the item is opened. */
-  const keepAsDraft = useCallback(async () => {
+  /**
+   * Keeps edits that could not be written so they can be recovered next time the item is opened. Falls back
+   * to localStorage when IndexedDB is closed or failing. Returns false only when the edits could not be kept.
+   */
+  const keepAsDraft = useCallback(async (): Promise<boolean> => {
     const p = pending.current;
-    if (!p) return;
-    try {
-      await storage.saveDraft<C>({ kind, itemId: id, baseVersion: version.current, ...p });
-    } catch {
-      // Nothing more we can do; the error state is already visible.
+    if (!p) return true;
+    const kept = { baseVersion: version.current, ...p };
+    if (!databaseClosed) {
+      try {
+        await storage.saveDraft<C>({ ...kept, kind, itemId: id });
+        return true;
+      } catch {
+        // Fall back to localStorage below.
+      }
     }
+    const ok = keepEmergencyDraft(kind, id, kept);
+    if (databaseClosed && events.versionChange) setEvents({ work: worst([events.work, ok ? 'kept' : 'failed']) });
+    return ok;
   }, [kind, id]);
 
   /** Writes pending edits. Runs strictly one at a time; reads the version only when its turn comes. */
@@ -245,6 +335,7 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
         return;
       }
       pending.current = null;
+      writing.current = patch.content !== undefined ? JSON.stringify(patch.content) : null;
       setStatus('saving');
       try {
         const saved = await storage.save<C>(kind, id, patch, version.current);
@@ -269,14 +360,30 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
         }
         setLastError(err instanceof Error ? err.message : String(err));
         setStatus('error');
+        if (databaseClosed) {
+          await keepAsDraft();
+          return;
+        }
         const delay = RETRY_DELAYS_MS[attempts.current++];
         if (delay !== undefined) timer.current = setTimeout(() => void flush(), delay);
         else await keepAsDraft();
+      } finally {
+        writing.current = null;
       }
     };
     queue.current = queue.current.then(run, run);
     return queue.current;
   }, [kind, id, keepAsDraft]);
+
+  /** Runs `task` in the save queue, after every write queued before it. */
+  const enqueue = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
+    const result = queue.current.then(task, task);
+    queue.current = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }, []);
 
   const schedule = useCallback(() => {
     if (blocked.current) return;
@@ -289,8 +396,9 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
   const updateContent = useCallback(
     (content: C) => {
       const serialized = JSON.stringify(content);
-      // Selection-only changes produce identical content; don't write those.
-      if (serialized === lastSavedContent.current && pending.current?.content === undefined) return;
+      // Selection-only changes produce identical content; don't write those. While a save is in flight,
+      // compare with what it is writing, so undoing back to the last saved state still gets saved.
+      if (serialized === (writing.current ?? lastSavedContent.current) && pending.current?.content === undefined) return;
       pending.current = { ...pending.current, content };
       if (blocked.current) {
         void keepAsDraft();
@@ -317,6 +425,7 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
   /** On blur: show the title as stored (trimmed, 'Untitled' when empty) once nothing newer is pending. */
   const commitTitle = useCallback(async () => {
     await flush();
+    if (databaseClosed) return;
     if (pending.current?.title === undefined) {
       const stored = await storage.get(kind, id);
       if (stored) setTitle(stored.title);
@@ -336,7 +445,7 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
   const resolveConflict = useCallback(
     async (choice: 'save-copy' | 'load-latest') => {
       const stored = conflict;
-      if (!stored) return null;
+      if (!stored || databaseClosed) return null;
       let copy: WorkspaceItem<C> | null = null;
       if (choice === 'save-copy' && pending.current) {
         copy = await storage.create<C>(kind, {
@@ -360,88 +469,147 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
   );
 
   /**
-   * Recovery of edits kept from an earlier session. If nothing changed since they were made they are applied
-   * to the item; otherwise they become a separate copy, so neither version is lost.
+   * Recovery of edits kept from an earlier session. They are applied to the item only if nothing changed since
+   * they were made: no newer save and nothing typed since. Otherwise they become a separate copy, so neither
+   * version is lost. Runs in the save queue after anything already typed, and the state they replace is kept
+   * as a version first.
    */
   const recoverDraft = useCallback(async (): Promise<{ appliedTo: 'item' | 'copy'; id: string } | null> => {
-    if (!draft) return null;
-    const current = await storage.get<C>(kind, id);
-    if (!current) return null;
-    let result: { appliedTo: 'item' | 'copy'; id: string };
-    if (current.version === draft.baseVersion) {
-      const saved = await storage.save<C>(kind, id, { title: draft.title, content: draft.content }, current.version);
-      version.current = saved.version;
-      lastSavedContent.current = JSON.stringify(saved.content);
-      setItem(saved);
-      setTitle(saved.title);
-      result = { appliedTo: 'item', id };
-    } else {
+    if (!draft || databaseClosed) return null;
+    void flush();
+    const result = await enqueue(async (): Promise<{ appliedTo: 'item' | 'copy'; id: string } | null> => {
+      const current = await storage.get<C>(kind, id);
+      if (!current) return null;
+      const untouched = current.version === draft.baseVersion && version.current === draft.baseVersion && !pending.current && !blocked.current;
+      if (untouched) {
+        await storage.snapshot(kind, id);
+        const saved = await storage.save<C>(kind, id, { title: draft.title, content: draft.content }, current.version);
+        // Anything typed during recovery stays on the old version, so it meets a conflict instead of replacing the draft.
+        if (!pending.current) {
+          version.current = saved.version;
+          lastSavedContent.current = JSON.stringify(saved.content);
+          setItem(saved);
+          setTitle(saved.title);
+        }
+        return { appliedTo: 'item', id };
+      }
       const copy = await storage.create<C>(kind, {
         title: `${draft.title ?? current.title} (recovered)`,
         content: (draft.content ?? current.content) as C,
       });
-      result = { appliedTo: 'copy', id: copy.id };
-    }
+      return { appliedTo: 'copy', id: copy.id };
+    });
+    if (!result) return null;
     await storage.deleteDraft(kind, id);
+    removeEmergencyDraft(kind, id);
     setDraft(null);
     notifyStorageChanged({ kind, id });
     return result;
-  }, [draft, kind, id]);
+  }, [draft, kind, id, flush, enqueue]);
 
   const discardDraft = useCallback(async () => {
+    if (databaseClosed) return;
     await storage.deleteDraft(kind, id);
+    removeEmergencyDraft(kind, id);
     setDraft(null);
+  }, [kind, id]);
+
+  /** Adopts a newer stored version when this editor has nothing unsaved and nothing holds external updates. */
+  const adoptExternal = useCallback(() => {
+    const idle = () => holds.current === 0 && !pending.current && !blocked.current && statusRef.current === 'saved';
+    if (!idle()) return;
+    void storage
+      .get<C>(kind, id)
+      .then((latest) => {
+        if (!latest || latest.version <= version.current || !idle()) return;
+        version.current = latest.version;
+        lastSavedContent.current = JSON.stringify(latest.content);
+        setItem(latest);
+        setTitle(latest.title);
+        setExternalRevision((r) => r + 1);
+      })
+      .catch(() => undefined);
   }, [kind, id]);
 
   // Another tab changed this item: if we have nothing unsaved, adopt its version silently.
   useStorageChanges((change) => {
-    if (change.id !== id || change.kind !== kind) return;
-    if (pending.current || blocked.current || statusRef.current !== 'saved') return;
-    void storage.get<C>(kind, id).then((latest) => {
-      if (!latest || latest.version <= version.current || pending.current) return;
-      version.current = latest.version;
-      lastSavedContent.current = JSON.stringify(latest.content);
-      setItem(latest);
-      setTitle(latest.title);
-      setExternalRevision((r) => r + 1);
-    });
+    if (change.id === id && change.kind === kind) adoptExternal();
   });
+
+  /**
+   * Stops adopting other tabs' changes until the returned release is called (it is safe to call twice).
+   * Edits made meanwhile save against the version held, so a change elsewhere surfaces as a normal conflict.
+   * The last release adopts a newer stored version if the editor is idle by then.
+   */
+  const holdExternalUpdates = useCallback(() => {
+    holds.current++;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      if (--holds.current === 0) adoptExternal();
+    };
+  }, [adoptExternal]);
 
   // Save when the window is hidden (tab switch, app backgrounded on Android, window closed),
   // and warn before leaving while anything is unsaved.
   useEffect(() => {
+    const keepNow = () => !pending.current || keepEmergencyDraft(kind, id, { baseVersion: version.current, ...pending.current });
     const onHide = () => document.visibilityState === 'hidden' && void flush();
     const onPageHide = () => {
       void flush();
       if (pending.current) void keepAsDraft();
     };
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (databaseClosed) {
+        if (!keepNow()) {
+          e.preventDefault();
+          e.returnValue = '';
+        }
+        return;
+      }
       if (pending.current || ['pending', 'saving', 'error', 'conflict'].includes(statusRef.current)) {
         void flush();
         e.preventDefault();
         e.returnValue = '';
       }
     };
+    const editor: OpenEditor = {
+      secure: async () => {
+        await flush();
+        if (!pending.current) return 'saved';
+        return (await keepAsDraft()) ? 'kept' : 'failed';
+      },
+      freeze: () => {
+        blocked.current = true;
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = null;
+        setReloadRequired(true);
+        if (!pending.current) return 'saved';
+        return keepNow() ? 'kept' : 'failed';
+      },
+    };
     document.addEventListener('visibilitychange', onHide);
     window.addEventListener('pagehide', onPageHide);
     window.addEventListener('beforeunload', onBeforeUnload);
-    flushers.add(flush);
+    editors.add(editor);
     return () => {
       document.removeEventListener('visibilitychange', onHide);
       window.removeEventListener('pagehide', onPageHide);
       window.removeEventListener('beforeunload', onBeforeUnload);
-      flushers.delete(flush);
+      editors.delete(editor);
       if (timer.current) clearTimeout(timer.current);
       void flush().then(() => {
         if (pending.current) void keepAsDraft();
       });
     };
-  }, [flush, keepAsDraft]);
+  }, [flush, keepAsDraft, kind, id]);
 
   return {
     item,
     title,
-    status,
+    status: reloadRequired ? ('reload-required' as const) : status,
+    reloadRequired,
     conflict,
     lastError,
     draft,
@@ -454,5 +622,6 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
     resolveConflict,
     recoverDraft,
     discardDraft,
+    holdExternalUpdates,
   };
 }

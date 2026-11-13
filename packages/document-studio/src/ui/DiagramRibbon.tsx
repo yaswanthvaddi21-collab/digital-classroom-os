@@ -4,7 +4,7 @@ import { NodeSelection } from '@tiptap/pm/state';
 import { useEditorState } from '@tiptap/react';
 import { ChevronDown, Download, FileInput, FolderOpen, Maximize2, Pencil, Plus, Trash2, Workflow } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { fitSize, type DiagramAttrs, type DiagramHost, type DiagramStart } from '../extensions/diagramEmbed';
+import { fitSize, RELOADED_NOT_APPLIED, RELOADED_NOT_INSERTED, type DiagramAttrs, type DiagramHost, type DiagramStart } from '../extensions/diagramEmbed';
 import type { EditorMode } from '../types';
 import { ModeToggle } from './Toolbar';
 
@@ -44,7 +44,10 @@ export function DiagramRibbon({ editor, host, maxWidth, mode, onModeChange, expo
 
   /** Opens the diagram editor and places the result. Call inside `run`, which guards against double clicks. */
   const editAndInsert = async (start?: DiagramStart) => {
+    // Every await here can outlive this editor (the document reloaded meanwhile); never report success into a dead one.
+    if (editor.isDestroyed) throw new Error(RELOADED_NOT_INSERTED);
     const diagram = await host.edit(null, start);
+    if (diagram && editor.isDestroyed) throw new Error(RELOADED_NOT_INSERTED);
     if (diagram) {
       editor.chain().focus().insertDiagram(diagram, maxWidth).run();
       toast('Diagram added. Double-click it to edit.', 'success');
@@ -110,6 +113,7 @@ export function DiagramRibbon({ editor, host, maxWidth, mode, onModeChange, expo
               onClick={() =>
                 void run(async () => {
                   const next = await host.edit(selected);
+                  if (next && editor.isDestroyed) throw new Error(RELOADED_NOT_APPLIED);
                   if (next) editor.chain().focus().updateAttributes('diagram', { ...next, ...fitSize(next.naturalWidth, next.naturalHeight, selected.width, maxWidth) }).run();
                 })
               }

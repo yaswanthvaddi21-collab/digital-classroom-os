@@ -72,7 +72,18 @@ const LINE_TO_DRAWIO: Record<EdgeLineType, string> = {
 
 const HANDLE_POINT: Record<string, [number, number]> = { t: [0.5, 0], r: [1, 0.5], b: [0.5, 1], l: [0, 0.5] };
 
-const xmlEscape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
+// Characters XML 1.0 forbids are dropped (a file containing them cannot be opened at all). Tab, CR and LF are written
+// as character references, because attribute-value normalisation would otherwise turn them into spaces.
+const xmlEscape = (s: string) =>
+  s
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, '&#10;')
+    .replace(/\t/g, '&#9;')
+    .replace(/\r/g, '&#13;');
 const htmlEscape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const color = (c: string) => (c === 'transparent' ? 'none' : c);
 const r = (n: number) => Math.round(n * 10) / 10;
@@ -319,6 +330,41 @@ function facing(a: SerializedNode, b: SerializedNode): [string, string] {
 const colorOf = (v: string | undefined, fallback: string) => (v === undefined || v === 'default' ? fallback : v === 'none' ? 'transparent' : v);
 const num = (v: string | null | undefined, fallback: number) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : fallback);
 
+type Cell = {
+  id: string;
+  value: string | null;
+  parent: string;
+  st: Style;
+  vertex: boolean;
+  edge: boolean;
+  source: string | null;
+  target: string | null;
+  g: Element | null;
+};
+
+const WRAPPERS = new Set(['UserObject', 'object']);
+
+/**
+ * Reads every mxCell. diagrams.net wraps a cell that has a link, tooltip or custom properties in
+ * `<UserObject>` / `<object>`, and the wrapper then holds the cell's id and label.
+ */
+function readCells(model: Element): Cell[] {
+  return Array.from(model.getElementsByTagName('mxCell')).map((el, i) => {
+    const wrapper = el.parentElement && WRAPPERS.has(el.parentElement.nodeName) ? el.parentElement : null;
+    return {
+      id: (wrapper ?? el).getAttribute('id') || `drawio-cell-${i}`,
+      value: wrapper ? wrapper.getAttribute('label') : el.getAttribute('value'),
+      parent: el.getAttribute('parent') ?? '',
+      st: parseStyle(el.getAttribute('style')),
+      vertex: el.getAttribute('vertex') === '1',
+      edge: el.getAttribute('edge') === '1',
+      source: el.getAttribute('source'),
+      target: el.getAttribute('target'),
+      g: el.getElementsByTagName('mxGeometry')[0] ?? null,
+    };
+  });
+}
+
 /** Reads a diagrams.net / draw.io file (.drawio, .xml, plain or compressed). Uses the first page. */
 export function fromDrawio(text: string): { content: DiagramContent; report: DrawioImportReport } {
   const doc = new DOMParser().parseFromString(text.trim(), 'application/xml');
@@ -339,89 +385,117 @@ export function fromDrawio(text: string): { content: DiagramContent; report: Dra
     throw new DrawioImportError('This is not a diagrams.net file.');
   }
 
-  const cells = Array.from(model.getElementsByTagName('mxCell'));
-  const byId = new Map(cells.map((c) => [c.getAttribute('id') ?? '', c]));
-  const geometry = (c: Element) => c.getElementsByTagName('mxGeometry')[0] ?? null;
-  const isVertex = (c: Element | undefined) => c?.getAttribute('vertex') === '1';
+  const cells = readCells(model);
+  const byId = new Map(cells.map((c) => [c.id, c]));
+  const children = new Map<string, Cell[]>();
+  for (const c of cells) children.set(c.parent, [...(children.get(c.parent) ?? []), c]);
+  const vertexChildren = (id: string) => (children.get(id) ?? []).filter((k) => k.vertex);
+  const y = (c: Cell) => num(c.g?.getAttribute('y'), 0);
+  const x = (c: Cell) => num(c.g?.getAttribute('x'), 0);
 
-  // Compartment containers (UML class / ER table stacks): their child rows become label lines.
-  const compartment = new Set<string>();
-  for (const c of cells) {
-    if (!isVertex(c)) continue;
-    const st = parseStyle(c.getAttribute('style'));
-    const kind = shapeFromStyle(st, new Set());
-    if (COMPARTMENT_SHAPES.has(kind)) compartment.add(c.getAttribute('id')!);
-  }
+  // diagrams.net paints a container, then its contents, then the next sibling. React Flow paints nodes in array
+  // order, so visiting the cell tree depth-first keeps every container behind the shapes inside it.
+  const ordered: Cell[] = [];
+  const seen = new Set<Cell>();
+  const visit = (c: Cell) => {
+    if (seen.has(c)) return;
+    seen.add(c);
+    ordered.push(c);
+    for (const k of children.get(c.id) ?? []) visit(k);
+  };
+  for (const c of cells) if (!byId.has(c.parent)) visit(c);
+  for (const c of cells) visit(c); // anything unreachable (a malformed parent chain) keeps document order
+
+  /** Cells folded into a class/entity/table, mapped to the node that now holds their text. */
+  const owner = new Map<string, string>();
+  const fold = (id: string, into: string) => {
+    for (const k of vertexChildren(id)) {
+      if (owner.has(k.id)) continue;
+      owner.set(k.id, into);
+      fold(k.id, into);
+    }
+  };
   /** Connectors may attach to a row of a class/entity; they belong to the class/entity itself. */
-  const ownerOf = (id: string | null): string | null => {
-    const parent = id ? byId.get(id)?.getAttribute('parent') : null;
-    return parent && compartment.has(parent) ? parent : id;
+  const ownerOf = (id: string | null): string | null => (id ? (owner.get(id) ?? id) : null);
+  const isRow = (c: Cell) => c.st.names.has('text') || c.st.names.has('label') || c.st.names.has('line');
+  /** A class/entity stack: every child is a text or divider row (or a plain leaf of a stack layout). */
+  const isStack = (c: Cell) => {
+    if (c.st.map.get('shape') === 'table') return true;
+    const stack = c.st.map.get('childLayout') === 'stackLayout';
+    return vertexChildren(c.id).every((k) => isRow(k) || (stack && !vertexChildren(k.id).length && !k.st.names.has('swimlane')));
   };
 
-  const absolute = (c: Element): { x: number; y: number } => {
-    const g = geometry(c);
-    let x = num(g?.getAttribute('x'), 0);
-    let y = num(g?.getAttribute('y'), 0);
-    let parent = byId.get(c.getAttribute('parent') ?? '');
-    while (parent && isVertex(parent)) {
-      const pg = geometry(parent);
-      x += num(pg?.getAttribute('x'), 0);
-      y += num(pg?.getAttribute('y'), 0);
-      parent = byId.get(parent.getAttribute('parent') ?? '');
+  const absolute = (c: Cell): { x: number; y: number } => {
+    let pos = { x: x(c), y: y(c) };
+    let parent = byId.get(c.parent);
+    const visited = new Set<Cell>();
+    while (parent?.vertex && !visited.has(parent)) {
+      visited.add(parent);
+      pos = { x: pos.x + x(parent), y: pos.y + y(parent) };
+      parent = byId.get(parent.parent);
     }
-    return { x, y };
+    return pos;
   };
 
   const nodes: SerializedNode[] = [];
   const nodeById = new Map<string, SerializedNode>();
   const edgeLabels = new Map<string, string[]>();
 
-  for (const c of cells) {
-    if (!isVertex(c)) continue;
-    const id = c.getAttribute('id')!;
-    const st = parseStyle(c.getAttribute('style'));
-    const parentId = c.getAttribute('parent') ?? '';
+  for (const c of ordered) {
+    if (!c.vertex) continue;
+    const { id, st } = c;
     // Labels drawn on connectors are child vertices of the edge.
-    if (st.names.has('edgeLabel') || byId.get(parentId)?.getAttribute('edge') === '1') {
-      edgeLabels.set(parentId, [...(edgeLabels.get(parentId) ?? []), htmlToText(c.getAttribute('value'))]);
+    if (st.names.has('edgeLabel') || byId.get(c.parent)?.edge) {
+      edgeLabels.set(c.parent, [...(edgeLabels.get(c.parent) ?? []), htmlToText(c.value)]);
       continue;
     }
-    if (compartment.has(parentId)) continue; // a row of a class/entity, folded into its owner below
+    if (owner.has(id)) continue; // a row of a class/entity, already folded into its owner
     if (st.names.has('group')) continue; // groups are flattened; children keep absolute positions
-    const shape = shapeFromStyle(st, notes);
+    let shape = shapeFromStyle(st, notes);
     if (st.map.get('shape') === 'image' || st.names.has('image')) notes.add('Images inside diagrams were not imported.');
-    const defaults = shapeDefaults(shape);
-    const g = geometry(c);
-    let label = htmlToText(c.getAttribute('value'));
-    if (COMPARTMENT_SHAPES.has(shape)) {
-      const rows = cells
-        .filter((r) => r.getAttribute('parent') === id && isVertex(r))
-        .sort((a, b) => num(geometry(a)?.getAttribute('y'), 0) - num(geometry(b)?.getAttribute('y'), 0));
+    let label = htmlToText(c.value);
+    let fill: string | undefined;
+    if (COMPARTMENT_SHAPES.has(shape) && isStack(c)) {
+      fold(id, id);
       const lines = [label];
       let sawContent = false;
-      for (const row of rows) {
-        const rs = parseStyle(row.getAttribute('style'));
-        if (rs.names.has('line')) {
+      for (const row of vertexChildren(id).sort((a, b) => y(a) - y(b))) {
+        if (row.st.names.has('line')) {
           lines.push('--');
           continue;
         }
-        const text = htmlToText(row.getAttribute('value'));
+        const isTableRow = row.st.map.get('shape') === 'tableRow';
+        if (!isRow(row) && !isTableRow) notes.add('Shapes inside some class or entity boxes were turned into lines of text.');
+        if (!isTableRow && vertexChildren(row.id).length) notes.add('Shapes nested inside the rows of some class or entity boxes were left out.');
+        // Table rows hold their text in cells (`PK`, `id`); the cells, left to right, make one line.
+        const rowCells = isTableRow ? vertexChildren(row.id).sort((a, b) => x(a) - x(b)) : [];
+        const text = rowCells.length
+          ? rowCells.map((k) => htmlToText(k.value).replace(/\s*\n\s*/g, ' ').trim()).filter(Boolean).join(' ')
+          : htmlToText(row.value);
         if (text || !sawContent) lines.push(...text.split('\n'));
         sawContent = true;
       }
       label = lines.join('\n');
+      if (st.map.get('shape') === 'table') notes.add('Tables were imported as entities: the cells of each row became one line of text.');
+    } else if (COMPARTMENT_SHAPES.has(shape)) {
+      // A swimlane holding real shapes (a process lane, a pool): an outline behind its contents, which are imported
+      // as shapes of their own. Transparent, so connectors between those shapes stay visible.
+      shape = 'rectangle';
+      fill = 'transparent';
+      notes.add('Swimlanes were imported as plain boxes drawn behind the shapes they contain.');
     }
+    const defaults = shapeDefaults(shape);
     const fontStyle = num(st.map.get('fontStyle'), 0);
     const node: SerializedNode = {
       id,
       position: absolute(c),
-      width: num(g?.getAttribute('width'), defaults.width),
-      height: num(g?.getAttribute('height'), defaults.height),
+      width: num(c.g?.getAttribute('width'), defaults.width),
+      height: num(c.g?.getAttribute('height'), defaults.height),
       data: {
         ...defaults,
         shape,
         label,
-        fill: colorOf(st.map.get('fillColor'), defaults.fill),
+        fill: fill ?? colorOf(st.map.get('fillColor'), defaults.fill),
         stroke: colorOf(st.map.get('strokeColor'), defaults.stroke),
         textColor: colorOf(st.map.get('fontColor'), defaults.textColor),
         fontSize: num(st.map.get('fontSize'), defaults.fontSize),
@@ -436,17 +510,24 @@ export function fromDrawio(text: string): { content: DiagramContent; report: Dra
 
   const edges: SerializedEdge[] = [];
   let dropped = 0;
+  let loops = 0;
   for (const c of cells) {
-    if (c.getAttribute('edge') !== '1') continue;
-    const source = ownerOf(c.getAttribute('source'));
-    const target = ownerOf(c.getAttribute('target'));
+    if (!c.edge) continue;
+    const source = ownerOf(c.source);
+    const target = ownerOf(c.target);
     const a = source ? nodeById.get(source) : undefined;
     const b = target ? nodeById.get(target) : undefined;
     if (!a || !b) {
       dropped++;
       continue;
     }
-    const st = parseStyle(c.getAttribute('style'));
+    // Two rows of one class folded into the same shape would make a loop the user never drew: leave those out.
+    // A loop the file really has (same source and target) is kept.
+    if (a === b && c.source !== c.target) {
+      loops++;
+      continue;
+    }
+    const { st } = c;
     const [fallbackS, fallbackT] = facing(a, b);
     const start = markerFromStyle(st, 'start', 'none');
     const end = markerFromStyle(st, 'end', 'arrow');
@@ -459,8 +540,8 @@ export function fromDrawio(text: string): { content: DiagramContent; report: Dra
       startMarker: start,
       endMarker: end,
     };
-    const id = c.getAttribute('id')!;
-    const label = [htmlToText(c.getAttribute('value')), ...(edgeLabels.get(id) ?? [])].filter(Boolean).join(' ');
+    const { id } = c;
+    const label = [htmlToText(c.value), ...(edgeLabels.get(id) ?? [])].filter(Boolean).join(' ');
     edges.push({
       id,
       source: a.id,
@@ -473,6 +554,7 @@ export function fromDrawio(text: string): { content: DiagramContent; report: Dra
     });
   }
   if (dropped) notes.add(`${dropped} connector${dropped === 1 ? '' : 's'} not attached to shapes at both ends were left out.`);
+  if (loops) notes.add(`${loops} connector${loops === 1 ? '' : 's'} between rows of the same class or entity ${loops === 1 ? 'was' : 'were'} left out.`);
   if (!nodes.length) throw new DrawioImportError('The diagram has no shapes that could be imported.');
 
   return {

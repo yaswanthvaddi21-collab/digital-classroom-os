@@ -1,9 +1,9 @@
 # MVP acceptance checklist
 
 Status of PRD §11 criteria. ✅ verified · 🟡 partly verified · ⬜ not started (later phase).
-"Unit" means covered by automated tests; "Browser" means checked by hand in Chromium on the dev server.
+"Unit" means covered by Vitest; "E2E" means covered by Playwright in Chromium, WebKit and mobile Chromium (Firefox in CI only); "Browser" means checked by hand.
 
-Last run: 2026-11-12, web app on `localhost:5173`. Re-assessed by the Release 0.2 audit on 2026-11-13 (see `docs/audit/RELEASE-0.2-AUDIT.md`).
+Last run: 2026-11-12, web app on `localhost:5173`. Re-assessed by the Release 0.2 audit on 2026-11-13 (see `docs/audit/RELEASE-0.2-AUDIT.md`), and updated after the 0.2 fixes, the diagram integration and quick connect (2026-11-13).
 
 ## Documents
 
@@ -12,7 +12,7 @@ Last run: 2026-11-12, web app on `localhost:5173`. Re-assessed by the Release 0.
 | Document creation works | ✅ | Browser: created from Assignment template |
 | Editing works | ✅ | Browser: typed, formatted, find & replace all |
 | Autosave works | ✅ | Browser: "Saved on this device" after edits; debounced 600 ms |
-| Offline persistence works | 🟡 | Browser: content and mode survive reload. Offline shell precached by service worker (build output); airplane-mode run not yet done |
+| Offline persistence works | ✅ | E2E (Chromium): app loads with the network off after the first visit; a document created and edited offline survives reload |
 | DOCX export works | 🟡 | Unit: package structure, headings, lists, tables, images, header/footer, page size. Browser: valid 11 KB `.docx` generated. **Not yet opened in Microsoft Word** |
 | PDF export works | 🟡 | Unit: print page (size, margins, header, page counter). Uses the system print dialog; not yet exported by hand in Safari/Firefox |
 
@@ -27,14 +27,27 @@ Last run: 2026-11-12, web app on `localhost:5173`. Re-assessed by the Release 0.
 | Diagrams save and reopen | ✅ | Browser: nodes, edges and viewport survive reload; Unit: serialization round-trip |
 | PNG and PDF exports work | ✅ | Browser: PNG 2× (no handles/UI in output), SVG, PDF all generated |
 
+## Diagram integration and quick connect (added in 0.2)
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Diagram tab inserts an editable diagram into a document | ✅ | E2E: insert from template, stored as source + separate PNG preview, reopen |
+| Double-click edits the embedded diagram | ✅ | E2E: edit, save, preview re-rendered, width kept |
+| Size and aspect ratio preserved | ✅ | E2E: corner resize keeps the ratio; Unit: DOCX picture at document size |
+| Cancelling inserts nothing | ✅ | E2E |
+| diagrams.net import and export | ✅ | Unit: plain and compressed files, round trip; E2E: import into a document and into Diagram Studio, export back |
+| UML class, ER, actor and package shapes with markers | ✅ | Unit: templates and markers; Browser: rendered and edited |
+| Quick connect: click, drag-to-connect, palette, keyboard, touch | ✅ | E2E: placement without overlap, selection, duplicate refused, zoom/pan/move tracking, undo/redo, Alt+Shift+Arrow, touch tap. Dragging an arrow with touch is not yet tested |
+| Exported DOCX with diagrams opens in Word | ⬜ | Not yet opened in Microsoft Word |
+
 ## Storage
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| Local data survives application restart | 🟡 | Unit: reopen DB connection; Browser: reload. **Downgraded 2026-11-13 (audit TEST-5):** neither detects browser storage eviction, and incident S-1 showed eviction happens. Needs a persistent-profile Playwright restart test plus persistent storage at startup (0.2-A3) |
-| Editing works offline | 🟡 | No network calls in editing paths; formal offline test pending |
-| Backup and recovery are tested | ✅ | Unit: export → import into empty DB; divergent items imported as copies. Audit 2026-11-13 found gaps outside this path: weak validation, non-idempotent re-import, backup version tied to DB version (STOR-5/6/13; fix planned in 0.2-A7) |
-| Interrupted saves do not corrupt existing documents | 🟡 | Unit: a failing write inside a transaction leaves the previous record and version intact; stale writes rejected. **Downgraded 2026-11-13 (audit):** does not cover edits held in memory during the 600 ms autosave delay, or leaving the editor in a conflict/error state (CODE-2, STOR-8) |
+| Local data survives application restart | ✅ | E2E (Chromium): data survives closing and relaunching the browser with a persistent profile. The app asks for persistent storage once there is data, and the Dashboard shows whether it was granted. Eviction by the browser is still possible when not granted; backups are the remedy |
+| Editing works offline | ✅ | E2E (Chromium): documents edited and diagrams embedded with the network off |
+| Backup and recovery are tested | ✅ | Unit: export → import into empty DB; divergent items imported as copies. 0.2 fixes: full validation before import, re-import adds nothing, attachments included, backup version independent of the DB version (STOR-5/6/13) |
+| Interrupted saves do not corrupt existing documents | 🟡 | Unit: a failing write inside a transaction leaves the previous record and version intact; stale writes rejected. 0.2 fixes, unit-tested: pending edits flush on hide and unmount, failed saves retry and then keep a recoverable draft, edits made during a conflict are kept (CODE-2, STOR-8). A forced tab kill during the 600 ms delay can still lose up to 600 ms of typing |
 
 ## Classroom (Phase 2–3) — ⬜ not started
 
@@ -44,7 +57,7 @@ Teacher account · Student account · Classroom invitation · Assignment distrib
 
 | Criterion | Status |
 |---|---|
-| Web application passes browser tests | 🟡 Chromium by hand; automated browser tests not yet added |
+| Web application passes browser tests | 🟡 Playwright passes in Chromium, WebKit and mobile Chromium; Firefox runs in CI only (it won't launch on the local macOS 27 machine) |
 | macOS desktop build | ⬜ Tauri config in place; needs Rust toolchain (Phase 5) |
 | Windows desktop build | ⬜ Phase 5 |
 | Android application | ⬜ Capacitor config in place (Phase 5) |

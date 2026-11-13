@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { Editor, type JSONContent } from '@tiptap/core';
+import { DOMParser as PMDOMParser } from '@tiptap/pm/model';
+import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { afterEach, describe, expect, it } from 'vitest';
 import { documentExtensions } from './index';
 import { findMatches, getSearchState, replaceAll, replaceCurrent, setSearch, stepSearch } from './searchReplace';
@@ -87,5 +89,70 @@ describe('page break', () => {
     expect(html).toContain('data-type="page-break"');
     e.commands.setContent(html);
     expect(e.getJSON().content?.some((n) => n.type === 'pageBreak')).toBe(true);
+  });
+});
+
+describe('embedded diagram', () => {
+  const attrs = { source: { nodes: [{ id: 'n1', label: 'Start "here" <b>' }], edges: [] }, previewId: 'p1', naturalWidth: 800, naturalHeight: 600, width: 500, height: 375, title: 'My diagram' };
+  const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
+  const withDiagram = () => make({ type: 'doc', content: [para('a'), { type: 'diagram', attrs }, para('b')] });
+  const selectDiagram = (e: Editor) => e.view.dispatch(e.state.tr.setSelection(NodeSelection.create(e.state.doc, e.state.doc.child(0).nodeSize)));
+  const copySelection = (e: Editor) => (e.view as unknown as { serializeForClipboard: (s: unknown) => { dom: HTMLElement } }).serializeForClipboard(e.state.selection.content()).dom;
+  const diagrams = (e: Editor) => (e.getJSON().content ?? []).filter((n) => n.type === 'diagram').map((n) => n.attrs);
+
+  it('keeps every attribute through copy and paste (DOC-2)', () => {
+    const e = withDiagram();
+    selectDiagram(e);
+    const dom = copySelection(e);
+    const slice = PMDOMParser.fromSchema(e.schema).parseSlice(dom, { preserveWhitespace: true });
+    expect(slice.content.toJSON()).toEqual([{ type: 'diagram', attrs }]);
+  });
+
+  it('survives cut and paste through the clipboard HTML (DOC-2)', () => {
+    const e = withDiagram();
+    selectDiagram(e);
+    const html = copySelection(e).innerHTML;
+    e.commands.deleteSelection();
+    expect(diagrams(e)).toEqual([]);
+    e.commands.setTextSelection(e.state.doc.content.size - 1);
+    e.view.pasteHTML(html, new Event('paste') as ClipboardEvent); // jsdom has no ClipboardEvent
+    expect(diagrams(e)).toEqual([attrs]);
+  });
+
+  it('pastes malformed clipboard data as an empty diagram instead of failing (DOC-2)', () => {
+    const e = make('<p>x</p>');
+    e.commands.setContent('<figure data-type="diagram" data-diagram="{not json"></figure><figure data-type="diagram" data-diagram=\'{"width":"wide","title":7,"previewId":""}\'></figure>');
+    expect(diagrams(e)).toEqual([
+      { source: null, previewId: null, naturalWidth: 400, naturalHeight: 300, width: 400, height: 300, title: '' },
+      { source: null, previewId: null, naturalWidth: 400, naturalHeight: 300, width: 400, height: 300, title: '' },
+    ]);
+  });
+
+  it('stores the same JSON as before: clipboard data never leaks into the document attributes', () => {
+    const e = withDiagram();
+    expect(Object.keys(diagrams(e)[0]!).sort()).toEqual(Object.keys(attrs).sort());
+  });
+
+  it('inserts a new diagram after a selected one instead of replacing it (DOC-3)', () => {
+    const e = withDiagram();
+    selectDiagram(e);
+    e.chain().focus().insertDiagram({ source: { nodes: [{ id: 'new' }] }, previewId: 'p2', naturalWidth: 400, naturalHeight: 300, title: 'New' }, 600).run();
+    expect(e.getJSON().content!.map((n) => n.type + (n.attrs?.previewId ? ':' + n.attrs.previewId : ''))).toEqual(['paragraph', 'diagram:p1', 'diagram:p2', 'paragraph']);
+  });
+
+  it('inserts after selected text instead of replacing it (DOC-3)', () => {
+    const e = make({ type: 'doc', content: [para('keep this')] });
+    e.view.dispatch(e.state.tr.setSelection(TextSelection.create(e.state.doc, 1, 10)));
+    e.chain().focus().insertDiagram({ source: {}, previewId: 'p2', naturalWidth: 400, naturalHeight: 300, title: 'New' }, 600).run();
+    expect(e.getText()).toContain('keep this');
+    expect(diagrams(e)).toHaveLength(1);
+  });
+
+  it('inserts at the cursor when nothing is selected', () => {
+    const e = make({ type: 'doc', content: [para('a'), para('b')] });
+    e.commands.setTextSelection(2);
+    e.chain().focus().insertDiagram({ source: {}, previewId: 'p2', naturalWidth: 1200, naturalHeight: 600, title: 'New' }, 600).run();
+    expect(e.getJSON().content!.map((n) => n.type)).toEqual(['paragraph', 'diagram', 'paragraph']);
+    expect(diagrams(e)[0]).toMatchObject({ width: 600, height: 300 });
   });
 });

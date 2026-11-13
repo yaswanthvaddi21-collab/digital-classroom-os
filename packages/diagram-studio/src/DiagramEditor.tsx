@@ -46,7 +46,7 @@ import { useCallback, useEffect, useImperativeHandle, useMemo, useReducer, useRe
 import { diagramCss } from './diagramCss';
 import { toDrawio } from './drawio';
 import { exportPdf, exportPng, exportSize, exportSvg } from './export';
-import { UndoStack } from './history';
+import { TextEditSession, UndoStack } from './history';
 import { EdgeInspector, NodeInspector, type EdgePatch, type PatchOpts } from './Inspector';
 import { layoutTree, type LayoutDirection } from './layout';
 import { DiagramActionsContext, ShapeNode as ShapeNodeView, type DiagramActions } from './ShapeNode';
@@ -102,7 +102,10 @@ export interface RenderedImage {
 }
 
 export interface DiagramEditorApi {
+  /** The diagram to save. For a protected diagram, the content the editor was given, unchanged. */
   getContent(): DiagramContent;
+  /** True when the diagram was saved by a newer app version and opened read-only; it must not be saved over. */
+  isReadOnly(): boolean;
   /** Renders the whole diagram (not just the visible part) without selection chrome. */
   renderPng(pixelRatio?: number): Promise<RenderedImage>;
   renderSvg(): Promise<Blob>;
@@ -133,7 +136,9 @@ const ARROWS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
 
 function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps) {
   const [initial] = useState(() => deserializeDiagram(initialContent));
-  const readOnly = diagramSchemaOf(initialContent) > DIAGRAM_SCHEMA;
+  // Fixed at mount, like `initial`: a protected diagram is handed back exactly as it came (unknown fields included).
+  const [original] = useState(() => initialContent);
+  const [readOnly] = useState(() => diagramSchemaOf(initialContent) > DIAGRAM_SCHEMA);
   const [nodes, setNodes, onNodesChange] = useNodesState<ShapeNode>(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Connector>(initial.edges);
   const [settings, setSettings] = useState<DiagramSettings>(initial.settings);
@@ -166,12 +171,14 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
   useEffect(emit, [nodes, edges, settings, emit]);
 
   // ── History ──────────────────────────────────────────────────────────────
+  /** Inspector text fields: typing in one is a single undo step, recorded from the state before it (audit DIAG-3). */
+  const textEdit = useRef(new TextEditSession<Snapshot>());
   const snapshot = useCallback(() => {
+    if (readOnly) return;
+    textEdit.current.invalidate();
     history.current.push({ ...current.current, settings: settingsRef.current });
     rerender();
-  }, []);
-  /** Inspector focus records the pre-edit state here; it becomes an undo step only if something changes (audit DIAG-3). */
-  const baseline = useRef<Snapshot | null>(null);
+  }, [readOnly]);
   const lastArrowSnapshot = useRef(0);
   const restore = (s: Snapshot | undefined) => {
     if (!s) return;
@@ -179,25 +186,32 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
     setEdges(s.edges);
     if (s.settings) setSettings(s.settings);
     setEditingId(null);
-    baseline.current = null;
+    textEdit.current.invalidate();
     rerender();
   };
-  const undo = () => restore(history.current.undo({ ...current.current, settings: settingsRef.current }));
-  const redo = () => restore(history.current.redo({ ...current.current, settings: settingsRef.current }));
+  const undo = () => !readOnly && restore(history.current.undo({ ...current.current, settings: settingsRef.current }));
+  const redo = () => !readOnly && restore(history.current.redo({ ...current.current, settings: settingsRef.current }));
 
   // ── Mutations ────────────────────────────────────────────────────────────
+  // Every path that changes the diagram returns early when it is read-only (audit DS-1).
   const updateNodeData = useCallback(
     (id: string, patch: Partial<ShapeData>) => {
+      if (readOnly) return;
       snapshot();
       setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)));
     },
-    [snapshot, setNodes],
+    [readOnly, snapshot, setNodes],
   );
+  const editLabel = useCallback((id: string | null) => setEditingId(readOnly ? null : id), [readOnly]);
+  const changeSettings = (update: (s: DiagramSettings) => DiagramSettings) => !readOnly && setSettings(update);
 
-  const actions = useMemo<DiagramActions>(() => ({ snapshot, updateNodeData, editingId, setEditingId }), [snapshot, updateNodeData, editingId]);
+  const actions = useMemo<DiagramActions>(() => ({ snapshot, updateNodeData, editingId, setEditingId: editLabel, readOnly }), [snapshot, updateNodeData, editingId, editLabel, readOnly]);
 
   const selectedNodes = nodes.filter((n) => n.selected);
   const selectedEdges = edges.filter((e) => e.selected);
+  // A different selection means a different field: an earlier focus no longer describes "before this edit".
+  const selectionKey = `${selectedNodes.map((n) => n.id).join()}|${selectedEdges.map((e) => e.id).join()}`;
+  useEffect(() => textEdit.current.invalidate(), [selectionKey]);
 
   const viewCenter = () => {
     const r = wrapper.current?.getBoundingClientRect();
@@ -205,6 +219,7 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
   };
 
   const addShape = (shape: ShapeKind, at?: { x: number; y: number }) => {
+    if (readOnly) return;
     const { width, height, ...style } = shapeDefaults(shape);
     const c = at ?? viewCenter();
     const node: ShapeNode = {
@@ -228,6 +243,7 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
   };
 
   const applyLayout = (dir: LayoutDirection) => {
+    if (readOnly) return;
     if (!edges.length) {
       toast('Connect shapes first — auto-layout arranges connected trees', 'info');
       return;
@@ -242,7 +258,7 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
 
   const addChild = (parentId?: string) => {
     const parent = nodes.find((n) => n.id === (parentId ?? (selectedNodes.length === 1 ? selectedNodes[0].id : '')));
-    if (!parent) return;
+    if (!parent || readOnly) return;
     const dir = settings.autoLayout === 'LR' ? 'LR' : 'TB';
     const childEdges = edges.filter((e) => e.source === parent.id);
     const childCount = childEdges.length;
@@ -288,7 +304,7 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
   };
 
   const pasteSnapshot = (src: Snapshot, offset: number) => {
-    if (!src.nodes.length) return;
+    if (!src.nodes.length || readOnly) return;
     const ids = new Map(src.nodes.map((n) => [n.id, newId('n')]));
     const copies = src.nodes.map((n) => ({ ...n, id: ids.get(n.id)!, position: { x: n.position.x + offset, y: n.position.y + offset }, selected: true }));
     const copiedEdges = src.edges
@@ -304,10 +320,10 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
     if (selectedNodes.length) clipboard.current = { nodes: selectedNodes, edges: edges.filter((e) => selectedNodes.some((n) => n.id === e.source) && selectedNodes.some((n) => n.id === e.target)) };
   };
   const paste = () => clipboard.current && pasteSnapshot(clipboard.current, 40);
-  const deleteSelected = () => void rf.deleteElements({ nodes: selectedNodes, edges: selectedEdges });
+  const deleteSelected = () => void (!readOnly && rf.deleteElements({ nodes: selectedNodes, edges: selectedEdges }));
 
   const align = (kind: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => {
-    if (selectedNodes.length < 2) return;
+    if (selectedNodes.length < 2 || readOnly) return;
     const box = selectedNodes.map((n) => ({ id: n.id, x: n.position.x, y: n.position.y, w: n.width ?? 0, h: n.height ?? 0 }));
     const minX = Math.min(...box.map((b) => b.x));
     const maxX = Math.max(...box.map((b) => b.x + b.w));
@@ -331,23 +347,21 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
     );
   };
 
-  /** Pushes an undo step for an inspector change: the focus baseline if there is one, else the current state. */
+  /** Pushes the undo step for an inspector change, unless it continues a text edit that already has one. */
   const recordInspectorChange = (opts: PatchOpts) => {
-    if (baseline.current) {
-      history.current.push(baseline.current);
-      baseline.current = null;
-      rerender();
-    } else if (opts.snapshot) {
-      snapshot();
-    }
+    const step = textEdit.current.stepFor({ ...current.current, settings: settingsRef.current }, opts.snapshot);
+    if (!step) return;
+    history.current.push(step);
+    rerender();
+  };
+  /** Focus remembers the state, but an undo step is created only if the text actually changes. */
+  const onTextFocus = (focused: boolean) => {
+    if (focused) textEdit.current.begin({ ...current.current, settings: settingsRef.current });
+    else textEdit.current.end();
   };
 
   const patchNodes = (patch: Partial<ShapeData>, opts: PatchOpts) => {
-    if (!Object.keys(patch).length) {
-      // Focus on a text field: remember the state, but do not create an undo step yet.
-      if (opts.snapshot) baseline.current = { ...current.current, settings: settingsRef.current };
-      return;
-    }
+    if (readOnly || !Object.keys(patch).length) return;
     const keys = Object.keys(patch) as Array<keyof ShapeData>;
     if (selectedNodes.every((n) => keys.every((k) => n.data[k] === patch[k]))) return; // nothing would change
     recordInspectorChange(opts);
@@ -355,10 +369,7 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
   };
 
   const patchEdges = (patch: EdgePatch, opts: PatchOpts) => {
-    if (!Object.keys(patch).length) {
-      if (opts.snapshot) baseline.current = { ...current.current, settings: settingsRef.current };
-      return;
-    }
+    if (readOnly || !Object.keys(patch).length) return;
     recordInspectorChange(opts);
     setEdges((es) =>
       es.map((e) =>
@@ -377,6 +388,7 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
   // ── React Flow handlers ──────────────────────────────────────────────────
   const lineType = settings.connector ?? 'smoothstep';
   const onConnect = (c: Connection) => {
+    if (readOnly) return;
     snapshot();
     setEdges((es) => addEdge(styledEdge({ ...c, id: newId('e'), type: lineType, data: { ...DEFAULT_CONNECTOR } }), es));
   };
@@ -433,13 +445,14 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
     setEdges((es) => [...es, styledEdge({ id: newId('e'), source: source.id, target: targetId, ...facingHandles(boxOf(source), boxOf(target)), type: lineType, data: { ...DEFAULT_CONNECTOR } })]);
   };
   const onReconnect = (oldEdge: Connector, c: Connection) => {
+    if (readOnly) return;
     snapshot();
     setEdges((es) => reconnectEdge(oldEdge, c, es));
   };
 
   const onDrop = (e: DragEvent) => {
     const shape = e.dataTransfer.getData(DRAG_MIME) as ShapeKind;
-    if (!shape) return;
+    if (!shape || readOnly) return;
     e.preventDefault();
     addShape(shape, rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
   };
@@ -477,7 +490,7 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
     if (!onCanvas(e.target) || selectedNodes.length !== 1) return;
     if (key === 'tab') return handled(), addChild();
     if (key === 'enter') return handled(), addSibling();
-    if (key === 'f2') return handled(), setEditingId(selectedNodes[0].id);
+    if (key === 'f2') return handled(), editLabel(selectedNodes[0].id);
   };
 
   // ── Export ───────────────────────────────────────────────────────────────
@@ -495,7 +508,8 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
   useImperativeHandle(
     apiRef,
     () => ({
-      getContent: () => serializeDiagram(current.current.nodes, current.current.edges, viewport.current, settingsRef.current),
+      getContent: () => (readOnly ? (original as DiagramContent) : serializeDiagram(current.current.nodes, current.current.edges, viewport.current, settingsRef.current)),
+      isReadOnly: () => readOnly,
       renderPng: async (pixelRatio = 2) => {
         const { el, ns } = await prepareCapture();
         const size = exportSize(ns);
@@ -532,12 +546,11 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
   };
 
   const single = selectedNodes.length === 1;
-  const inspector =
-    selectedNodes.length > 0 ? (
-      <NodeInspector nodes={selectedNodes} onPatch={patchNodes} />
-    ) : selectedEdges.length > 0 ? (
-      <EdgeInspector edges={selectedEdges} onPatch={patchEdges} />
-    ) : null;
+  const inspector = readOnly ? null : selectedNodes.length > 0 ? (
+    <NodeInspector nodes={selectedNodes} onPatch={patchNodes} onTextFocus={onTextFocus} />
+  ) : selectedEdges.length > 0 ? (
+    <EdgeInspector edges={selectedEdges} onPatch={patchEdges} onTextFocus={onTextFocus} />
+  ) : null;
 
   return (
     <DiagramActionsContext.Provider value={actions}>
@@ -560,29 +573,29 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
         )}
         <div className="flex items-center border-b border-border bg-surface">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:thin]" role="toolbar" aria-label="Diagram tools">
-          <IconButton label="Undo (Ctrl+Z)" disabled={!history.current.canUndo} onClick={undo}>
+          <IconButton label="Undo (Ctrl+Z)" disabled={readOnly || !history.current.canUndo} onClick={undo}>
             <Undo2 size={16} />
           </IconButton>
-          <IconButton label="Redo (Ctrl+Shift+Z)" disabled={!history.current.canRedo} onClick={redo}>
+          <IconButton label="Redo (Ctrl+Shift+Z)" disabled={readOnly || !history.current.canRedo} onClick={redo}>
             <Redo2 size={16} />
           </IconButton>
           <Separator vertical />
-          <IconButton label="Duplicate (Ctrl+D)" disabled={!selectedNodes.length} onClick={duplicate}>
+          <IconButton label="Duplicate (Ctrl+D)" disabled={readOnly || !selectedNodes.length} onClick={duplicate}>
             <Copy size={16} />
           </IconButton>
-          <IconButton label="Delete (Del)" disabled={!selectedNodes.length && !selectedEdges.length} onClick={deleteSelected}>
+          <IconButton label="Delete (Del)" disabled={readOnly || (!selectedNodes.length && !selectedEdges.length)} onClick={deleteSelected}>
             <Trash2 size={16} />
           </IconButton>
           <Separator vertical />
-          <IconButton label="Add child (Tab)" disabled={!single} onClick={() => addChild()}>
+          <IconButton label="Add child (Tab)" disabled={readOnly || !single} onClick={() => addChild()}>
             <CornerDownRight size={16} />
           </IconButton>
-          <IconButton label="Add sibling (Enter)" disabled={!single} onClick={addSibling}>
+          <IconButton label="Add sibling (Enter)" disabled={readOnly || !single} onClick={addSibling}>
             <Plus size={16} />
           </IconButton>
           <Menu
             trigger={(p) => (
-              <Button size="sm" variant="ghost" icon={<Network size={15} />} {...p}>
+              <Button size="sm" variant="ghost" icon={<Network size={15} />} disabled={readOnly} {...p}>
                 <span className="hidden sm:inline">Arrange</span> <ChevronDown size={13} />
               </Button>
             )}
@@ -592,11 +605,11 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
               {
                 label: settings.autoLayout === 'none' ? 'Auto-arrange is off' : 'Turn off auto-arrange',
                 disabled: settings.autoLayout === 'none',
-                onSelect: () => setSettings((s) => ({ ...s, autoLayout: 'none' })),
+                onSelect: () => changeSettings((s) => ({ ...s, autoLayout: 'none' })),
               },
             ]}
           />
-          {selectedNodes.length > 1 && (
+          {selectedNodes.length > 1 && !readOnly && (
             <>
               <Separator vertical />
               <IconButton label="Align left" onClick={() => align('left')}>
@@ -620,10 +633,10 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
             </>
           )}
           <Separator vertical />
-          <IconButton label={settings.showGrid ? 'Hide grid' : 'Show grid'} active={settings.showGrid} onClick={() => setSettings((s) => ({ ...s, showGrid: !s.showGrid }))}>
+          <IconButton label={settings.showGrid ? 'Hide grid' : 'Show grid'} active={settings.showGrid} disabled={readOnly} onClick={() => changeSettings((s) => ({ ...s, showGrid: !s.showGrid }))}>
             <Grid3x3 size={16} />
           </IconButton>
-          <IconButton label={settings.snapToGrid ? 'Snap to grid: on' : 'Snap to grid: off'} active={settings.snapToGrid} onClick={() => setSettings((s) => ({ ...s, snapToGrid: !s.snapToGrid }))}>
+          <IconButton label={settings.snapToGrid ? 'Snap to grid: on' : 'Snap to grid: off'} active={settings.snapToGrid} disabled={readOnly} onClick={() => changeSettings((s) => ({ ...s, snapToGrid: !s.snapToGrid }))}>
             <Magnet size={16} />
           </IconButton>
           <IconButton label="Fit diagram to screen" onClick={() => rf.fitView({ padding: 0.2, duration: 300, maxZoom: 1.2 })}>
@@ -635,7 +648,7 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
             title="Line style for new connectors"
             value={lineType}
             disabled={readOnly}
-            onChange={(e) => setSettings((s) => ({ ...s, connector: e.target.value as EdgeLineType }))}
+            onChange={(e) => changeSettings((s) => ({ ...s, connector: e.target.value as EdgeLineType }))}
           >
             <option value="smoothstep">New lines: Elbow</option>
             <option value="step">New lines: Orthogonal</option>
@@ -671,7 +684,8 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
                 <button
                   key={s.shape}
                   type="button"
-                  draggable
+                  draggable={!readOnly}
+                  disabled={readOnly}
                   onDragStart={(e) => {
                     e.dataTransfer.setData(DRAG_MIME, s.shape);
                     e.dataTransfer.effectAllowed = 'copy';
@@ -707,9 +721,9 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
               onNodeDragStart={snapshot}
               onBeforeDelete={async () => {
                 snapshot();
-                return true;
+                return !readOnly;
               }}
-              onNodeDoubleClick={(_, n) => setEditingId(n.id)}
+              onNodeDoubleClick={(_, n) => editLabel(n.id)}
               onPaneClick={() => setEditingId(null)}
               onMoveEnd={(_, vp) => {
                 // Remembered and saved with the next real edit; moving the view is not an edit itself.
@@ -748,7 +762,7 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
                   </div>
                 </Panel>
               )}
-              {nodes.length === 0 && (
+              {nodes.length === 0 && !readOnly && (
                 <Panel position="top-center">
                   <div className="mt-16 max-w-sm rounded-xl border border-dashed border-slate-300 bg-white/90 px-5 py-4 text-center text-sm text-slate-600 shadow-sm">
                     <div className="font-semibold text-slate-900">Start your diagram</div>

@@ -70,3 +70,33 @@ test('embedding and editing a diagram works and saves offline', async ({ page, c
   expect(docs.find((d) => d.id === id)?.content.schemaVersion).toBe(2);
   await context.setOffline(false);
 });
+
+test('when another tab upgrades the database, open work is saved and editing stops with a clear message', async ({ page }) => {
+  const id = await createFromQuickStart(page, 'Assignment');
+  await page.locator('.ProseMirror').getByText('Begin your answer here.', { exact: false }).click();
+  await page.keyboard.type('Typed just before the upgrade. ');
+
+  // What a newer build does in another tab: open the same database at a higher version.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('digital-classroom-os', 3);
+        req.onsuccess = () => {
+          req.result.close();
+          resolve();
+        };
+        req.onerror = () => reject(req.error);
+      }),
+  );
+
+  const overlay = page.getByRole('alertdialog', { name: 'This app was updated in another tab' });
+  await expect(overlay).toBeVisible();
+  await expect(overlay).toContainText(/saved/i);
+  await expect(overlay.getByRole('button', { name: 'Reload' })).toBeVisible();
+  // The editor behind it can't be typed into, so nothing is silently lost.
+  await expect(page.locator('.ProseMirror')).not.toBeFocused();
+
+  // The edit made just before the upgrade reached the database.
+  const docs = await readStore<{ id: string; content: unknown }>(page, 'documents');
+  expect(JSON.stringify(docs.find((d) => d.id === id)?.content)).toContain('Typed just before the upgrade.');
+});
