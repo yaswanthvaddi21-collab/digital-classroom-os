@@ -1,0 +1,72 @@
+# Technical debt — v0.2.0 Stable readiness (Phase 1)
+
+Audited commit `ea7f316`, 2026-11-13. Debt here means structural problems that make later work slower or riskier. Defects with user-visible symptoms are in [PROJECT_AUDIT.md](PROJECT_AUDIT.md); what blocks the release is in [RELEASE_GAPS.md](RELEASE_GAPS.md). Items found by more than one area audit are merged.
+
+**Effort:** S = up to a day · M = a few days · L = one to two weeks · XL = more.
+
+## Storage and data
+
+| # | Debt | Where | Impact | Effort |
+|---|---|---|---|---|
+| TD-1 | **No attachment cleanup.** `StorageAdapter` has no `deleteAttachment`, purge leaves attachments, and every embedded-diagram edit stores a new PNG | `packages/local-storage/src/indexeddb.ts` (putAttachment/purge/export), `apps/web/src/components/DiagramDialogs.tsx` | IndexedDB and every backup grow without bound. This raises the chance of hitting quota or eviction (incident S-1 in the Release 0.2 audit) | M |
+| TD-2 | **Images stored inline as data URLs** inside content, and so inside every version snapshot | `packages/document-studio/src/image.ts`, `indexeddb.ts` versionOf | Up to 50× duplication per image, large `JSON.stringify` on every edit, faster quota exhaustion. The planned images-to-attachments migration (Release 0.2 audit, step 7) is not done | L |
+| TD-3 | **One draft slot per item**, and no list of pending drafts | `indexeddb.ts` saveDraft (key `kind:id`), `apps/web/src/lib/storage.ts` | Drafts can be overwritten. They are invisible unless that exact item is opened, and they are not in backups | M |
+| TD-4 | **Every failure handled the same way** (quota, not found, transient) | `apps/web/src/lib/storage.ts` save queue | Terminal errors are retried, the status text claims retrying when nothing is scheduled, and the user is never told the storage is full | S |
+| TD-5 | **Storage singleton created at import**, with no adapter injection | `apps/web/src/lib/storage.ts` | A SQLite adapter for Tauri/Capacitor cannot be chosen without editing this module | S |
+| TD-6 | **Unguarded async handlers** in settings and version history | `apps/web/src/pages/settings/SettingsPages.tsx`, `EditorFrame.tsx` VersionHistory | Failures become unhandled rejections or an endless "Loading…" | S |
+| TD-7 | **Emergency localStorage drafts never cleaned up**; preferences neither synced across tabs nor backed up | `apps/web/src/lib/storage.ts`, `apps/web/src/lib/preferences.ts` | Stale entries consume the 5 MB localStorage budget; settings are lost when site data is cleared | S |
+| TD-8 | **Page settings and editor mode are outside content validation and schema versioning** | `packages/document-studio/src/types.ts`, `migrate.ts` | Invalid values crash the editor or break exports; a future page feature can't be detected as "newer" | S |
+
+## Document Studio
+
+| # | Debt | Where | Impact | Effort |
+|---|---|---|---|---|
+| TD-9 | **Print HTML built by string templates** | `packages/document-studio/src/export/print.ts` | Source of the header/footer injection (DS-1). It is also meant to be the base for native PDF later | S |
+| TD-10 | **DOCX exporter fidelity gaps**: line height, column widths, list alignment, highlight vs shading, static table of contents, remote images | `packages/document-studio/src/export/docx.ts` | Silent formatting loss in the most important export | M |
+| TD-11 | **DOCX tests check stability, not correctness**: golden snapshots of our own XML plus a heading-only mammoth check; no OOXML validation; no diagram or schema-2 fixture | `tests/integration/docx-golden.test.ts` | A Word-incompatible structure would pass every test | S |
+| TD-12 | **No component tests** for Toolbar, PageSetupDialog, FindReplaceBar or the Simple/Advanced gating | `packages/document-studio/src/ui/*` | No automated check that each control has an effect | M |
+| TD-13 | **TXT export drops images and the table of contents without a marker** | `packages/document-studio/src/export/text.ts` | Content silently disappears; inconsistent with the diagram placeholder | S |
+| TD-14 | **Diagram preview object URLs never revoked**; failures cached at module level | `packages/document-studio/src/extensions/diagramEmbed.tsx` | Memory grows over long sessions; one transient failure leaves "Loading…" until reload | S |
+
+## Diagram Studio
+
+| # | Debt | Where | Impact | Effort |
+|---|---|---|---|---|
+| TD-15 | **`DiagramEditor.tsx` is a 785-line component** mixing history, mutations, shortcuts, export and layout | `packages/diagram-studio/src/DiagramEditor.tsx` | Group, lock, z-order and distribute would all land here; hard to test without a browser | M |
+| TD-16 | **Only four fixed connection handles and no waypoint model** | `ShapeNode.tsx`, `types.ts` SerializedEdge | diagrams.net waypoints and perimeter points can't be represented, so import/export stays lossy. Routing upgrades need a schema 3 change | L |
+| TD-17 | **Missing editor primitives**: group/ungroup, lock, z-order/layers, distribute, full-screen, rotation | `packages/diagram-studio/src` (absent) | Brief phase 5 items. diagrams.net groups and layers are flattened on import | L |
+| TD-18 | **Clipboard is an in-memory ref per editor**: no cut, no system clipboard | `DiagramEditor.tsx` | Shapes can't move between diagrams or into documents; Ctrl+X does nothing | M |
+| TD-19 | **No large-diagram test** (render, drag, export, import) | `packages/diagram-studio/src/*.test.ts`, `e2e/diagram.spec.ts` | Scale and export-size limits are unknown | S |
+| TD-20 | **`fromDrawio` builds child lists by copying arrays** (quadratic on large flat files) | `packages/diagram-studio/src/drawio.ts` | Part of the 354 ms import time at 5000 cells; worse beyond | S |
+| TD-21 | **A separate `<marker>` per decorated edge end** instead of shared definitions | `packages/diagram-studio/src/edges.tsx` | Extra DOM: 500 markers for 500 default edges, more with two-ended markers. Ids are unique, so this is size, not correctness | S |
+| TD-22 | **SVG export is HTML in `foreignObject`** (html-to-image), not a model-to-SVG renderer | `packages/diagram-studio/src/export.ts` | Not portable to office and design tools | M |
+
+## App shell and UI
+
+| # | Debt | Where | Impact | Effort |
+|---|---|---|---|---|
+| TD-23 | **A single top-level error boundary wraps the whole shell** and never resets | `apps/web/src/App.tsx`, `components/ErrorBoundary.tsx` | A crash in any list or settings page removes navigation; only a reload recovers | S |
+| TD-24 | **Toast host isn't aware of modal dialogs** | `packages/ui/src/toast.tsx` | Feedback raised while a native modal is open is invisible (and inert for assistive technology) | S |
+| TD-25 | **Menus without the keyboard menu pattern; mobile drawer without dialog semantics** | `packages/ui/src/components.tsx`, `apps/web/src/components/AppShell.tsx` | Accessibility gaps that every new menu inherits | S |
+| TD-26 | **No i18n layer**; English strings hard-coded everywhere | `apps/web/src/**`, `packages/*/src/**` | Localisation later touches every component; dates already follow the browser locale | L |
+| TD-27 | **PWA manifest has only an SVG icon**; no apple-touch-icon or theme-color | `apps/web/vite.config.ts`, `apps/web/index.html` | Weaker install experience on iOS and some Android launchers | S |
+| TD-28 | **Downloads rely on `<a download>`** and PDF on `window.print()` | `packages/ui/src/download.ts`, `export/print.ts` | Will not work in Tauri/Capacitor webviews without native save and print adapters | M |
+| TD-29 | **No web Content-Security-Policy** | `apps/web/index.html`, deployment docs | No defence in depth against a future injection bug | S |
+
+## Platforms, build and repository
+
+| # | Debt | Where | Impact | Effort |
+|---|---|---|---|---|
+| TD-30 | **Native shells outside the npm workspace and lockfile**; no `Cargo.lock`; Tauri icons missing | `package.json` workspaces, `apps/desktop`, `apps/android` | Non-reproducible native builds; licence and audit gates don't cover the Tauri CLI, Capacitor or Rust crates; the desktop build fails as committed | M |
+| TD-31 | **No platform detection**: the service worker would register inside native webviews | `apps/web/src/main.tsx`, `components/SystemBanners.tsx` | Offline and update behaviour in the shells is undefined | S |
+| TD-32 | **Python dependencies unpinned** (ranges, no lock); local venv 3.9 vs CI 3.12 | `backend/requirements*.txt`, `.github/workflows/ci.yml` | Drift between local and CI runs | S |
+| TD-33 | **CI hardening**: no `permissions` block, actions pinned to tags not SHAs, no timeouts or concurrency, coverage thresholds never enforced | `.github/workflows/ci.yml`, `vitest.config.ts` | Weaker supply-chain posture; coverage floors are decorative | S |
+| TD-34 | **Placeholder git identity and no remote** | git config, all 6 commits | No real authorship; CI never triggered | S |
+| TD-35 | **Empty backend packages** (`authentication`, `classroom`, `synchronization`) | `backend/*/__init__.py` | Clutter that can read as progress | S |
+| TD-36 | **No project LICENSE** (Cargo.toml says MIT, nothing else does) | repository root | The project's own licence is undefined for a release | S |
+| TD-37 | **`.gitignore` misses `.env*`, `*.db`, `*.sqlite`** outside `backend/` | `.gitignore` | A future secret or local database could be committed by `git add -A` | S |
+
+## Notes
+
+- **Build-chain advisories.** The 6 `npm audit` advisories are in `vite-plugin-pwa → workbox-build`, which is build time only. npm's suggested fix is a major downgrade. Track upstream rather than downgrade; `SECURITY.md` already records this.
+- **Earlier debt is already paid.** Several items from the Release 0.2 audit were fixed in `ff53b49`–`ea7f316`: version pruning, the save queue, drafts, cross-tab sync, the safety copy and backup format 2. They are not repeated here.
