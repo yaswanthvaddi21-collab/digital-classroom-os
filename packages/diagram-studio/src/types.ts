@@ -1,4 +1,4 @@
-import { MarkerType, type Edge, type Node, type Viewport } from '@xyflow/react';
+import type { Edge, Node, Viewport } from '@xyflow/react';
 
 export type ShapeKind =
   | 'rectangle'
@@ -12,7 +12,26 @@ export type ShapeKind =
   | 'cylinder'
   | 'document'
   | 'note'
-  | 'text';
+  | 'text'
+  // schema 2: UML, ER and organisation shapes
+  | 'umlClass'
+  | 'erEntity'
+  | 'actor'
+  | 'package';
+
+/** Shapes whose label is split into a header and compartments (lines separated by a line holding only `--`). */
+export const COMPARTMENT_SHAPES: ReadonlySet<ShapeKind> = new Set(['umlClass', 'erEntity']);
+
+/** Splits a compartment label: first line is the header, `--` lines start new sections. */
+export function splitCompartments(label: string): { header: string; sections: string[][] } {
+  const [header = '', ...rest] = label.split('\n');
+  const sections: string[][] = [[]];
+  for (const line of rest) {
+    if (line.trim() === '--') sections.push([]);
+    else sections[sections.length - 1].push(line);
+  }
+  return { header, sections };
+}
 
 export type ShapeStyle = {
   shape: ShapeKind;
@@ -32,12 +51,40 @@ export type ShapeNode = Node<ShapeData, 'shape'>;
 export type EdgeLineType = 'smoothstep' | 'step' | 'straight' | 'default';
 export type ArrowMode = 'end' | 'both' | 'none';
 
+/** Connector end decorations. UML: triangle = inheritance, diamond = aggregation, diamond-filled = composition. */
+export type MarkerKind =
+  | 'none'
+  | 'arrow'
+  | 'open-arrow'
+  | 'triangle'
+  | 'diamond'
+  | 'diamond-filled'
+  | 'circle'
+  | 'crow-many'
+  | 'crow-one'
+  | 'crow-zero-many'
+  | 'crow-zero-one';
+
+export const MARKER_KINDS: MarkerKind[] = ['none', 'arrow', 'open-arrow', 'triangle', 'diamond', 'diamond-filled', 'circle', 'crow-many', 'crow-one', 'crow-zero-many', 'crow-zero-one'];
+
 export type ConnectorData = {
   color: string;
   width: number;
   dashed: boolean;
+  /** v1 field, still honoured when start/endMarker are absent. */
   arrow: ArrowMode;
+  /** schema 2: explicit end decorations; when set they take precedence over `arrow`. */
+  startMarker?: MarkerKind;
+  endMarker?: MarkerKind;
 };
+
+/** The decorations actually drawn at each end of a connector. */
+export function edgeMarkers(d: ConnectorData): { start: MarkerKind; end: MarkerKind } {
+  return {
+    start: d.startMarker ?? (d.arrow === 'both' ? 'arrow' : 'none'),
+    end: d.endMarker ?? (d.arrow === 'none' ? 'none' : 'arrow'),
+  };
+}
 
 export type Connector = Edge<ConnectorData>;
 
@@ -72,7 +119,7 @@ export interface SerializedEdge {
 }
 
 export interface DiagramContent {
-  schemaVersion: 1;
+  schemaVersion: number;
   nodes: SerializedNode[];
   edges: SerializedEdge[];
   viewport: Viewport | null;
@@ -108,6 +155,14 @@ export function shapeDefaults(shape: ShapeKind): ShapeStyle & { width: number; h
       return { ...base, width: 160, height: 40, fill: 'transparent', stroke: 'transparent', strokeWidth: 0, fontSize: 16 };
     case 'rounded':
       return { ...base, width: 160, height: 70 };
+    case 'umlClass':
+      return { ...base, width: 200, height: 130, fill: '#ffffff', stroke: '#334155', fontSize: 13 };
+    case 'erEntity':
+      return { ...base, width: 190, height: 120, fill: '#ffffff', stroke: '#0369a1', fontSize: 13 };
+    case 'actor':
+      return { ...base, width: 70, height: 110, fill: '#ffffff', stroke: '#334155', fontSize: 13 };
+    case 'package':
+      return { ...base, width: 180, height: 110, fill: '#fefce8', stroke: '#a16207' };
     default:
       return { ...base, width: 160, height: 70 };
   }
@@ -116,13 +171,13 @@ export function shapeDefaults(shape: ShapeKind): ShapeStyle & { width: number; h
 /** Derives React Flow presentation props (stroke, markers, label style) from connector data. */
 export function styledEdge(edge: Connector): Connector {
   const d = { ...DEFAULT_CONNECTOR, ...edge.data };
-  const marker = { type: MarkerType.ArrowClosed, color: d.color, width: 16, height: 16 };
+  // End markers are drawn by the connector component itself (see edges.tsx), so exports always include them.
   return {
     ...edge,
     data: d,
     style: { stroke: d.color, strokeWidth: d.width, strokeDasharray: d.dashed ? '6 5' : undefined },
-    markerEnd: d.arrow !== 'none' ? marker : undefined,
-    markerStart: d.arrow === 'both' ? marker : undefined,
+    markerEnd: undefined,
+    markerStart: undefined,
     labelStyle: { fill: '#0f172a', fontSize: 12, fontWeight: 500 },
     labelBgStyle: { fill: '#ffffff' },
     labelBgPadding: [6, 3],
@@ -131,7 +186,7 @@ export function styledEdge(edge: Connector): Connector {
 }
 
 /** Newest diagram content schema this build reads and writes. Newer content opens read-only. */
-export const DIAGRAM_SCHEMA = 1;
+export const DIAGRAM_SCHEMA = 2;
 
 export function diagramSchemaOf(raw: unknown): number {
   const v = raw && typeof raw === 'object' ? (raw as { schemaVersion?: unknown }).schemaVersion : undefined;
@@ -139,12 +194,12 @@ export function diagramSchemaOf(raw: unknown): number {
 }
 
 export function createEmptyDiagram(): DiagramContent {
-  return { schemaVersion: 1, nodes: [], edges: [], viewport: null, settings: { ...DEFAULT_SETTINGS } };
+  return { schemaVersion: DIAGRAM_SCHEMA, nodes: [], edges: [], viewport: null, settings: { ...DEFAULT_SETTINGS } };
 }
 
 export function serializeDiagram(nodes: ShapeNode[], edges: Connector[], viewport: Viewport | null, settings: DiagramSettings): DiagramContent {
   return {
-    schemaVersion: 1,
+    schemaVersion: DIAGRAM_SCHEMA,
     nodes: nodes.map((n) => ({
       id: n.id,
       position: { x: Math.round(n.position.x * 10) / 10, y: Math.round(n.position.y * 10) / 10 },

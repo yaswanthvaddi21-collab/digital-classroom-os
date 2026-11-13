@@ -49,6 +49,14 @@ describe('find and replace', () => {
     expect(getSearchState(e.state).results).toHaveLength(0);
   });
 
+  it('finds the right text when lower-casing changes length (Turkish İ)', () => {
+    const e = make('<p>İstanbul city</p>');
+    const [m] = findMatches(e.state.doc, 'city', false);
+    expect(e.state.doc.textBetween(m.from, m.to)).toBe('city');
+    const [i] = findMatches(e.state.doc, 'i̇stanbul', false);
+    expect(e.state.doc.textBetween(i.from, i.to)).toBe('İstanbul');
+  });
+
   it('replaces with an empty string by deleting', () => {
     const e = make('<p>keep drop keep</p>');
     setSearch(e, { term: ' drop', caseSensitive: false, index: 0 });

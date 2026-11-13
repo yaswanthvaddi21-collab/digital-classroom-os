@@ -74,6 +74,39 @@ interface Ctx {
   contentWidthPx: number;
   listInstance: number;
   headings: Array<{ level: number; text: string }>;
+  /** Preview images of embedded diagrams, by attachment id. */
+  assets: Map<string, Uint8Array>;
+  /** Start numbers of numbered lists that do not start at 1. */
+  orderedStarts: Set<number>;
+}
+
+/** Embedded diagram: its rendered preview, at the size shown in the document (aspect ratio preserved). */
+function diagramParagraph(node: JSONContent, ctx: Ctx): Paragraph {
+  const a = node.attrs ?? {};
+  const title = String(a.title || 'Diagram');
+  const bytes = a.previewId ? ctx.assets.get(String(a.previewId)) : undefined;
+  if (!bytes) {
+    return new Paragraph({ children: [new TextRun({ text: `[Diagram: ${title} — preview not available]`, italics: true, color: '888888' })] });
+  }
+  const naturalW = Number(a.naturalWidth) || 400;
+  const naturalH = Number(a.naturalHeight) || 300;
+  const width = Math.min(Number(a.width) || naturalW, ctx.contentWidthPx);
+  const height = Math.round((width * naturalH) / naturalW);
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    children: [new ImageRun({ type: 'png', data: bytes, transformation: { width, height }, altText: { name: 'diagram', description: title, title } })],
+  });
+}
+
+/** Collects the attachment ids of all embedded diagram previews in a document. */
+export function diagramPreviewIds(doc: JSONContent): string[] {
+  const ids = new Set<string>();
+  const walk = (n: JSONContent) => {
+    if (n.type === 'diagram' && n.attrs?.previewId) ids.add(String(n.attrs.previewId));
+    n.content?.forEach(walk);
+  };
+  walk(doc);
+  return [...ids];
 }
 
 type RunStyle = { -readonly [K in keyof IRunOptions]?: IRunOptions[K] };
@@ -172,9 +205,13 @@ function imageParagraph(node: JSONContent, ctx: Ctx): Paragraph {
   });
 }
 
-function list(node: JSONContent, ctx: Ctx, level: number, ordered: boolean): Paragraph[] {
+function list(node: JSONContent, ctx: Ctx, level: number, ordered: boolean): Array<Paragraph | Table> {
   const instance = ++ctx.listInstance;
-  const out: Paragraph[] = [];
+  // A numbered list that starts at N gets a numbering definition starting at N (shared by all lists starting at N).
+  const start = ordered ? Math.max(1, Number(node.attrs?.start) || 1) : 1;
+  if (start !== 1) ctx.orderedStarts.add(start);
+  const reference = !ordered ? 'dcos-bullet' : start === 1 ? 'dcos-ordered' : `dcos-ordered-from-${start}`;
+  const out: Array<Paragraph | Table> = [];
   for (const item of node.content ?? []) {
     let first = true;
     for (const child of item.content ?? []) {
@@ -185,9 +222,13 @@ function list(node: JSONContent, ctx: Ctx, level: number, ordered: boolean): Par
           new Paragraph({
             children: inlines(child.content),
             // Continuation paragraphs in the same item are indented but not numbered.
-            ...(first ? { numbering: { reference: ordered ? 'dcos-ordered' : 'dcos-bullet', level, instance } } : { indent: { left: 720 * (level + 1) } }),
+            ...(first ? { numbering: { reference, level, instance } } : { indent: { left: 720 * (level + 1) } }),
           }),
         );
+        first = false;
+      } else {
+        // Images, tables, code and quotes inside a list item are kept, not dropped (audit CODE-4).
+        out.push(...blocks([child], ctx));
         first = false;
       }
     }
@@ -202,9 +243,9 @@ function tableBlock(node: JSONContent, ctx: Ctx): Table {
         tableHeader: (row.content ?? []).every((c) => c.type === 'tableHeader'),
         children: (row.content ?? []).map((cell) => {
           const isHeader = cell.type === 'tableHeader';
-          const children = blocks(cell.content ?? [], { ...ctx, contentWidthPx: ctx.contentWidthPx / Math.max(1, row.content?.length ?? 1) }).filter(
-            (b): b is Paragraph => b instanceof Paragraph,
-          );
+          const children = blocks(cell.content ?? [], { ...ctx, contentWidthPx: ctx.contentWidthPx / Math.max(1, row.content?.length ?? 1) });
+          // Nested tables are kept; Word requires every cell to end with a paragraph.
+          if (children.at(-1) instanceof Table) children.push(new Paragraph({}));
           return new TableCell({
             columnSpan: Number(cell.attrs?.colspan) || 1,
             rowSpan: Number(cell.attrs?.rowspan) || 1,
@@ -269,6 +310,9 @@ function blocks(nodes: JSONContent[], ctx: Ctx): Array<Paragraph | Table> {
       case 'image':
         out.push(imageParagraph(node, ctx));
         break;
+      case 'diagram':
+        out.push(diagramParagraph(node, ctx));
+        break;
       case 'table':
         out.push(tableBlock(node, ctx));
         out.push(new Paragraph({}));
@@ -303,20 +347,23 @@ function collectHeadingText(doc: JSONContent) {
   return out;
 }
 
-const listLevels = (ordered: boolean) =>
+const listLevels = (ordered: boolean, start = 1) =>
   Array.from({ length: 9 }, (_, level) => ({
     level,
+    start: level === 0 ? start : 1,
     format: ordered ? [LevelFormat.DECIMAL, LevelFormat.LOWER_LETTER, LevelFormat.LOWER_ROMAN][level % 3] : LevelFormat.BULLET,
     text: ordered ? `%${level + 1}.` : ['•', '◦', '▪'][level % 3],
     alignment: AlignmentType.LEFT,
     style: { paragraph: { indent: { left: 720 * (level + 1), hanging: 360 } } },
   }));
 
-export function buildDocx(content: DocumentContent, title = 'Document'): Document {
+export function buildDocx(content: DocumentContent, title = 'Document', assets: Map<string, Uint8Array> = new Map()): Document {
   const page = content.page;
   const paper = paperSize(page);
   const contentWidthMm = paper.width - page.margins.left - page.margins.right;
-  const ctx: Ctx = { contentWidthPx: Math.round((contentWidthMm / 25.4) * 96), listInstance: 0, headings: collectHeadingText(content.doc) };
+  const ctx: Ctx = { contentWidthPx: Math.round((contentWidthMm / 25.4) * 96), listInstance: 0, headings: collectHeadingText(content.doc), assets, orderedStarts: new Set() };
+  // Convert the body first: it decides which list numbering definitions are needed.
+  const body = blocks(content.doc.content ?? [], ctx);
 
   const footerChildren: ParagraphChild[] = [];
   if (page.footer) footerChildren.push(new TextRun(page.footer));
@@ -335,6 +382,7 @@ export function buildDocx(content: DocumentContent, title = 'Document'): Documen
       config: [
         { reference: 'dcos-bullet', levels: listLevels(false) },
         { reference: 'dcos-ordered', levels: listLevels(true) },
+        ...[...ctx.orderedStarts].map((start) => ({ reference: `dcos-ordered-from-${start}`, levels: listLevels(true, start) })),
       ],
     },
     sections: [
@@ -356,12 +404,20 @@ export function buildDocx(content: DocumentContent, title = 'Document'): Documen
         footers: footerChildren.length
           ? { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: footerChildren })] }) }
           : undefined,
-        children: blocks(content.doc.content ?? [], ctx),
+        children: body,
       },
     ],
   });
 }
 
-export async function exportDocx(content: DocumentContent, title: string): Promise<Blob> {
-  return Packer.toBlob(buildDocx(content, title));
+/** Loads embedded diagram previews (via the app's storage) and writes the .docx. */
+export async function exportDocx(content: DocumentContent, title: string, loadAsset?: (id: string) => Promise<Blob | undefined>): Promise<Blob> {
+  const assets = new Map<string, Uint8Array>();
+  if (loadAsset) {
+    for (const id of diagramPreviewIds(content.doc)) {
+      const blob = await loadAsset(id);
+      if (blob) assets.set(id, new Uint8Array(await blob.arrayBuffer()));
+    }
+  }
+  return Packer.toBlob(buildDocx(content, title, assets));
 }

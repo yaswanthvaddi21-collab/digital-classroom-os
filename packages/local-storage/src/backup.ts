@@ -1,10 +1,11 @@
 import { InvalidBackupError } from './errors';
-import { ITEM_KINDS, type BackupFile, type ItemKind, type ItemVersion, type VersionReason, type WorkspaceItem } from './types';
+import { fromBase64 } from './base64';
+import { ITEM_KINDS, type Attachment, type BackupFile, type ItemKind, type ItemVersion, type VersionReason, type WorkspaceItem } from './types';
 
 /** Newest backup layout this build reads and writes. */
 export const BACKUP_FORMAT_VERSION = 2;
 /** Newest content schema this build understands inside backups (documents and diagrams). */
-export const MAX_CONTENT_SCHEMA = 1;
+export const MAX_CONTENT_SCHEMA = 2;
 
 const REASONS: VersionReason[] = ['create', 'manual', 'auto', 'restore'];
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -20,6 +21,7 @@ export interface ValidatedBackup {
   file: BackupFile;
   items: WorkspaceItem[];
   versions: ItemVersion[];
+  attachments: Attachment[];
   unsupported: number;
 }
 
@@ -87,5 +89,28 @@ export function validateBackup(raw: unknown): ValidatedBackup {
     });
   });
 
-  return { file: raw as unknown as BackupFile, items, versions, unsupported };
+  const attachments: Attachment[] = [];
+  if (raw.attachments !== undefined) {
+    if (!Array.isArray(raw.attachments)) throw new InvalidBackupError('attachments is not a list');
+    raw.attachments.forEach((a, n) => {
+      const where = `attachment ${n + 1}`;
+      if (!isObj(a) || typeof a.id !== 'string' || !a.id || typeof a.base64 !== 'string') throw new InvalidBackupError(`${where} is incomplete`);
+      let data: ArrayBuffer;
+      try {
+        data = fromBase64(a.base64);
+      } catch {
+        throw new InvalidBackupError(`${where} (${a.id}) is damaged`);
+      }
+      attachments.push({
+        id: a.id,
+        sha256: typeof a.sha256 === 'string' ? a.sha256 : '',
+        mimeType: typeof a.mimeType === 'string' ? a.mimeType : 'application/octet-stream',
+        sizeBytes: data.byteLength,
+        data,
+        createdAt: isIso(a.createdAt) ? a.createdAt : exportedAt,
+      });
+    });
+  }
+
+  return { file: raw as unknown as BackupFile, items, versions, attachments, unsupported };
 }

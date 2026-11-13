@@ -8,12 +8,13 @@ import TextAlign from '@tiptap/extension-text-align';
 import { TextStyleKit } from '@tiptap/extension-text-style';
 import { CharacterCount, Placeholder } from '@tiptap/extensions';
 import StarterKit from '@tiptap/starter-kit';
+import { DiagramEmbed, type DiagramHost } from './diagramEmbed';
 import { PageBreak } from './pageBreak';
 import { SearchReplace } from './searchReplace';
 import { TableOfContents } from './tableOfContents';
 
 /** Every extension the document schema uses. Content saved with these must keep loading, so only add, never remove. */
-export function documentExtensions(opts: { placeholder?: string } = {}): AnyExtension[] {
+export function documentExtensions(opts: { placeholder?: string; diagramHost?: DiagramHost | null } = {}): AnyExtension[] {
   return [
     StarterKit.configure({
       heading: { levels: [1, 2, 3, 4] },
@@ -31,9 +32,12 @@ export function documentExtensions(opts: { placeholder?: string } = {}): AnyExte
     PageBreak,
     TableOfContents,
     SearchReplace,
+    // Schema 2 (Release 0.2.x): editable diagrams embedded in documents.
+    DiagramEmbed.configure({ host: opts.diagramHost ?? null }),
   ];
 }
 
-export { PageBreak, SearchReplace, TableOfContents };
+export { DiagramEmbed, PageBreak, SearchReplace, TableOfContents };
+export * from './diagramEmbed';
 export * from './searchReplace';
 export { collectHeadings } from './tableOfContents';

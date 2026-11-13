@@ -67,6 +67,20 @@ export interface Draft<C = unknown> {
   savedAt: string;
 }
 
+/** A binary stored beside documents, e.g. the rendered preview of an embedded diagram. */
+export interface Attachment {
+  id: string;
+  /** Content hash; identical files are stored once. */
+  sha256: string;
+  mimeType: string;
+  sizeBytes: number;
+  data: ArrayBuffer;
+  createdAt: string;
+}
+
+/** An attachment inside a backup file: same fields, bytes as base64. */
+export type BackupAttachment = Omit<Attachment, 'data'> & { base64: string };
+
 export interface BackupFile {
   format: 'dcos-backup';
   /** Backup layout version. 1 = items + versions only; 2 adds formatVersion/appVersion/restoredFrom. */
@@ -81,6 +95,8 @@ export interface BackupFile {
   deviceId: string;
   items: WorkspaceItem[];
   versions: ItemVersion[];
+  /** formatVersion 2: attachments referenced by items (older readers ignore this field). */
+  attachments?: BackupAttachment[];
 }
 
 export interface ImportReport {
@@ -92,6 +108,7 @@ export interface ImportReport {
   versionsAdded: number;
   /** Records of kinds this app version does not know (from a newer app). Left out, not lost from the file. */
   unsupported: number;
+  attachmentsAdded: number;
 }
 
 export interface StorageInfo {
@@ -130,6 +147,9 @@ export interface StorageAdapter {
   restoreVersion(kind: ItemKind, id: string, versionId: string): Promise<WorkspaceItem>;
   exportBackup(): Promise<BackupFile>;
   importBackup(file: unknown): Promise<ImportReport>;
+  /** Stores a binary (deduplicated by content) and returns its record without the bytes. */
+  putAttachment(data: Blob | ArrayBuffer, mimeType: string): Promise<Omit<Attachment, 'data'>>;
+  getAttachment(id: string): Promise<Attachment | undefined>;
   getMeta(key: string): Promise<string | undefined>;
   setMeta(key: string, value: string): Promise<void>;
   saveDraft<C = unknown>(draft: Omit<Draft<C>, 'key' | 'savedAt'>): Promise<void>;

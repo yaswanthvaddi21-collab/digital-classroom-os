@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useDiagramHost } from '../components/DiagramDialogs';
 import { EditorFrame, MissingItem } from '../components/EditorFrame';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { useEditableItem } from '../lib/storage';
-import { useModuleEditor, type ModuleDef } from '../modules';
+import { useModuleEditor, type EditorProps, type ModuleDef } from '../modules';
 
 /** Opens one item of any module. Routes stay `#/<module.route>/:id` (frozen since v0.1.0). */
 export function EditorPage({ module }: { module: ModuleDef }) {
@@ -15,6 +16,7 @@ export function EditorPage({ module }: { module: ModuleDef }) {
 
 function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string; reload: () => void }) {
   const editable = useEditableItem<unknown>(module.kind, id);
+  const { host: diagramHost, dialogs } = useDiagramHost();
   const { item, status, saveNow } = editable;
 
   // Ctrl/⌘+S saves a version; held keys do not repeat it (audit CODE-1).
@@ -51,13 +53,21 @@ function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string
       onDiscardDraft={editable.discardDraft}
     >
       <ErrorBoundary what={`this ${module.label.toLowerCase()}`}>
-        <ModuleEditor module={module} key={editable.externalRevision} initialContent={item.content} title={editable.title} onChange={editable.updateContent} />
+        <ModuleEditor
+          module={module}
+          key={editable.externalRevision}
+          initialContent={item.content}
+          title={editable.title}
+          onChange={editable.updateContent}
+          diagramHost={module.kind === 'document' ? diagramHost : undefined}
+        />
       </ErrorBoundary>
+      {dialogs}
     </EditorFrame>
   );
 }
 
-function ModuleEditor({ module, ...props }: { module: ModuleDef; initialContent: unknown; title: string; onChange: (content: unknown) => void }) {
+function ModuleEditor({ module, ...props }: { module: ModuleDef } & EditorProps) {
   const Editor = useModuleEditor(module);
   if (!Editor) return <div className="p-6 text-sm text-muted">Opening editor…</div>;
   return <Editor {...props} />;

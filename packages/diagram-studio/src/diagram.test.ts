@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { UndoStack } from './history';
 import { layoutTree } from './layout';
 import { diagramTemplates } from './templates';
-import { deserializeDiagram, serializeDiagram, styledEdge } from './types';
+import { deserializeDiagram, edgeMarkers, serializeDiagram, styledEdge } from './types';
 
 describe('UndoStack', () => {
   it('undoes and redoes in order, and a new change clears redo', () => {
@@ -95,13 +95,18 @@ describe('serialization', () => {
     expect(deserializeDiagram({ nodes: 'nope' }).nodes).toEqual([]);
   });
 
-  it('derives arrow markers from connector data', () => {
-    const e = styledEdge({ id: 'e', source: 'a', target: 'b', data: { color: '#ff0000', width: 2, dashed: true, arrow: 'both' } });
-    expect(e.markerEnd).toBeTruthy();
-    expect(e.markerStart).toBeTruthy();
+  it('keeps the meaning of v1 arrow settings and lets schema 2 markers override them', () => {
+    const base = { color: '#000', width: 1, dashed: false };
+    expect(edgeMarkers({ ...base, arrow: 'end' })).toEqual({ start: 'none', end: 'arrow' });
+    expect(edgeMarkers({ ...base, arrow: 'both' })).toEqual({ start: 'arrow', end: 'arrow' });
+    expect(edgeMarkers({ ...base, arrow: 'none' })).toEqual({ start: 'none', end: 'none' });
+    expect(edgeMarkers({ ...base, arrow: 'end', startMarker: 'diamond', endMarker: 'triangle' })).toEqual({ start: 'diamond', end: 'triangle' });
+    // Markers are drawn inside the connector (so exports include them), not by React Flow.
+    const e = styledEdge({ id: 'e', source: 'a', target: 'b', data: { ...base, color: '#ff0000', width: 2, dashed: true, arrow: 'both' } });
+    expect(e.markerEnd).toBeUndefined();
     expect(e.style?.strokeDasharray).toBeTruthy();
-    expect(styledEdge({ id: 'e', source: 'a', target: 'b', data: { color: '#000', width: 1, dashed: false, arrow: 'none' } }).markerEnd).toBeUndefined();
   });
+
 });
 
 describe('templates', () => {

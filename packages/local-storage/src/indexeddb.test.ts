@@ -37,8 +37,12 @@ describe('IndexedDbAdapter basics', () => {
   });
 
   it('lists all kinds together, newest first', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
     const a = await store.create('document', { title: 'A', content: 1 });
+    vi.setSystemTime(new Date('2026-01-01T00:01:00Z'));
     const b = await store.create('diagram', { title: 'B', content: 2 });
+    vi.setSystemTime(new Date('2026-01-01T00:02:00Z'));
     await store.save('document', a.id, { content: 3 }, 1);
     expect((await store.listAll()).map((i) => i.id)).toEqual([a.id, b.id]);
   });
@@ -221,7 +225,7 @@ describe('backup and restore', () => {
     const base = { format: 'dcos-backup', schemaVersion: 1, exportedAt: '2026-01-01T00:00:00Z', deviceId: 'd', versions: [] };
     await expect(store.importBackup({ format: 'other' })).rejects.toBeInstanceOf(InvalidBackupError);
     await expect(store.importBackup({ ...base, schemaVersion: -1, items: [] })).rejects.toBeInstanceOf(InvalidBackupError);
-    await expect(store.importBackup({ ...base, schemaVersion: 2, items: [] })).rejects.toThrow(/newer/);
+    await expect(store.importBackup({ ...base, schemaVersion: 3, items: [] })).rejects.toThrow(/newer/);
     await expect(store.importBackup({ ...base, formatVersion: 3, items: [] })).rejects.toThrow(/newer/);
     const mixed = {
       ...base,
@@ -255,6 +259,42 @@ describe('backup and restore', () => {
     // The v0.1.0 rule: format 'dcos-backup', schemaVersion <= 1, kinds document|diagram.
     expect(backup.schemaVersion).toBeLessThanOrEqual(1);
     expect(backup.items.every((i) => ['document', 'diagram'].includes(i.kind))).toBe(true);
+  });
+});
+
+describe('attachments (embedded diagram previews)', () => {
+  const png = (seed: number) => new Uint8Array([0x89, 0x50, 0x4e, 0x47, seed, seed + 1]).buffer;
+
+  it('stores bytes once per content and reads them back', async () => {
+    const a = await store.putAttachment(png(1), 'image/png');
+    const again = await store.putAttachment(new Blob([png(1)]), 'image/png');
+    const other = await store.putAttachment(png(2), 'image/png');
+    expect(again.id).toBe(a.id);
+    expect(other.id).not.toBe(a.id);
+    expect(a).toMatchObject({ mimeType: 'image/png', sizeBytes: 6 });
+    expect(a.sha256).toMatch(/^[0-9a-f]{64}$/);
+    const stored = (await store.getAttachment(a.id))!;
+    expect(new Uint8Array(stored.data)).toEqual(new Uint8Array(png(1)));
+  });
+
+  it('travel with backups, keeping their ids so content references stay valid', async () => {
+    const a = await store.putAttachment(png(7), 'image/png');
+    await store.create('document', { title: 'With preview', content: { schemaVersion: 1, previewId: a.id } });
+    const backup = JSON.parse(JSON.stringify(await store.exportBackup()));
+    expect(backup.attachments).toHaveLength(1);
+    expect(backup.schemaVersion).toBe(1); // still readable by v0.1.0, which ignores the attachments field
+
+    const other = new IndexedDbAdapter(`${name}-att`);
+    expect(await other.importBackup(backup)).toMatchObject({ added: 1, attachmentsAdded: 1 });
+    expect(new Uint8Array((await other.getAttachment(a.id))!.data)).toEqual(new Uint8Array(png(7)));
+    expect(await other.importBackup(backup)).toMatchObject({ attachmentsAdded: 0, skipped: 1 });
+    await other.close();
+  });
+
+  it('rejects damaged attachment data without importing anything', async () => {
+    const bad = { format: 'dcos-backup', formatVersion: 2, schemaVersion: 1, exportedAt: '2026-01-01T00:00:00Z', deviceId: 'd', items: [{ id: 'x', kind: 'document', title: 'X', version: 1, content: {} }], versions: [], attachments: [{ id: 'a', base64: '!!!not base64' }] };
+    await expect(store.importBackup(bad)).rejects.toThrow(/damaged/);
+    expect(await store.get('document', 'x')).toBeUndefined();
   });
 });
 

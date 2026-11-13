@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DOCUMENT_SCHEMA, migrateDocument } from './migrate';
+import { DOCUMENT_SCHEMA, migrateDocument, schemaFor } from './migrate';
 import { displaySafe, prepareDocument, validateDoc } from './safety';
 import { documentTemplates } from './templates';
 import { createEmptyDocument } from './types';
@@ -27,13 +27,19 @@ describe('opening v0.1.0 documents', () => {
     expect(JSON.stringify(prepared.content.doc)).toContain('Observations');
   });
 
-  it('leaves valid documents byte-identical (opening must not rewrite them)', () => {
+  it('leaves valid documents unchanged, and saving them keeps schema 1 (readable by v0.1.0)', () => {
     for (const file of ['assignment.json', 'kitchen-sink.json', 'essay.json']) {
       const raw = fixture(file);
       const result = migrateDocument(raw);
-      expect(result.ok && result.repairs).toEqual([]);
-      expect(result.ok && result.content).toEqual(raw);
+      if (!result.ok) throw new Error('expected ok');
+      expect(result.repairs).toEqual([]);
+      expect({ ...result.content, schemaVersion: 1 }).toEqual(raw);
+      expect(schemaFor(result.content.doc)).toBe(1);
     }
+  });
+
+  it('marks documents that contain a diagram as schema 2', () => {
+    expect(schemaFor({ type: 'doc', content: [{ type: 'paragraph' }, { type: 'diagram', attrs: { previewId: 'x' } }] })).toBe(2);
   });
 });
 

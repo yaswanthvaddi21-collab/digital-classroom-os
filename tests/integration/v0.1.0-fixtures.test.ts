@@ -43,11 +43,12 @@ describe('v0.1.0 backup', () => {
 });
 
 describe('v0.1.0 diagrams', () => {
-  it.each(diagramFiles)('%s round-trips through deserialize/serialize without changes', (file) => {
+  it.each(diagramFiles)('%s round-trips through deserialize/serialize with every node, edge and setting intact', (file) => {
     const item = load<WorkspaceItem<DiagramContent>>(`diagrams/${file}`);
     const state = deserializeDiagram(item.content);
     const again = serializeDiagram(state.nodes, state.edges, state.viewport, state.settings);
-    // Opening a diagram must not rewrite it: identical JSON means autosave sees no change.
-    expect(JSON.stringify(again)).toBe(JSON.stringify(item.content));
+    // Only the schema number moves forward (written once the user edits); the data itself is unchanged.
+    expect(item.content.schemaVersion).toBe(1);
+    expect(JSON.stringify({ ...again, schemaVersion: 1 })).toBe(JSON.stringify(item.content));
   });
 });

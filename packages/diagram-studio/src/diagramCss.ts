@@ -10,6 +10,11 @@ export const diagramCss = `
   line-height: 1.25; white-space: pre-wrap; word-break: break-word; overflow: hidden;
   font-family: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
 }
+.dcos-compartments { display: flex; flex-direction: column; width: 100%; height: 100%; text-align: left; line-height: 1.35; }
+.dcos-compartment-header { text-align: center; padding: 6px 8px; border-radius: 4px 4px 0 0; }
+.dcos-compartment { padding: 4px 8px; }
+.dcos-compartment:last-child { flex: 1; }
+.dcos-compartment-row { white-space: pre; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 0.92em; }
 .dcos-label-placeholder { color: #9ca3af; font-size: 12px; font-weight: 400; font-style: italic; }
 .dcos-label-editor {
   width: 100%; height: 100%; resize: none; border: none; outline: none; background: transparent;

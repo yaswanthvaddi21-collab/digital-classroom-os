@@ -10,7 +10,7 @@ function cleanClone(editorDom: HTMLElement) {
   clone.removeAttribute('contenteditable');
   clone.querySelectorAll('[contenteditable]').forEach((el) => el.removeAttribute('contenteditable'));
   clone.querySelectorAll('.dcos-search-match').forEach((el) => el.replaceWith(...Array.from(el.childNodes)));
-  clone.querySelectorAll('[data-resize-handle], .column-resize-handle, .ProseMirror-gapcursor, .ProseMirror-separator, .ProseMirror-trailingBreak').forEach((el) => el.remove());
+  clone.querySelectorAll('[data-resize-handle], .column-resize-handle, .ProseMirror-gapcursor, .ProseMirror-separator, .ProseMirror-trailingBreak, .dcos-diagram-handle, .dcos-diagram-busy').forEach((el) => el.remove());
   clone.querySelectorAll('.ProseMirror-selectednode, .selectedCell, .is-selected').forEach((el) => el.classList.remove('ProseMirror-selectednode', 'selectedCell', 'is-selected'));
   clone.querySelectorAll('.is-editor-empty').forEach((el) => el.removeAttribute('data-placeholder'));
   return clone.innerHTML;
@@ -57,7 +57,10 @@ export function printDocument(editorDom: HTMLElement, page: PageSettings, title:
     doc.write(buildPrintHtml(cleanClone(editorDom), page, title));
     doc.close();
 
+    let done = false;
     const cleanup = () => {
+      if (done) return;
+      done = true;
       setTimeout(() => iframe.remove(), 500);
       resolve();
     };
@@ -75,8 +78,10 @@ export function printDocument(editorDom: HTMLElement, page: PageSettings, title:
       win.focus();
       win.print();
       // Some engines don't fire afterprint for iframes; restore anyway.
+      // Some engines never fire afterprint for iframes; restore and clean up regardless (audit CODE-12).
       setTimeout(() => {
         document.title = previousTitle;
+        cleanup();
       }, 1000);
     };
     if (doc.readyState === 'complete') void go();

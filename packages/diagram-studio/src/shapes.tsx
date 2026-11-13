@@ -13,7 +13,19 @@ export const SHAPE_CATALOG: Array<{ shape: ShapeKind; name: string; hint: string
   { shape: 'triangle', name: 'Triangle', hint: 'Merge / extract' },
   { shape: 'note', name: 'Sticky note', hint: 'Comment' },
   { shape: 'text', name: 'Text', hint: 'Free label' },
+  { shape: 'umlClass', name: 'UML class', hint: 'Name, attributes, methods' },
+  { shape: 'erEntity', name: 'ER entity', hint: 'Table and its fields' },
+  { shape: 'actor', name: 'Actor', hint: 'User or role (use case)' },
+  { shape: 'package', name: 'Package', hint: 'Group of classes or modules' },
 ];
+
+/** Starting text for shapes whose label has structure. */
+export const DEFAULT_LABELS: Partial<Record<ShapeKind, string>> = {
+  umlClass: 'ClassName\n+ attribute: Type\n--\n+ method(): Type',
+  erEntity: 'Entity\nPK id\nname\nFK other_id',
+  actor: 'Actor',
+  package: 'package',
+};
 
 interface Props {
   shape: ShapeKind;
@@ -85,6 +97,38 @@ export function ShapeSvg({ shape, width: w, height: h, fill, stroke, strokeWidth
       );
       break;
     }
+    case 'umlClass':
+    case 'erEntity':
+      // Compartment dividers are drawn by the node body, which knows where the text lines fall.
+      el = <rect x={i} y={i} width={w - 2 * i} height={h - 2 * i} rx={shape === 'erEntity' ? 6 : 1} {...common} />;
+      break;
+    case 'actor': {
+      const cx = w / 2;
+      const head = Math.min(w, h) * 0.14;
+      const top = i + 2;
+      const neck = top + head * 2;
+      const hip = neck + (h - 24) * 0.32;
+      const foot = h - 26;
+      const arms = neck + head * 0.8;
+      el = (
+        <>
+          <circle cx={cx} cy={top + head} r={head} {...common} />
+          <path d={`M${cx},${neck} V${hip} M${cx - w * 0.32},${arms} H${cx + w * 0.32} M${cx},${hip} L${cx - w * 0.26},${foot} M${cx},${hip} L${cx + w * 0.26},${foot}`} {...common} fill="none" />
+        </>
+      );
+      break;
+    }
+    case 'package': {
+      const tabW = Math.min(w * 0.4, 70);
+      const tabH = Math.min(18, h * 0.2);
+      el = (
+        <>
+          <rect x={i} y={i} width={tabW} height={tabH} {...common} />
+          <rect x={i} y={tabH} width={w - 2 * i} height={h - tabH - i} {...common} />
+        </>
+      );
+      break;
+    }
     default:
       // A shape from a newer version: draw a visible placeholder rather than nothing.
       el = (
@@ -120,6 +164,13 @@ export function labelInset(shape: ShapeKind): React.CSSProperties {
     case 'ellipse':
     case 'circle':
       return { inset: '12% 14%' };
+    case 'actor':
+      return { inset: 'auto 0 0 0', height: 22, alignItems: 'flex-end' };
+    case 'package':
+      return { inset: '22% 8px 6px 8px' };
+    case 'umlClass':
+    case 'erEntity':
+      return { inset: '0', alignItems: 'stretch', justifyContent: 'flex-start' };
     default:
       return { inset: '6px 10px' };
   }

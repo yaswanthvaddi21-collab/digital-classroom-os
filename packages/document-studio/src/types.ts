@@ -16,7 +16,8 @@ export interface PageSettings {
 
 /** The persisted form of a document. `doc` is Tiptap/ProseMirror JSON. */
 export interface DocumentContent {
-  schemaVersion: 1;
+  /** Content schema; see DOCUMENT_SCHEMA in migrate.ts. */
+  schemaVersion: number;
   doc: JSONContent;
   page: PageSettings;
   mode: EditorMode;

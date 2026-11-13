@@ -2,6 +2,7 @@ import { layoutTree } from './layout';
 import {
   createEmptyDiagram,
   DEFAULT_CONNECTOR,
+  DIAGRAM_SCHEMA,
   DEFAULT_SETTINGS,
   shapeDefaults,
   type AutoLayout,
@@ -45,7 +46,7 @@ function make(nodes: SerializedNode[], edges: SerializedEdge[], autoLayout: Auto
     nodes = laid.nodes;
     edges = laid.edges;
   }
-  return { schemaVersion: 1, nodes, edges, viewport: null, settings: { ...DEFAULT_SETTINGS, autoLayout } };
+  return { schemaVersion: DIAGRAM_SCHEMA, nodes, edges, viewport: null, settings: { ...DEFAULT_SETTINGS, autoLayout } };
 }
 
 /** Builds a tree from an outline: [label, children[]] pairs. */
@@ -203,6 +204,42 @@ export const diagramTemplates: DiagramTemplate[] = [
           n('mid', 'text', 'A ∩ B ∩ C', 130, 170, { fontSize: 13, w: 160 }),
         ],
         [],
+      ),
+  },
+  {
+    id: 'uml-class',
+    name: 'UML class diagram',
+    description: 'Classes with attributes and methods, inheritance and composition.',
+    build: () =>
+      make(
+        [
+          n('person', 'umlClass', 'Person\n- name: String\n- email: String\n--\n+ getName(): String', 200, 0, { w: 220, h: 130 }),
+          n('student', 'umlClass', 'Student\n- rollNo: int\n--\n+ enrol(c: Course): void', 0, 230, { w: 220, h: 120 }),
+          n('teacher', 'umlClass', 'Teacher\n- subject: String\n--\n+ grade(s: Student): int', 400, 230, { w: 220, h: 120 }),
+          n('course', 'umlClass', 'Course\n- code: String\n- credits: int\n--\n+ addStudent(s: Student)', 0, 460, { w: 220, h: 130 }),
+        ],
+        [
+          e('student', 'person', { sh: 't', th: 'b', type: 'smoothstep', data: { endMarker: 'triangle' } }),
+          e('teacher', 'person', { sh: 't', th: 'b', type: 'smoothstep', data: { endMarker: 'triangle' } }),
+          e('course', 'student', { label: 'enrols', sh: 't', th: 'b', type: 'straight', data: { startMarker: 'diamond', endMarker: 'open-arrow' } }),
+        ],
+      ),
+  },
+  {
+    id: 'er',
+    name: 'ER diagram',
+    description: 'Database entities with keys and crow’s-foot relationships.',
+    build: () =>
+      make(
+        [
+          n('students', 'erEntity', 'STUDENT\nPK student_id\nname\nemail', 0, 0),
+          n('enrolments', 'erEntity', 'ENROLMENT\nPK enrolment_id\nFK student_id\nFK course_id\ngrade', 300, 0, { h: 140 }),
+          n('courses', 'erEntity', 'COURSE\nPK course_id\ntitle\ncredits', 600, 0),
+        ],
+        [
+          e('students', 'enrolments', { sh: 'r', th: 'l', type: 'straight', label: 'has', data: { arrow: 'none', startMarker: 'crow-one', endMarker: 'crow-zero-many' } }),
+          e('courses', 'enrolments', { sh: 'l', th: 'r', type: 'straight', label: 'has', data: { arrow: 'none', startMarker: 'crow-one', endMarker: 'crow-zero-many' } }),
+        ],
       ),
   },
   {

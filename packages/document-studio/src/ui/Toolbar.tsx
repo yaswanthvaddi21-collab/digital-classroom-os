@@ -30,7 +30,7 @@ import {
   Underline,
   Undo2,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { EditorMode } from '../types';
 import { HIGHLIGHT_COLORS, Popover, Swatches, TEXT_COLORS } from './Popover';
 
@@ -49,10 +49,18 @@ function Group({ children, className }: { children: ReactNode; className?: strin
   return <div className={cn('flex shrink-0 items-center gap-0.5', className)}>{children}</div>;
 }
 
+export const OPEN_LINK_EVENT = 'dcos:open-link';
+
 function LinkButton({ editor }: { editor: Editor }) {
   const [url, setUrl] = useState('');
+  useEffect(() => {
+    const prefill = () => setUrl(editor.getAttributes('link').href ?? '');
+    window.addEventListener(OPEN_LINK_EVENT, prefill);
+    return () => window.removeEventListener(OPEN_LINK_EVENT, prefill);
+  }, [editor]);
   return (
     <Popover
+      openOn={OPEN_LINK_EVENT}
       trigger={({ toggle }) => (
         <IconButton
           label="Link (Ctrl+K)"
@@ -124,6 +132,26 @@ function TableButton({ editor }: { editor: Editor }) {
         </div>
       )}
     </Popover>
+  );
+}
+
+/** Simple / Advanced switch; shown on every toolbar tab because it applies to the whole document. */
+export function ModeToggle({ mode, onModeChange }: { mode: EditorMode; onModeChange: (m: EditorMode) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Editor mode" className="flex rounded-lg border border-border bg-surface-2 p-0.5 text-xs font-medium">
+      {(['simple', 'advanced'] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          role="radio"
+          aria-checked={mode === m}
+          onClick={() => onModeChange(m)}
+          className={cn('rounded-md px-2.5 py-1 capitalize', mode === m ? 'bg-surface text-fg shadow-xs' : 'text-muted hover:text-fg')}
+        >
+          {m}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -358,20 +386,7 @@ export function Toolbar({ editor, mode, onModeChange, onInsertImage, onToggleFin
         )}
       </div>
         <div className="flex shrink-0 items-center gap-2 border-l border-border px-2 py-1.5">
-          <div role="radiogroup" aria-label="Editor mode" className="flex rounded-lg border border-border bg-surface-2 p-0.5 text-xs font-medium">
-            {(['simple', 'advanced'] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                role="radio"
-                aria-checked={mode === m}
-                onClick={() => onModeChange(m)}
-                className={cn('rounded-md px-2.5 py-1 capitalize', mode === m ? 'bg-surface text-fg shadow-xs' : 'text-muted hover:text-fg')}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
+          <ModeToggle mode={mode} onModeChange={onModeChange} />
           {exportMenu}
         </div>
       </div>

@@ -1,7 +1,33 @@
 import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/react';
 import { createContext, memo, useContext, useEffect, useRef, useState } from 'react';
 import { labelInset, ShapeSvg } from './shapes';
-import type { ShapeData, ShapeNode as ShapeNodeType } from './types';
+import { COMPARTMENT_SHAPES, splitCompartments, type ShapeData, type ShapeNode as ShapeNodeType } from './types';
+
+/** UML class / ER entity body: header band, then compartments separated by full-width dividers. */
+function CompartmentBody({ data }: { data: ShapeData }) {
+  const { header, sections } = splitCompartments(data.label);
+  const er = data.shape === 'erEntity';
+  const line = { borderTop: `${Math.max(1, data.strokeWidth)}px solid ${data.stroke}` };
+  return (
+    <div className="dcos-compartments" style={{ color: data.textColor, fontSize: data.fontSize }}>
+      <div className="dcos-compartment-header" style={{ fontWeight: 700, background: er ? `${data.stroke}1a` : undefined }}>
+        {header || <span className="dcos-label-placeholder">Name</span>}
+      </div>
+      {sections.map((rows, i) => (
+        <div key={i} className="dcos-compartment" style={line}>
+          {rows.map((row, j) => {
+            const key = /^(PK|FK)\b/.exec(row.trim())?.[1];
+            return (
+              <div key={j} className="dcos-compartment-row" style={{ fontWeight: key === 'PK' ? 700 : 400, textDecoration: key === 'PK' ? 'underline' : undefined }}>
+                {row || '\u00a0'}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export interface DiagramActions {
   snapshot: () => void;
@@ -43,12 +69,19 @@ function LabelEditor({ id, data, onDone }: { id: string; data: ShapeData; onDone
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === 'Escape') onDone();
-        if (e.key === 'Enter' && !e.shiftKey) {
+        // Structured labels (UML, ER) are multi-line: Enter adds a line, Ctrl/⌘+Enter finishes.
+        const multiline = COMPARTMENT_SHAPES.has(data.shape);
+        if (e.key === 'Enter' && (multiline ? e.metaKey || e.ctrlKey : !e.shiftKey)) {
           e.preventDefault();
           commit();
         }
       }}
-      style={{ color: data.textColor, fontSize: data.fontSize, fontWeight: data.bold ? 700 : 500 }}
+      style={{
+        color: data.textColor,
+        fontSize: data.fontSize,
+        fontWeight: data.bold ? 700 : 500,
+        ...(COMPARTMENT_SHAPES.has(data.shape) ? { textAlign: 'left', padding: 6, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' } : {}),
+      }}
     />
   );
 }
@@ -73,6 +106,8 @@ export const ShapeNode = memo(function ShapeNode({ id, data, selected, width, he
       <div className="dcos-shape-label" style={labelInset(data.shape)}>
         {editing ? (
           <LabelEditor id={id} data={data} onDone={() => setEditingId(null)} />
+        ) : COMPARTMENT_SHAPES.has(data.shape) ? (
+          <CompartmentBody data={data} />
         ) : (
           <span style={{ color: data.textColor, fontSize: data.fontSize, fontWeight: data.bold ? 700 : 500 }}>
             {data.label || (selected ? <span className="dcos-label-placeholder">Double-click to type</span> : null)}

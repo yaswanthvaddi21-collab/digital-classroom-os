@@ -1,6 +1,20 @@
 import { cn, Input, Select } from '@dcos/ui';
 import type { ReactNode } from 'react';
-import type { ArrowMode, Connector, ConnectorData, EdgeLineType, ShapeData, ShapeNode } from './types';
+import { edgeMarkers, MARKER_KINDS, type Connector, type ConnectorData, type EdgeLineType, type MarkerKind, type ShapeData, type ShapeNode } from './types';
+
+const MARKER_LABELS: Record<MarkerKind, string> = {
+  none: 'none',
+  arrow: 'arrow',
+  'open-arrow': 'open arrow',
+  triangle: 'inheritance △',
+  diamond: 'aggregation ◇',
+  'diamond-filled': 'composition ◆',
+  circle: 'circle',
+  'crow-many': 'many (crow’s foot)',
+  'crow-one': 'exactly one',
+  'crow-zero-many': 'zero or many',
+  'crow-zero-one': 'zero or one',
+};
 
 const FILLS = ['#ffffff', '#f1f5f9', '#e0e7ff', '#dcfce7', '#fef3c7', '#fce7f3', '#e0f2fe', '#f3e8ff', '#fee2e2', '#1e293b', '#4f46e5', 'transparent'];
 const STROKES = ['#334155', '#94a3b8', '#4f46e5', '#15803d', '#b45309', '#be185d', '#0369a1', '#7e22ce', '#dc2626', 'transparent'];
@@ -108,6 +122,7 @@ export interface EdgePatch {
 export function EdgeInspector({ edges, onPatch }: { edges: Connector[]; onPatch: (patch: EdgePatch, opts: PatchOpts) => void }) {
   const e = edges[0];
   const d = e.data!;
+  const markers = edgeMarkers(d);
   const set = (patch: EdgePatch) => onPatch(patch, { snapshot: true });
   return (
     <div className="grid gap-4">
@@ -132,11 +147,6 @@ export function EdgeInspector({ edges, onPatch }: { edges: Connector[]; onPatch:
             <option value="straight">Straight</option>
             <option value="default">Curved</option>
           </Select>
-          <Select value={d.arrow} onChange={(ev) => set({ data: { arrow: ev.target.value as ArrowMode } })} aria-label="Arrows">
-            <option value="end">Arrow →</option>
-            <option value="both">Arrows ↔</option>
-            <option value="none">No arrow</option>
-          </Select>
           <Select value={String(d.width)} onChange={(ev) => set({ data: { width: Number(ev.target.value) } })} aria-label="Line width">
             {[1, 1.5, 2, 3, 4].map((w) => (
               <option key={w} value={w}>
@@ -145,6 +155,24 @@ export function EdgeInspector({ edges, onPatch }: { edges: Connector[]; onPatch:
             ))}
           </Select>
           <Toggle label="Dashed" checked={d.dashed} onChange={(dashed) => set({ data: { dashed } })} />
+        </div>
+      </Row>
+      <Row label="Ends">
+        <div className="grid grid-cols-2 gap-2">
+          <Select value={markers.start} onChange={(ev) => set({ data: { startMarker: ev.target.value as MarkerKind } })} aria-label="Start of connector">
+            {MARKER_KINDS.map((m) => (
+              <option key={m} value={m}>
+                Start: {MARKER_LABELS[m]}
+              </option>
+            ))}
+          </Select>
+          <Select value={markers.end} onChange={(ev) => set({ data: { endMarker: ev.target.value as MarkerKind } })} aria-label="End of connector">
+            {MARKER_KINDS.map((m) => (
+              <option key={m} value={m}>
+                End: {MARKER_LABELS[m]}
+              </option>
+            ))}
+          </Select>
         </div>
       </Row>
       <Row label="Colour">

@@ -1,0 +1,37 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram id="lib" name="Library system">
+    <mxGraphModel dx="1000" dy="600" grid="1" gridSize="10">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="book" value="Book" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=26;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="180" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="book-attrs" value="+ title: String&lt;br&gt;+ isbn: String" style="text;align=left;verticalAlign=top;" vertex="1" parent="book">
+          <mxGeometry y="26" width="180" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="book-line" style="line;strokeWidth=1;" vertex="1" parent="book">
+          <mxGeometry y="70" width="180" height="8" as="geometry" />
+        </mxCell>
+        <mxCell id="book-ops" value="+ borrow(): void" style="text;align=left;verticalAlign=top;" vertex="1" parent="book">
+          <mxGeometry y="78" width="180" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="member" value="Member" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="50" width="40" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="check" value="Available?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="320" y="220" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="cloud" value="Catalogue" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="230" width="120" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="borrows" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=open;html=1;" edge="1" parent="1" source="member" target="book-ops">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="endArrow=block;endFill=1;html=1;" edge="1" parent="1" source="member" target="check">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

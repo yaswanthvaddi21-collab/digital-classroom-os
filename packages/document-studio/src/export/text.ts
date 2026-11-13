@@ -36,6 +36,9 @@ export function documentToText(doc: JSONContent): string {
         case 'codeBlock':
           lines.push(inline(n), '');
           break;
+        case 'diagram':
+          lines.push(`${indent}[Diagram: ${n.attrs?.title || 'Untitled'}]`, '');
+          break;
         case 'tableOfContents':
         case 'image':
           break;

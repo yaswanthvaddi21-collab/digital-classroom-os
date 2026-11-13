@@ -1,8 +1,10 @@
 import { openDB, type DBSchema, type IDBPDatabase, type IDBPTransaction, type StoreNames } from 'idb';
 import { BACKUP_FORMAT_VERSION, contentSchemaOf, validateBackup } from './backup';
+import { toBase64 } from './base64';
 import { ConflictError, NotFoundError } from './errors';
 import { nowIso, uuid } from './ids';
 import type {
+  Attachment,
   BackupFile,
   CreateItemInput,
   Draft,
@@ -29,14 +31,6 @@ export const AUTO_SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000;
  */
 export const MAX_VERSIONS_PER_ITEM = 50;
 
-export interface AttachmentRecord {
-  id: string;
-  sha256: string;
-  mimeType: string;
-  sizeBytes: number;
-  blob: Blob;
-  createdAt: string;
-}
 
 interface DcosDB extends DBSchema {
   // ── v1 (frozen: never rename, reshape or remove) ──
@@ -48,7 +42,7 @@ interface DcosDB extends DBSchema {
   // ── v2 ──
   item_index: { key: string; value: ItemSummary; indexes: { by_kind: string } };
   drafts: { key: string; value: Draft };
-  attachments: { key: string; value: AttachmentRecord; indexes: { by_sha256: string } };
+  attachments: { key: string; value: Attachment; indexes: { by_sha256: string } };
 }
 
 type ItemStore = 'documents' | 'diagrams';
@@ -91,6 +85,11 @@ const MIGRATIONS: Array<(db: IDBPDatabase<DcosDB>, tx: UpgradeTx) => Promise<voi
     }
   },
 ];
+
+async function sha256Hex(data: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 function summarize(item: WorkspaceItem): ItemSummary {
   const { content, ...rest } = item;
@@ -340,7 +339,8 @@ export class IndexedDbAdapter implements StorageAdapter {
       throw new NotFoundError(kind, id);
     }
     const versions = await tx.objectStore(versionStore).index('by_item').getAll(id);
-    const newest = versions.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    // Newest first; versions written in the same millisecond are ordered by item version.
+    const newest = versions.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.version - a.version)[0];
     if (newest && newest.title === current.title && JSON.stringify(newest.content) === JSON.stringify(current.content)) {
       await tx.done;
       return false;
@@ -456,16 +456,24 @@ export class IndexedDbAdapter implements StorageAdapter {
       deviceId: await this.deviceId(),
       items,
       versions,
+      attachments: (await db.getAll('attachments')).map(({ data, ...rest }) => ({ ...rest, base64: toBase64(data) })),
     };
   }
 
   async importBackup(raw: unknown): Promise<ImportReport> {
-    const { items, versions, unsupported } = validateBackup(raw);
+    const { items, versions, unsupported, attachments } = validateBackup(raw);
     const db = await this.db();
-    const report: ImportReport = { added: 0, skipped: 0, copied: 0, versionsAdded: 0, unsupported };
+    const report: ImportReport = { added: 0, skipped: 0, copied: 0, versionsAdded: 0, unsupported, attachmentsAdded: 0 };
     const idMap = new Map<string, string>();
-    const tx = db.transaction(['documents', 'diagrams', 'document_versions', 'diagram_versions', 'item_index'], 'readwrite');
+    const tx = db.transaction(['documents', 'diagrams', 'document_versions', 'diagram_versions', 'item_index', 'attachments'], 'readwrite');
     const index = tx.objectStore('item_index');
+    // Attachments first: content refers to them by id, which is kept so references stay valid.
+    for (const a of attachments) {
+      const store = tx.objectStore('attachments');
+      if (await store.get(a.id)) continue;
+      await store.add(a);
+      report.attachmentsAdded++;
+    }
     const restoredKeys = new Set(
       (await index.getAll()).filter((s) => s.restoredFrom).map((s) => `${s.restoredFrom!.itemId}@${s.restoredFrom!.version}@${s.restoredFrom!.updatedAt}`),
     );
@@ -508,6 +516,28 @@ export class IndexedDbAdapter implements StorageAdapter {
     }
     await tx.done;
     return report;
+  }
+
+  async putAttachment(input: Blob | ArrayBuffer, mimeType: string): Promise<Omit<Attachment, 'data'>> {
+    const data = input instanceof ArrayBuffer ? input : await input.arrayBuffer();
+    const sha256 = await sha256Hex(data);
+    const db = await this.db();
+    const tx = db.transaction('attachments', 'readwrite');
+    const existing = await tx.store.index('by_sha256').get(sha256);
+    if (existing) {
+      await tx.done;
+      const { data: _data, ...meta } = existing;
+      return meta;
+    }
+    const record: Attachment = { id: uuid(), sha256, mimeType, sizeBytes: data.byteLength, data, createdAt: nowIso() };
+    await tx.store.add(record);
+    await tx.done;
+    const { data: _bytes, ...meta } = record;
+    return meta;
+  }
+
+  async getAttachment(id: string): Promise<Attachment | undefined> {
+    return (await this.db()).get('attachments', id);
   }
 
   async getMeta(key: string): Promise<string | undefined> {

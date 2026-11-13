@@ -1,5 +1,6 @@
 import { diagramTemplates } from '@dcos/diagram-studio/templates';
 import { documentTemplates } from '@dcos/document-studio/templates';
+import type { DiagramHost } from '@dcos/document-studio';
 import type { ItemKind } from '@dcos/local-storage';
 import { FileText, GitFork, type LucideIcon } from 'lucide-react';
 import { useEffect, useState, type ComponentType } from 'react';
@@ -8,6 +9,8 @@ export interface EditorProps {
   initialContent: unknown;
   title: string;
   onChange: (content: unknown) => void;
+  /** Documents only: enables embedded diagrams. */
+  diagramHost?: DiagramHost;
 }
 
 export interface TemplateOption {

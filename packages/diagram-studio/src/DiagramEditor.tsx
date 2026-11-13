@@ -42,14 +42,16 @@ import {
   Trash2,
   Undo2,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useMemo, useReducer, useRef, useState, type DragEvent, type KeyboardEvent, type Ref } from 'react';
 import { diagramCss } from './diagramCss';
-import { exportPdf, exportPng, exportSvg } from './export';
+import { toDrawio } from './drawio';
+import { exportPdf, exportPng, exportSize, exportSvg } from './export';
 import { UndoStack } from './history';
 import { EdgeInspector, NodeInspector, type EdgePatch, type PatchOpts } from './Inspector';
 import { layoutTree, type LayoutDirection } from './layout';
 import { DiagramActionsContext, ShapeNode as ShapeNodeView, type DiagramActions } from './ShapeNode';
-import { SHAPE_CATALOG, ShapeSvg } from './shapes';
+import { edgeTypes } from './edges';
+import { DEFAULT_LABELS, SHAPE_CATALOG, ShapeSvg } from './shapes';
 import {
   DEFAULT_CONNECTOR,
   deserializeDiagram,
@@ -84,7 +86,24 @@ export interface DiagramEditorProps {
   /** Read once on mount. Remount (change `key`) to load different content. */
   initialContent: unknown;
   title: string;
-  onChange: (content: DiagramContent) => void;
+  onChange?: (content: DiagramContent) => void;
+  /** Gives a host (such as the document's diagram dialog) access to the current diagram and its renders. */
+  apiRef?: Ref<DiagramEditorApi>;
+}
+
+export interface RenderedImage {
+  blob: Blob;
+  /** Natural size in CSS pixels; the PNG itself is pixelRatio times larger. */
+  width: number;
+  height: number;
+}
+
+export interface DiagramEditorApi {
+  getContent(): DiagramContent;
+  /** Renders the whole diagram (not just the visible part) without selection chrome. */
+  renderPng(pixelRatio?: number): Promise<RenderedImage>;
+  renderSvg(): Promise<Blob>;
+  renderPdf(): Promise<Blob>;
 }
 
 export function DiagramEditor(props: DiagramEditorProps) {
@@ -109,7 +128,7 @@ function onCanvas(target: EventTarget | null) {
 
 const ARROWS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
 
-function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
+function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps) {
   const [initial] = useState(() => deserializeDiagram(initialContent));
   const readOnly = diagramSchemaOf(initialContent) > DIAGRAM_SCHEMA;
   const [nodes, setNodes, onNodesChange] = useNodesState<ShapeNode>(initial.nodes);
@@ -139,7 +158,7 @@ function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
     const json = JSON.stringify(serializeDiagram(current.current.nodes, current.current.edges, null, settingsRef.current));
     if (json === lastEmitted.current) return;
     lastEmitted.current = json;
-    onChangeRef.current(serializeDiagram(current.current.nodes, current.current.edges, viewport.current, settingsRef.current));
+    onChangeRef.current?.(serializeDiagram(current.current.nodes, current.current.edges, viewport.current, settingsRef.current));
   }, [readOnly]);
   useEffect(emit, [nodes, edges, settings, emit]);
 
@@ -192,7 +211,7 @@ function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
       width,
       height,
       selected: true,
-      data: { ...style, label: shape === 'text' ? 'Text' : '' },
+      data: { ...style, label: shape === 'text' ? 'Text' : (DEFAULT_LABELS[shape] ?? '') },
     };
     snapshot();
     setNodes((ns) => [...ns.map((n) => ({ ...n, selected: false })), node]);
@@ -398,15 +417,48 @@ function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
   };
 
   // ── Export ───────────────────────────────────────────────────────────────
-  const runExport = async (kind: 'png' | 'svg' | 'pdf') => {
+  /** Clears selection and editing chrome, waits for the canvas to repaint, then hands over the flow element. */
+  const prepareCapture = async () => {
     const el = wrapper.current;
-    if (!el) return;
+    if (!el) throw new Error('The diagram is not on screen');
+    setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)));
+    setEdges((es) => es.map((x) => (x.selected ? { ...x, selected: false } : x)));
+    setEditingId(null);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return { el, ns: rf.getNodes() };
+  };
+
+  useImperativeHandle(
+    apiRef,
+    () => ({
+      getContent: () => serializeDiagram(current.current.nodes, current.current.edges, viewport.current, settingsRef.current),
+      renderPng: async (pixelRatio = 2) => {
+        const { el, ns } = await prepareCapture();
+        const size = exportSize(ns);
+        return { blob: await exportPng(el, ns, pixelRatio), ...size };
+      },
+      renderSvg: async () => {
+        const { el, ns } = await prepareCapture();
+        return exportSvg(el, ns);
+      },
+      renderPdf: async () => {
+        const { el, ns } = await prepareCapture();
+        return exportPdf(el, ns);
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const runExport = async (kind: 'png' | 'svg' | 'pdf' | 'drawio') => {
     try {
-      setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)));
-      setEdges((es) => es.map((x) => (x.selected ? { ...x, selected: false } : x)));
-      setEditingId(null);
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      const ns = rf.getNodes();
+      if (kind === 'drawio') {
+        const xml = toDrawio(serializeDiagram(current.current.nodes, current.current.edges, viewport.current, settingsRef.current), title);
+        downloadBlob(new Blob([xml], { type: 'application/vnd.jgraph.mxfile' }), `${safeFileName(title)}.drawio`);
+        toast('Exported for diagrams.net', 'success');
+        return;
+      }
+      const { el, ns } = await prepareCapture();
       const blob = kind === 'png' ? await exportPng(el, ns) : kind === 'svg' ? await exportSvg(el, ns) : await exportPdf(el, ns);
       downloadBlob(blob, `${safeFileName(title)}.${kind}`);
       toast(`Exported ${kind.toUpperCase()}`, 'success');
@@ -520,6 +572,7 @@ function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
                 { label: 'PNG image (high resolution)', icon: <FileImage size={14} />, onSelect: () => void runExport('png') },
                 { label: 'SVG image', icon: <FileImage size={14} />, onSelect: () => void runExport('svg') },
                 { label: 'PDF', icon: <FileText size={14} />, onSelect: () => void runExport('pdf') },
+                { label: 'diagrams.net / draw.io (.drawio)', icon: <FileJson size={14} />, onSelect: () => void runExport('drawio') },
               ]}
             />
           </div>
@@ -563,6 +616,7 @@ function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
               nodes={nodes}
               edges={edges}
               nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}

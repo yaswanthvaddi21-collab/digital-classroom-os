@@ -1,4 +1,4 @@
-import { cn } from '@dcos/ui';
+import { cn, useAnchoredDropdown } from '@dcos/ui';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 /** Toolbar popover. Renders its trigger via a render prop and closes on outside click or Esc. */
@@ -7,11 +7,14 @@ export function Popover({
   children,
   align = 'start',
   className,
+  openOn,
 }: {
   trigger: (p: { open: boolean; toggle: () => void }) => ReactNode;
   children: (close: () => void) => ReactNode;
   align?: 'start' | 'end';
   className?: string;
+  /** A window event name that opens the popover (used for keyboard shortcuts). */
+  openOn?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -26,11 +29,19 @@ export function Popover({
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+  useEffect(() => {
+    if (!openOn) return;
+    const show = () => setOpen(true);
+    window.addEventListener(openOn, show);
+    return () => window.removeEventListener(openOn, show);
+  }, [openOn]);
+  // Viewport-positioned so the scrolling toolbar row cannot clip it.
+  const position = useAnchoredDropdown(open, setOpen, ref, align);
   return (
     <div ref={ref} className="relative">
       {trigger({ open, toggle: () => setOpen((o) => !o) })}
       {open && (
-        <div className={cn('absolute top-full z-50 mt-1 rounded-xl border border-border bg-surface p-2 shadow-lg', align === 'end' ? 'right-0' : 'left-0', className)}>
+        <div style={position} className={cn('z-50 rounded-xl border border-border bg-surface p-2 shadow-lg', className)}>
           {children(() => setOpen(false))}
         </div>
       )}

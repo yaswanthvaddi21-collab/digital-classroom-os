@@ -32,6 +32,13 @@ function viewportOf(flowEl: HTMLElement) {
 
 const dataUrlToBlob = async (url: string) => (await fetch(url)).blob();
 
+/** Size in CSS pixels of an export of these nodes (their bounds plus padding): the diagram's natural size. */
+export function exportSize(nodes: Node[]): { width: number; height: number } {
+  if (!nodes.length) return { width: 0, height: 0 };
+  const { width, height } = captureOptions(nodes, 1);
+  return { width, height };
+}
+
 /** PNG at 2× (or more) so diagrams stay crisp when pasted into documents or projected. */
 export async function exportPng(flowEl: HTMLElement, nodes: Node[], pixelRatio = 2): Promise<Blob> {
   if (!nodes.length) throw new Error('The diagram is empty');

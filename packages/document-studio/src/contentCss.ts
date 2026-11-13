@@ -51,6 +51,13 @@ export const documentContentCss = `
 .dcos-doc .dcos-toc button:hover { color: #3b49df; text-decoration: underline; }
 .dcos-doc .dcos-toc-empty { color: #8a8a96; font-style: italic; }
 .dcos-doc .dcos-toc.is-selected, .dcos-doc .ProseMirror-selectednode { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 4px; }
+.dcos-doc .dcos-diagram { margin: 0.8em 0; display: flex; justify-content: center; }
+.dcos-doc .dcos-diagram-box { position: relative; max-width: 100%; }
+.dcos-doc .dcos-diagram-box img { display: block; width: 100%; height: 100%; margin: 0; object-fit: contain; }
+.dcos-doc .dcos-diagram.is-selected .dcos-diagram-box { outline: 2px solid #6366f1; outline-offset: 3px; border-radius: 2px; }
+.dcos-doc .dcos-diagram-missing { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; min-height: 80px; padding: 1em; text-align: center; color: #6b6b76; background: #f6f6f8; border: 1px dashed #c9c9d2; border-radius: 6px; font-size: 10pt; }
+.dcos-doc .dcos-diagram-handle { position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; background: #fff; border: 2px solid #6366f1; border-radius: 3px; cursor: nwse-resize; }
+.dcos-doc .dcos-diagram-busy { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.7); font-size: 10pt; color: #4f46e5; }
 .dcos-doc .dcos-search-match { background: #fde68a; border-radius: 2px; }
 .dcos-doc .dcos-search-current { background: #f59e0b; color: #000; }
 .dcos-doc p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: #a0a0ab; float: left; height: 0; pointer-events: none; }

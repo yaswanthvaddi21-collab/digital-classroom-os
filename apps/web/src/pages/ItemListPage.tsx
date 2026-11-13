@@ -1,11 +1,13 @@
 import type { ItemKind, ItemSummary } from '@dcos/local-storage';
 import { Button, Card, cn, Dialog, EmptyState, Input, Menu, Select, useToast } from '@dcos/ui';
-import { Clock, FolderOpen, Plus, Search, Star, Trash2 } from 'lucide-react';
+import { Clock, FileInput, FolderOpen, Plus, Search, Star, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { chooseDrawioFile } from '../components/DiagramDialogs';
 import { useMemo, useState, type ReactNode } from 'react';
 import { ItemRow } from '../components/ItemRow';
 import { NewItemDialog } from '../components/NewItemDialog';
-import { notifyStorageChanged, storage, useItems } from '../lib/storage';
-import { MODULE_LIST, MODULES } from '../modules';
+import { notifyStorageChanged, requestPersistentStorage, storage, useItems } from '../lib/storage';
+import { itemHref, MODULE_LIST, MODULES } from '../modules';
 
 export type ListView = { type: 'kind'; kind: ItemKind } | { type: 'files' } | { type: 'recent' } | { type: 'favorites' } | { type: 'trash' };
 
@@ -39,6 +41,27 @@ export function ItemListPage({ view }: { view: ListView }) {
   }, [all, view.type, kindFilter, query, sort, trash]);
 
   const copy = describe(view);
+  const navigate = useNavigate();
+
+  /** Creates a new diagram from a diagrams.net / draw.io file, and says what (if anything) did not carry over. */
+  const importDrawio = async () => {
+    const file = await chooseDrawioFile();
+    if (!file) return;
+    try {
+      const { fromDrawio } = await import('@dcos/diagram-studio');
+      const { content, report } = fromDrawio(file.text);
+      const item = await storage.create('diagram', { title: report.title === 'Imported diagram' ? file.name : report.title, content, templateId: null });
+      notifyStorageChanged({ kind: 'diagram', id: item.id });
+      void requestPersistentStorage();
+      toast(
+        report.notes.length ? `Imported ${report.nodes} shapes and ${report.edges} connectors. Note: ${report.notes.join(' ')}` : `Imported ${report.nodes} shapes and ${report.edges} connectors.`,
+        report.notes.length ? 'info' : 'success',
+      );
+      navigate(itemHref('diagram', item.id));
+    } catch (err) {
+      toast(`Could not import “${file.name}”: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+  };
 
   const purge = async () => {
     if (!purging) return;
@@ -65,6 +88,11 @@ export function ItemListPage({ view }: { view: ListView }) {
             <option value="created">Date created</option>
             <option value="title">Name</option>
           </Select>
+        )}
+        {view.type === 'kind' && view.kind === 'diagram' && (
+          <Button icon={<FileInput size={16} />} onClick={() => void importDrawio()}>
+            Import diagrams.net
+          </Button>
         )}
         {view.type === 'kind' && (
           <Button variant="primary" icon={<Plus size={16} />} onClick={() => setCreating(view.kind)}>

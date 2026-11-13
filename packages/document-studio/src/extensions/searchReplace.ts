@@ -27,18 +27,23 @@ export function findMatches(doc: PMNode, term: string, caseSensitive: boolean): 
   const results: SearchMatch[] = [];
   doc.descendants((node, pos) => {
     if (!node.isTextblock) return true;
-    let text = '';
+    // `positions[i]` is the document position of the i-th UTF-16 unit of `hay`. Lower-casing can change length
+    // (Turkish İ becomes two units), so positions are recorded per lowered unit, not per original character.
+    let hay = '';
     const positions: number[] = [];
     node.forEach((child, offset) => {
       if (child.isText) {
-        for (let i = 0; i < child.text!.length; i++) positions.push(pos + 1 + offset + i);
-        text += child.text;
+        const t = child.text!;
+        for (let i = 0; i < t.length; i++) {
+          const unit = caseSensitive ? t[i] : t[i].toLowerCase();
+          for (let k = 0; k < unit.length; k++) positions.push(pos + 1 + offset + i);
+          hay += unit;
+        }
       } else {
         positions.push(pos + 1 + offset);
-        text += '￼';
+        hay += '\ufffc';
       }
     });
-    const hay = caseSensitive ? text : text.toLowerCase();
     let i = hay.indexOf(needle);
     while (i !== -1) {
       results.push({ from: positions[i], to: positions[i + needle.length - 1] + 1 });

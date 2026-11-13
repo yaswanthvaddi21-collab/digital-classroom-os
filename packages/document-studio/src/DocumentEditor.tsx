@@ -8,27 +8,40 @@ import { printDocument } from './export/print';
 import { documentToText } from './export/text';
 import { documentExtensions } from './extensions';
 import { readImageFile } from './image';
+import { schemaFor } from './migrate';
 import { prepareDocument } from './safety';
 import { paperSize, type DocumentContent, type EditorMode, type PageSettings } from './types';
 import { FindReplaceBar } from './ui/FindReplaceBar';
 import { PageSetupDialog } from './ui/PageSetupDialog';
-import { Toolbar } from './ui/Toolbar';
+import { DiagramRibbon } from './ui/DiagramRibbon';
+import { OPEN_LINK_EVENT, Toolbar } from './ui/Toolbar';
+import type { DiagramHost } from './extensions/diagramEmbed';
 
 export interface DocumentEditorProps {
   /** Read once on mount. Remount (change `key`) to load different content. */
   initialContent: unknown;
   title: string;
   onChange: (content: DocumentContent) => void;
+  /** Enables embedded diagrams (the Diagram tab, editing, previews). Supplied by the app. */
+  diagramHost?: DiagramHost;
 }
 
 /**
  * Opens a stored document. Content the editor can represent exactly is editable. Anything else (content from a
  * newer app version, or content the schema rejects) opens in a protected read-only view and is never saved over.
  */
-export function DocumentEditor({ initialContent, title, onChange }: DocumentEditorProps) {
+export function DocumentEditor({ initialContent, title, onChange, diagramHost }: DocumentEditorProps) {
   const [prepared] = useState(() => prepareDocument(initialContent));
-  if (prepared.state === 'editable') return <DocumentWorkspace content={prepared.content} title={title} onChange={onChange} repaired={prepared.repairs.length > 0} />;
-  return <DocumentWorkspace content={prepared.display} title={title} protectedView={{ reason: prepared.reason, detail: prepared.detail, original: initialContent }} />;
+  if (prepared.state === 'editable')
+    return <DocumentWorkspace content={prepared.content} title={title} onChange={onChange} repaired={prepared.repairs.length > 0} diagramHost={diagramHost} />;
+  return (
+    <DocumentWorkspace
+      content={prepared.display}
+      title={title}
+      diagramHost={diagramHost}
+      protectedView={{ reason: prepared.reason, detail: prepared.detail, original: initialContent }}
+    />
+  );
 }
 
 interface ProtectedView {
@@ -43,13 +56,16 @@ function DocumentWorkspace({
   onChange,
   protectedView,
   repaired = false,
+  diagramHost,
 }: {
   content: DocumentContent;
   title: string;
   onChange?: (c: DocumentContent) => void;
   protectedView?: ProtectedView;
   repaired?: boolean;
+  diagramHost?: DiagramHost;
 }) {
+  const [tab, setTab] = useState<'home' | 'diagram'>('home');
   const [showRepaired, setShowRepaired] = useState(repaired);
   const readOnly = !!protectedView;
   const [contentError, setContentError] = useState<string | null>(null);
@@ -65,7 +81,7 @@ function DocumentWorkspace({
   const latest = useRef({ page, mode, onChange });
   latest.current = { page, mode, onChange };
 
-  const extensions = useMemo(() => documentExtensions(), []);
+  const extensions = useMemo(() => documentExtensions({ diagramHost: diagramHost ?? null }), [diagramHost]);
   const editor = useEditor({
     extensions,
     content: initial.doc,
@@ -80,19 +96,20 @@ function DocumentWorkspace({
     onUpdate: ({ editor: e }) => {
       if (blocked.current) return;
       const { page: p, mode: m, onChange: cb } = latest.current;
-      cb?.({ schemaVersion: 1, doc: e.getJSON(), page: p, mode: m });
+      const doc = e.getJSON();
+      cb?.({ schemaVersion: schemaFor(doc), doc, page: p, mode: m });
     },
   });
 
-  // Page settings and mode are part of the document too, so changing them saves.
-  const firstRun = useRef(true);
+  // Page settings and mode are part of the document too, so changing them saves. Compared with the opening
+  // values (not a first-run flag) so React StrictMode's repeated effects never count as an edit.
   useEffect(() => {
-    if (firstRun.current) {
-      firstRun.current = false;
-      return;
+    if (page === initial.page && mode === initial.mode) return;
+    if (editor && !blocked.current) {
+      const doc = editor.getJSON();
+      latest.current.onChange?.({ schemaVersion: schemaFor(doc), doc, page, mode });
     }
-    if (editor && !blocked.current) latest.current.onChange?.({ schemaVersion: 1, doc: editor.getJSON(), page, mode });
-  }, [editor, page, mode]);
+  }, [editor, page, mode, initial.page, initial.mode]);
 
   // Ctrl/⌘+P prints from anywhere on the page, not only when focus is inside the editor.
   useEffect(() => {
@@ -156,9 +173,18 @@ function DocumentWorkspace({
       e.preventDefault();
       setFindOpen(true);
     }
+    // Ctrl/⌘+K: insert or edit a link (the Link control lives on the Home tab).
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && !readOnly) {
+      e.preventDefault();
+      setTab('home');
+      requestAnimationFrame(() => window.dispatchEvent(new Event(OPEN_LINK_EVENT)));
+    }
   };
 
-  const content = (): DocumentContent => ({ schemaVersion: 1, doc: editor.getJSON(), page, mode });
+  const content = (): DocumentContent => {
+    const doc = editor.getJSON();
+    return { schemaVersion: schemaFor(doc), doc, page, mode };
+  };
   const base = safeFileName(title);
 
   const exportMenu = (
@@ -181,7 +207,7 @@ function DocumentWorkspace({
           icon: <FileType size={14} />,
           onSelect: async () => {
             try {
-              downloadBlob(await exportDocx(content(), title), `${base}.docx`);
+              downloadBlob(await exportDocx(content(), title, diagramHost?.loadPreview), `${base}.docx`);
               toast('Exported Word document', 'success');
             } catch (err) {
               toast(`DOCX export failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
@@ -198,6 +224,8 @@ function DocumentWorkspace({
   );
 
   const paper = paperSize(page);
+  // Text width of the page in CSS pixels (96 per inch): embedded diagrams are never wider than this.
+  const textWidthPx = Math.round(((paper.width - page.margins.left - page.margins.right) / 25.4) * 96);
   const m = page.margins;
   const paperStyle = {
     '--paper-w': `${paper.width}mm`,
@@ -218,6 +246,35 @@ function DocumentWorkspace({
       {protectedNotice ? (
         <ProtectedBanner notice={protectedNotice} title={title} />
       ) : (
+      <>
+      {diagramHost && (
+        <div role="tablist" aria-label="Toolbar" className="flex items-end gap-1 border-b border-border bg-surface-2/50 px-2 pt-1">
+          {(
+            [
+              ['home', 'Home'],
+              ['diagram', 'Diagram'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => setTab(id)}
+              className={
+                tab === id
+                  ? '-mb-px rounded-t-md border border-b-surface border-border bg-surface px-3 py-1 text-xs font-semibold text-fg'
+                  : 'rounded-t-md px-3 py-1 text-xs font-medium text-muted hover:text-fg'
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {tab === 'diagram' && diagramHost ? (
+        <DiagramRibbon editor={editor} host={diagramHost} maxWidth={textWidthPx} mode={mode} onModeChange={setMode} exportMenu={exportMenu} />
+      ) : (
       <Toolbar
         editor={editor}
         mode={mode}
@@ -232,6 +289,8 @@ function DocumentWorkspace({
         onToggleSpellcheck={() => setSpellcheck((v) => !v)}
         exportMenu={exportMenu}
       />
+      )}
+      </>
       )}
       {showRepaired && !protectedNotice && (
         <div role="status" className="flex items-center gap-3 border-b border-accent/20 bg-accent-soft px-4 py-2 text-sm">

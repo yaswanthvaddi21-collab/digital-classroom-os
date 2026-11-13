@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import {
   forwardRef,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ButtonHTMLAttributes,
@@ -196,6 +197,40 @@ export interface MenuItem {
 }
 
 /** Small dropdown menu. Closes on outside click, Esc, or selection. */
+/**
+ * Places a dropdown under its trigger using viewport coordinates, so scrolling toolbars (overflow: auto) cannot
+ * clip it. Closes when anything scrolls or the window resizes, since the anchor has moved.
+ */
+export function useAnchoredDropdown(open: boolean, setOpen: (open: boolean) => void, anchor: React.RefObject<HTMLElement | null>, align: 'start' | 'end') {
+  // Fixed and hidden from the first render: an in-flow dropdown would stretch the anchor we are about to measure.
+  const hidden: React.CSSProperties = { position: 'fixed', top: 0, left: 0, visibility: 'hidden' };
+  const [style, setStyle] = useState<React.CSSProperties>(hidden);
+  useLayoutEffect(() => {
+    if (!open) setStyle(hidden);
+    if (!open || !anchor.current) return;
+    const r = anchor.current.getBoundingClientRect();
+    setStyle(
+      align === 'end'
+        ? { position: 'fixed', top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) }
+        : { position: 'fixed', top: r.bottom + 4, left: Math.max(8, Math.min(r.left, window.innerWidth - 220)) },
+    );
+  }, [open, anchor, align]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (e.type === 'scroll' && anchor.current && (e.target as Node)?.contains?.(anchor.current) === false) return;
+      setOpen(false);
+    };
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [open, setOpen, anchor]);
+  return style;
+}
+
 export function Menu({ trigger, items, align = 'start' }: { trigger: (props: { onClick: () => void; 'aria-expanded': boolean }) => ReactNode; items: MenuItem[]; align?: 'start' | 'end' }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -210,17 +245,12 @@ export function Menu({ trigger, items, align = 'start' }: { trigger: (props: { o
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+  const position = useAnchoredDropdown(open, setOpen, ref, align);
   return (
     <div ref={ref} className="relative inline-block">
       {trigger({ onClick: () => setOpen((o) => !o), 'aria-expanded': open })}
       {open && (
-        <div
-          role="menu"
-          className={cn(
-            'absolute z-50 mt-1 min-w-48 rounded-xl border border-border bg-surface p-1 shadow-lg',
-            align === 'end' ? 'right-0' : 'left-0',
-          )}
-        >
+        <div role="menu" style={position} className="z-50 min-w-48 rounded-xl border border-border bg-surface p-1 shadow-lg">
           {items.map((item) => (
             <button
               key={item.label}

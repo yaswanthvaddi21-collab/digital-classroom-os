@@ -8,5 +8,4 @@ export {
   AUTO_SNAPSHOT_INTERVAL_MS,
   MAX_VERSIONS_PER_ITEM,
   type IndexedDbAdapterOptions,
-  type AttachmentRecord,
 } from './indexeddb';
