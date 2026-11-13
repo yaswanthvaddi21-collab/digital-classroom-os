@@ -4,12 +4,19 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./templates": "./src/templates.ts"
+  },
   "dependencies": {
     "@dcos/ui": "*",
     "@xyflow/react": "^12.4.0",
     "html-to-image": "1.11.11",
     "jspdf": "^4.2.1"
   },
-  "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" }
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "sideEffects": false
 }

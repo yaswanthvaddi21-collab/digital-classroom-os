@@ -1,28 +1,68 @@
 import type { ItemKind } from '@dcos/local-storage';
 import { Button, Card, EmptyState } from '@dcos/ui';
-import { FileText, GitFork, HardDrive, Network, Plus, Sparkles } from 'lucide-react';
+import { FileText, GitFork, HardDrive, Network, Plus, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ItemRow } from '../components/ItemRow';
-import { NewItemDialog, templatesFor, useCreateItem } from '../components/NewItemDialog';
-import { useItems } from '../lib/storage';
+import { NewItemDialog, useCreateItem } from '../components/NewItemDialog';
+import { relativeTime } from '../lib/format';
+import { usePreferences } from '../lib/preferences';
+import { requestPersistentStorage, useDataSafety, useItems } from '../lib/storage';
+import { MODULES } from '../modules';
 
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
 }
 
+/**
+ * Tells the user plainly whether their work is protected: browsers can clear site data, and a backup file is
+ * the only copy that survives that (audit H-1 / incident S-1).
+ */
+function DataSafetyCard({ itemCount }: { itemCount: number }) {
+  const safety = useDataSafety();
+  const { backupReminderDays } = usePreferences();
+  if (!safety.persist) return null;
+  const persisted = safety.persist === 'persisted';
+  const backupAgeDays = safety.lastBackupAt ? (Date.now() - Date.parse(safety.lastBackupAt)) / 86_400_000 : Infinity;
+  const backupDue = itemCount > 0 && backupAgeDays >= backupReminderDays;
+  const ok = persisted && !backupDue;
+
+  return (
+    <Card className={ok ? 'flex gap-3 p-4' : 'flex gap-3 border-warning/40 bg-warning/5 p-4'}>
+      {ok ? <ShieldCheck size={18} className="mt-0.5 shrink-0 text-success" /> : <ShieldAlert size={18} className="mt-0.5 shrink-0 text-warning" />}
+      <div className="flex min-w-0 flex-col gap-2 text-sm">
+        <div className="font-medium">{ok ? 'Your work is protected on this device' : 'Protect your work'}</div>
+        {!persisted && itemCount > 0 && (
+          <p className="text-muted">This browser may clear its saved data when the device runs low on space.</p>
+        )}
+        {backupDue && (
+          <p className="text-muted">{safety.lastBackupAt ? `Last backup ${relativeTime(safety.lastBackupAt)}.` : 'You have not made a backup yet.'} A backup file is the only copy that survives if this browser's data is cleared.</p>
+        )}
+        {ok && <p className="text-muted">Persistent storage is on{safety.lastBackupAt ? ` and your last backup was ${relativeTime(safety.lastBackupAt)}` : ''}.</p>}
+        <div className="flex flex-wrap gap-2">
+          {!persisted && safety.persist !== 'unsupported' && itemCount > 0 && (
+            <Button size="sm" icon={<HardDrive size={14} />} onClick={async () => (await requestPersistentStorage(), safety.refresh())}>
+              Keep data on this device
+            </Button>
+          )}
+          {backupDue && (
+            <Link to="/settings/backup" className="inline-flex h-8 items-center rounded-lg bg-accent px-2.5 text-[13px] font-medium text-accent-fg hover:bg-accent-hover">
+              Back up now
+            </Link>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export function Dashboard() {
-  const docs = useItems('document');
-  const diagrams = useItems('diagram');
+  const { items: recent, loading } = useItems();
   const [dialog, setDialog] = useState<ItemKind | null>(null);
   const create = useCreateItem();
-
-  const recent = useMemo(
-    () => [...docs.items, ...diagrams.items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [docs.items, diagrams.items],
-  );
-  const favorites = recent.filter((i) => i.favorite);
-  const loading = docs.loading || diagrams.loading;
+  const favorites = useMemo(() => recent.filter((i) => i.favorite), [recent]);
+  const counts = useMemo(() => ({ document: recent.filter((i) => i.kind === 'document').length, diagram: recent.filter((i) => i.kind === 'diagram').length }), [recent]);
 
   const quick = [
     { kind: 'document' as const, template: 'assignment', label: 'Assignment', icon: <FileText size={18} /> },
@@ -54,7 +94,7 @@ export function Dashboard() {
         </h3>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {quick.map((q) => {
-            const template = templatesFor(q.kind).find((t) => t.id === q.template)!;
+            const template = MODULES[q.kind].templates.find((t) => t.id === q.template)!;
             return (
               <button
                 key={q.label}
@@ -73,9 +113,16 @@ export function Dashboard() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <section aria-labelledby="recent" className="lg:col-span-2">
           <Card className="p-2">
-            <h3 id="recent" className="px-3 pb-1 pt-2 text-sm font-semibold">
-              Recent work
-            </h3>
+            <div className="flex items-center justify-between px-3 pb-1 pt-2">
+              <h3 id="recent" className="text-sm font-semibold">
+                Recent work
+              </h3>
+              {recent.length > 8 && (
+                <Link to="/recent" className="text-xs font-medium text-accent hover:underline">
+                  View all
+                </Link>
+              )}
+            </div>
             {!loading && recent.length === 0 ? (
               <div className="p-2">
                 <EmptyState
@@ -96,8 +143,16 @@ export function Dashboard() {
         </section>
 
         <aside className="flex flex-col gap-6">
+          <DataSafetyCard itemCount={recent.length} />
           <Card className="p-2">
-            <h3 className="px-3 pb-1 pt-2 text-sm font-semibold">Favorites</h3>
+            <div className="flex items-center justify-between px-3 pb-1 pt-2">
+              <h3 className="text-sm font-semibold">Favorites</h3>
+              {favorites.length > 6 && (
+                <Link to="/favorites" className="text-xs font-medium text-accent hover:underline">
+                  View all
+                </Link>
+              )}
+            </div>
             {favorites.length === 0 ? (
               <p className="px-3 pb-3 text-sm text-muted">Star a file to pin it here.</p>
             ) : (
@@ -109,8 +164,7 @@ export function Dashboard() {
             <div className="text-sm">
               <div className="font-medium">Stored on this device</div>
               <p className="mt-1 text-muted">
-                {docs.items.length} document{docs.items.length === 1 ? '' : 's'} and {diagrams.items.length} diagram
-                {diagrams.items.length === 1 ? '' : 's'}. Export a backup from Settings to keep a copy elsewhere.
+                {counts.document} document{counts.document === 1 ? '' : 's'} and {counts.diagram} diagram{counts.diagram === 1 ? '' : 's'}.
               </p>
             </div>
           </Card>

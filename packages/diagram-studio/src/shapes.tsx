@@ -85,6 +85,16 @@ export function ShapeSvg({ shape, width: w, height: h, fill, stroke, strokeWidth
       );
       break;
     }
+    default:
+      // A shape from a newer version: draw a visible placeholder rather than nothing.
+      el = (
+        <>
+          <rect x={i} y={i} width={w - 2 * i} height={h - 2 * i} rx={6} fill="#f8fafc" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 4" />
+          <text x={w / 2} y={14} textAnchor="middle" fontSize={10} fill="#64748b">
+            unknown shape
+          </text>
+        </>
+      );
   }
   return (
     <svg className={className} width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden>

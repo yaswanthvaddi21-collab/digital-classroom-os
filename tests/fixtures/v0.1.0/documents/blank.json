@@ -1,0 +1,38 @@
+{
+  "id": "484fe31c-fb43-4f16-ab4c-73b6d75cbd71",
+  "kind": "document",
+  "title": "Blank document",
+  "content": {
+    "schemaVersion": 1,
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph"
+        }
+      ]
+    },
+    "page": {
+      "size": "A4",
+      "orientation": "portrait",
+      "margins": {
+        "top": 25.4,
+        "right": 25.4,
+        "bottom": 25.4,
+        "left": 25.4
+      },
+      "header": "",
+      "footer": "",
+      "pageNumbers": true
+    },
+    "mode": "simple"
+  },
+  "version": 1,
+  "createdAt": "2026-11-12T09:00:00.000Z",
+  "updatedAt": "2026-11-12T09:00:00.000Z",
+  "deletedAt": null,
+  "ownerDeviceId": "a15fdf7b-5552-417c-9212-f9bf0b2a668f",
+  "favorite": false,
+  "templateId": "blank",
+  "lastSnapshotAt": "2026-11-12T09:00:00.000Z"
+}

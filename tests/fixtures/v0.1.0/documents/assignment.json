@@ -1,0 +1,260 @@
+{
+  "id": "1dd5ad91-c988-474c-b13e-35a8a1ba9233",
+  "kind": "document",
+  "title": "Assignment",
+  "content": {
+    "schemaVersion": 1,
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 1,
+            "textAlign": "center"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Assignment Title"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Student name: ",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "____________________"
+            }
+          ],
+          "attrs": {
+            "textAlign": "center"
+          }
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Roll number: ",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "__________   "
+            },
+            {
+              "type": "text",
+              "text": "Subject: ",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "____________________"
+            }
+          ],
+          "attrs": {
+            "textAlign": "center"
+          }
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Submitted to: ",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "____________________   "
+            },
+            {
+              "type": "text",
+              "text": "Date: ",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "__________"
+            }
+          ],
+          "attrs": {
+            "textAlign": "center"
+          }
+        },
+        {
+          "type": "horizontalRule"
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Question"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Write or paste the assignment question here.",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Answer"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Begin your answer here. Use headings to separate parts of the question, and add diagrams from Diagram Studio where they help."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Conclusion"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Summarise the key points of your answer."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "References"
+            }
+          ]
+        },
+        {
+          "type": "orderedList",
+          "attrs": {
+            "start": 1
+          },
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Author, A. (Year). Title of the book. Publisher."
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Author, B. (Year). Title of the article. Journal, volume(issue), pages."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "page": {
+      "size": "A4",
+      "orientation": "portrait",
+      "margins": {
+        "top": 25.4,
+        "right": 25.4,
+        "bottom": 25.4,
+        "left": 25.4
+      },
+      "header": "",
+      "footer": "",
+      "pageNumbers": true
+    },
+    "mode": "simple"
+  },
+  "version": 1,
+  "createdAt": "2026-11-12T09:00:00.000Z",
+  "updatedAt": "2026-11-12T09:00:00.000Z",
+  "deletedAt": null,
+  "ownerDeviceId": "a15fdf7b-5552-417c-9212-f9bf0b2a668f",
+  "favorite": false,
+  "templateId": "assignment",
+  "lastSnapshotAt": "2026-11-12T09:00:00.000Z"
+}

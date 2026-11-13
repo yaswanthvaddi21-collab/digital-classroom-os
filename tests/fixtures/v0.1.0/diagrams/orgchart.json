@@ -1,0 +1,361 @@
+{
+  "id": "968da0aa-6016-459e-8242-1118ef6ca121",
+  "kind": "diagram",
+  "title": "Organisation chart",
+  "content": {
+    "schemaVersion": 1,
+    "nodes": [
+      {
+        "id": "n1",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "width": 160,
+        "height": 60,
+        "data": {
+          "shape": "rounded",
+          "fill": "#1e293b",
+          "stroke": "#0f172a",
+          "strokeWidth": 2,
+          "textColor": "#ffffff",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": true,
+          "label": "Principal"
+        }
+      },
+      {
+        "id": "n2",
+        "position": {
+          "x": -342,
+          "y": 130
+        },
+        "width": 140,
+        "height": 54,
+        "data": {
+          "shape": "rounded",
+          "fill": "#dcfce7",
+          "stroke": "#15803d",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "HOD Science"
+        }
+      },
+      {
+        "id": "n3",
+        "position": {
+          "x": -430,
+          "y": 254
+        },
+        "width": 140,
+        "height": 54,
+        "data": {
+          "shape": "rounded",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Physics"
+        }
+      },
+      {
+        "id": "n4",
+        "position": {
+          "x": -254,
+          "y": 254
+        },
+        "width": 140,
+        "height": 54,
+        "data": {
+          "shape": "rounded",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Chemistry"
+        }
+      },
+      {
+        "id": "n5",
+        "position": {
+          "x": 10,
+          "y": 130
+        },
+        "width": 140,
+        "height": 54,
+        "data": {
+          "shape": "rounded",
+          "fill": "#dcfce7",
+          "stroke": "#15803d",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "HOD Arts"
+        }
+      },
+      {
+        "id": "n6",
+        "position": {
+          "x": -78,
+          "y": 254
+        },
+        "width": 140,
+        "height": 54,
+        "data": {
+          "shape": "rounded",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "History"
+        }
+      },
+      {
+        "id": "n7",
+        "position": {
+          "x": 98,
+          "y": 254
+        },
+        "width": 140,
+        "height": 54,
+        "data": {
+          "shape": "rounded",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "English"
+        }
+      },
+      {
+        "id": "n8",
+        "position": {
+          "x": 362,
+          "y": 130
+        },
+        "width": 140,
+        "height": 54,
+        "data": {
+          "shape": "rounded",
+          "fill": "#dcfce7",
+          "stroke": "#15803d",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Administration"
+        }
+      },
+      {
+        "id": "n9",
+        "position": {
+          "x": 274,
+          "y": 254
+        },
+        "width": 140,
+        "height": 54,
+        "data": {
+          "shape": "rounded",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Office"
+        }
+      },
+      {
+        "id": "n10",
+        "position": {
+          "x": 450,
+          "y": 254
+        },
+        "width": 140,
+        "height": 54,
+        "data": {
+          "shape": "rounded",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Library"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-n1-n2",
+        "source": "n1",
+        "target": "n2",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n2-n3",
+        "source": "n2",
+        "target": "n3",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n2-n4",
+        "source": "n2",
+        "target": "n4",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n1-n5",
+        "source": "n1",
+        "target": "n5",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n5-n6",
+        "source": "n5",
+        "target": "n6",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n5-n7",
+        "source": "n5",
+        "target": "n7",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n1-n8",
+        "source": "n1",
+        "target": "n8",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n8-n9",
+        "source": "n8",
+        "target": "n9",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n8-n10",
+        "source": "n8",
+        "target": "n10",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      }
+    ],
+    "viewport": null,
+    "settings": {
+      "snapToGrid": true,
+      "showGrid": true,
+      "autoLayout": "TB"
+    }
+  },
+  "version": 1,
+  "createdAt": "2026-11-12T09:00:00.000Z",
+  "updatedAt": "2026-11-12T09:00:00.000Z",
+  "deletedAt": null,
+  "ownerDeviceId": "a15fdf7b-5552-417c-9212-f9bf0b2a668f",
+  "favorite": false,
+  "templateId": "orgchart",
+  "lastSnapshotAt": "2026-11-12T09:00:00.000Z"
+}

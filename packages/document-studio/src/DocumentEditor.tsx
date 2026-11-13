@@ -1,6 +1,6 @@
 import { Button, downloadBlob, Menu, safeFileName, useToast } from '@dcos/ui';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
-import { ChevronDown, Download, FileText, FileType, Printer } from 'lucide-react';
+import { ChevronDown, Download, FileJson, FileText, FileType, Printer, ShieldAlert } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { documentContentCss } from './contentCss';
 import { exportDocx } from './export/docx';
@@ -8,7 +8,8 @@ import { printDocument } from './export/print';
 import { documentToText } from './export/text';
 import { documentExtensions } from './extensions';
 import { readImageFile } from './image';
-import { normalizeDocument, paperSize, type DocumentContent, type EditorMode, type PageSettings } from './types';
+import { prepareDocument } from './safety';
+import { paperSize, type DocumentContent, type EditorMode, type PageSettings } from './types';
 import { FindReplaceBar } from './ui/FindReplaceBar';
 import { PageSetupDialog } from './ui/PageSetupDialog';
 import { Toolbar } from './ui/Toolbar';
@@ -20,8 +21,39 @@ export interface DocumentEditorProps {
   onChange: (content: DocumentContent) => void;
 }
 
+/**
+ * Opens a stored document. Content the editor can represent exactly is editable. Anything else (content from a
+ * newer app version, or content the schema rejects) opens in a protected read-only view and is never saved over.
+ */
 export function DocumentEditor({ initialContent, title, onChange }: DocumentEditorProps) {
-  const [initial] = useState(() => normalizeDocument(initialContent));
+  const [prepared] = useState(() => prepareDocument(initialContent));
+  if (prepared.state === 'editable') return <DocumentWorkspace content={prepared.content} title={title} onChange={onChange} repaired={prepared.repairs.length > 0} />;
+  return <DocumentWorkspace content={prepared.display} title={title} protectedView={{ reason: prepared.reason, detail: prepared.detail, original: initialContent }} />;
+}
+
+interface ProtectedView {
+  reason: 'newer' | 'invalid';
+  detail: string;
+  original: unknown;
+}
+
+function DocumentWorkspace({
+  content: initial,
+  title,
+  onChange,
+  protectedView,
+  repaired = false,
+}: {
+  content: DocumentContent;
+  title: string;
+  onChange?: (c: DocumentContent) => void;
+  protectedView?: ProtectedView;
+  repaired?: boolean;
+}) {
+  const [showRepaired, setShowRepaired] = useState(repaired);
+  const readOnly = !!protectedView;
+  const [contentError, setContentError] = useState<string | null>(null);
+  const blocked = useRef(readOnly);
   const [page, setPage] = useState<PageSettings>(initial.page);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
   const [spellcheck, setSpellcheck] = useState(true);
@@ -37,10 +69,18 @@ export function DocumentEditor({ initialContent, title, onChange }: DocumentEdit
   const editor = useEditor({
     extensions,
     content: initial.doc,
+    editable: !readOnly,
+    // Never let the editor silently replace content it cannot parse with an empty document (audit C-1).
+    enableContentCheck: true,
+    onContentError: ({ error }) => {
+      blocked.current = true;
+      setContentError(error.message);
+    },
     editorProps: { attributes: { class: 'dcos-doc', spellcheck: 'true', 'aria-label': 'Document body', role: 'textbox', 'aria-multiline': 'true' } },
     onUpdate: ({ editor: e }) => {
+      if (blocked.current) return;
       const { page: p, mode: m, onChange: cb } = latest.current;
-      cb({ schemaVersion: 1, doc: e.getJSON(), page: p, mode: m });
+      cb?.({ schemaVersion: 1, doc: e.getJSON(), page: p, mode: m });
     },
   });
 
@@ -51,16 +91,48 @@ export function DocumentEditor({ initialContent, title, onChange }: DocumentEdit
       firstRun.current = false;
       return;
     }
-    if (editor) latest.current.onChange({ schemaVersion: 1, doc: editor.getJSON(), page, mode });
+    if (editor && !blocked.current) latest.current.onChange?.({ schemaVersion: 1, doc: editor.getJSON(), page, mode });
   }, [editor, page, mode]);
 
+  // Ctrl/⌘+P prints from anywhere on the page, not only when focus is inside the editor.
   useEffect(() => {
-    editor?.view.dom.setAttribute('spellcheck', String(spellcheck));
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'p' && editor) {
+        e.preventDefault();
+        void printDocument(editor.view.dom, latest.current.page, title);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [editor, title]);
+
+  // The view may not be mounted yet (the editor is created before EditorContent attaches it), so apply on mount too.
+  useEffect(() => {
+    if (!editor) return;
+    const apply = () => {
+      if (editor.isDestroyed) return;
+      let dom: HTMLElement;
+      try {
+        dom = editor.view.dom; // throws until EditorContent has mounted the view; the 'mount' listener retries
+      } catch {
+        return;
+      }
+      dom.setAttribute('spellcheck', String(spellcheck));
+    };
+    apply();
+    editor.on('mount', apply);
+    return () => {
+      editor.off('mount', apply);
+    };
   }, [editor, spellcheck]);
 
   const counts = useEditorState({
     editor,
-    selector: ({ editor: e }) => (e ? { words: e.storage.characterCount.words(), chars: e.storage.characterCount.characters() } : { words: 0, chars: 0 }),
+    // The selector can run against an editor that React has just torn down (Suspense, StrictMode); its storage is gone then.
+    selector: ({ editor: e }) => {
+      const count = e && !e.isDestroyed ? e.storage.characterCount : undefined;
+      return count ? { words: count.words(), chars: count.characters() } : { words: 0, chars: 0 };
+    },
   });
 
   const insertImage = useCallback(
@@ -79,15 +151,10 @@ export function DocumentEditor({ initialContent, title, onChange }: DocumentEdit
   if (!editor) return null;
 
   const onKeyDown = (e: KeyboardEvent) => {
-    const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === 'f') {
+    // Opening Find is a view action: it must not change the document's mode or save anything.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && !readOnly) {
       e.preventDefault();
-      setMode('advanced');
       setFindOpen(true);
-    }
-    if (mod && e.key.toLowerCase() === 'p') {
-      e.preventDefault();
-      void printDocument(editor.view.dom, page, title);
     }
   };
 
@@ -98,7 +165,7 @@ export function DocumentEditor({ initialContent, title, onChange }: DocumentEdit
     <Menu
       align="end"
       trigger={(p) => (
-        <Button size="sm" variant="primary" icon={<Download size={14} />} {...p}>
+        <Button size="sm" variant="primary" icon={<Download size={14} />} aria-label="Export" {...p}>
           <span className="hidden sm:inline">Export</span> <ChevronDown size={13} />
         </Button>
       )}
@@ -141,11 +208,16 @@ export function DocumentEditor({ initialContent, title, onChange }: DocumentEdit
     '--m-left': `${m.left}mm`,
   } as CSSProperties;
 
-  const footerPreview = [page.footer, page.pageNumbers ? 'Page 1' : ''].filter(Boolean).join('   ·   ');
+  // The editor shows one continuous sheet, so this is a preview of the footer text, not a page count.
+  const footerPreview = [page.footer, page.pageNumbers ? 'Page # of #' : ''].filter(Boolean).join('   ·   ');
+  const protectedNotice = protectedView ?? (contentError ? { reason: 'invalid' as const, detail: contentError, original: initial } : null);
 
   return (
     <div className="flex h-full flex-col" onKeyDown={onKeyDown}>
       <style>{documentContentCss + pageCss}</style>
+      {protectedNotice ? (
+        <ProtectedBanner notice={protectedNotice} title={title} />
+      ) : (
       <Toolbar
         editor={editor}
         mode={mode}
@@ -160,7 +232,16 @@ export function DocumentEditor({ initialContent, title, onChange }: DocumentEdit
         onToggleSpellcheck={() => setSpellcheck((v) => !v)}
         exportMenu={exportMenu}
       />
-      {findOpen && <FindReplaceBar editor={editor} onClose={() => setFindOpen(false)} />}
+      )}
+      {showRepaired && !protectedNotice && (
+        <div role="status" className="flex items-center gap-3 border-b border-accent/20 bg-accent-soft px-4 py-2 text-sm">
+          <span className="flex-1">This document had a formatting fault from an earlier version that hid its contents. It has been repaired, and all of its text is here.</span>
+          <Button size="sm" variant="ghost" onClick={() => setShowRepaired(false)}>
+            Dismiss
+          </Button>
+        </div>
+      )}
+      {findOpen && !protectedNotice && <FindReplaceBar editor={editor} onClose={() => setFindOpen(false)} />}
 
       <div
         className="dcos-canvas min-h-0 flex-1 overflow-y-auto bg-canvas"
@@ -202,6 +283,31 @@ export function DocumentEditor({ initialContent, title, onChange }: DocumentEdit
         }}
       />
       {pageSetupOpen && <PageSetupDialog page={page} onApply={setPage} onClose={() => setPageSetupOpen(false)} />}
+    </div>
+  );
+}
+
+function ProtectedBanner({ notice, title }: { notice: ProtectedView; title: string }) {
+  return (
+    <div role="alert" className="flex flex-wrap items-start gap-3 border-b border-warning/30 bg-warning/10 px-4 py-3 text-sm">
+      <ShieldAlert size={18} className="mt-0.5 shrink-0 text-warning" />
+      <div className="min-w-0 flex-1">
+        <div className="font-semibold">Opened read-only to protect this document</div>
+        <p className="mt-0.5 text-muted">
+          {notice.reason === 'newer'
+            ? 'It was saved by a newer version of Classroom OS. Update the app on this device to edit it.'
+            : 'It contains content this version cannot display exactly.'}{' '}
+          Nothing has been changed or saved. What you see below may be simplified.
+        </p>
+        <p className="mt-1 font-mono text-xs text-muted">{notice.detail}</p>
+      </div>
+      <Button
+        size="sm"
+        icon={<FileJson size={14} />}
+        onClick={() => downloadBlob(new Blob([JSON.stringify(notice.original, null, 2)], { type: 'application/json' }), `${safeFileName(title)} (original data).json`)}
+      >
+        Download original data
+      </Button>
     </div>
   );
 }

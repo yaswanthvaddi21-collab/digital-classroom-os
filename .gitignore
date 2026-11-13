@@ -21,3 +21,8 @@ backend/*.db
 
 # Local source and database backups
 backups/
+
+# Test output
+test-results/
+playwright-report/
+blob-report/

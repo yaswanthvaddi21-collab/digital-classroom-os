@@ -1,0 +1,153 @@
+{
+  "id": "1f8acbd0-f80b-45ac-a220-e349f639199f",
+  "kind": "document",
+  "title": "Essay",
+  "content": {
+    "schemaVersion": 1,
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 1,
+            "textAlign": "center"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Essay Title"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Your name · Course · Date",
+              "marks": [
+                {
+                  "type": "italic"
+                }
+              ]
+            }
+          ],
+          "attrs": {
+            "textAlign": "center"
+          }
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Introduction"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Introduce the topic and state your thesis."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Main argument"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Develop your first point with evidence."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Counter-argument"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Address an opposing view."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Conclusion"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Restate the thesis and summarise."
+            }
+          ]
+        }
+      ]
+    },
+    "page": {
+      "size": "A4",
+      "orientation": "portrait",
+      "margins": {
+        "top": 25.4,
+        "right": 25.4,
+        "bottom": 25.4,
+        "left": 25.4
+      },
+      "header": "",
+      "footer": "",
+      "pageNumbers": true
+    },
+    "mode": "simple"
+  },
+  "version": 4,
+  "createdAt": "2026-11-12T09:00:00.000Z",
+  "updatedAt": "2026-11-12T09:20:00.000Z",
+  "deletedAt": null,
+  "ownerDeviceId": "a15fdf7b-5552-417c-9212-f9bf0b2a668f",
+  "favorite": false,
+  "templateId": "essay",
+  "lastSnapshotAt": "2026-11-12T09:20:00.000Z"
+}

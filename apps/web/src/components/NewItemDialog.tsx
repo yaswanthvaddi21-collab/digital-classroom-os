@@ -1,36 +1,29 @@
-import { diagramTemplates } from '@dcos/diagram-studio';
-import { documentTemplates } from '@dcos/document-studio';
 import type { ItemKind } from '@dcos/local-storage';
 import { cn, Dialog, useToast } from '@dcos/ui';
-import { FileText, GitFork } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getPreference } from '../lib/preferences';
 import { notifyStorageChanged, requestPersistentStorage, storage } from '../lib/storage';
-
-interface TemplateOption {
-  id: string;
-  name: string;
-  description: string;
-  build: () => unknown;
-}
-
-export function templatesFor(kind: ItemKind): TemplateOption[] {
-  return kind === 'document' ? documentTemplates : diagramTemplates;
-}
+import { itemHref, MODULES, type TemplateOption } from '../modules';
 
 export function useCreateItem() {
   const navigate = useNavigate();
   const toast = useToast();
   return async (kind: ItemKind, template: TemplateOption) => {
     try {
+      let content = template.build();
+      // The blank document starts in the user's preferred editing mode (Settings → General).
+      if (kind === 'document' && template.id === 'blank' && content && typeof content === 'object') {
+        content = { ...content, mode: getPreference('newDocumentMode') };
+      }
       const item = await storage.create(kind, {
-        title: template.id === 'blank' ? `Untitled ${kind}` : template.name,
-        content: template.build(),
+        title: template.id === 'blank' ? `Untitled ${MODULES[kind].label.toLowerCase()}` : template.name,
+        content,
         templateId: template.id,
       });
-      notifyStorageChanged();
+      notifyStorageChanged({ kind, id: item.id });
       void requestPersistentStorage();
-      navigate(`/${kind}s/${item.id}`);
+      navigate(itemHref(kind, item.id));
     } catch (err) {
       toast(`Could not create ${kind}: ${err instanceof Error ? err.message : String(err)}`, 'error');
     }
@@ -40,17 +33,12 @@ export function useCreateItem() {
 export function NewItemDialog({ kind, open, onClose }: { kind: ItemKind; open: boolean; onClose: () => void }) {
   const create = useCreateItem();
   const [busy, setBusy] = useState(false);
-  const Icon = kind === 'document' ? FileText : GitFork;
+  const module = MODULES[kind];
+  const Icon = module.icon;
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      size="lg"
-      title={kind === 'document' ? 'New document' : 'New diagram'}
-      description="Start blank or from a template. Everything is saved on this device."
-    >
+    <Dialog open={open} onClose={onClose} size="lg" title={`New ${module.label.toLowerCase()}`} description="Start blank or from a template. Everything is saved on this device.">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {templatesFor(kind).map((t) => (
+        {module.templates.map((t) => (
           <button
             key={t.id}
             type="button"

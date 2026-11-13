@@ -1,0 +1,351 @@
+{
+  "id": "fa02529b-c436-4ec8-9d27-443a1427eaeb",
+  "kind": "document",
+  "title": "Project report",
+  "content": {
+    "schemaVersion": 1,
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 1,
+            "textAlign": "center"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Project Report Title"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Student name: ",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "____________________"
+            }
+          ],
+          "attrs": {
+            "textAlign": "center"
+          }
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Roll number: ",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "__________   "
+            },
+            {
+              "type": "text",
+              "text": "Subject: ",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "____________________"
+            }
+          ],
+          "attrs": {
+            "textAlign": "center"
+          }
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Submitted to: ",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "____________________   "
+            },
+            {
+              "type": "text",
+              "text": "Date: ",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "__________"
+            }
+          ],
+          "attrs": {
+            "textAlign": "center"
+          }
+        },
+        {
+          "type": "pageBreak"
+        },
+        {
+          "type": "tableOfContents"
+        },
+        {
+          "type": "pageBreak"
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 1,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "1. Introduction"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Background and motivation for the project."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 2,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "1.1 Objectives"
+            }
+          ]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Objective one"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Objective two"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 1,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "2. Literature Review"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Summarise existing work."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 1,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "3. Methodology"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Describe your approach."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 1,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "4. Results and Discussion"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Present and interpret your results."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 1,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "5. Conclusion"
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Summarise findings and future work."
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {
+            "level": 1,
+            "textAlign": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "References"
+            }
+          ]
+        },
+        {
+          "type": "orderedList",
+          "attrs": {
+            "start": 1
+          },
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Reference one."
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Reference two."
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "page": {
+      "size": "A4",
+      "orientation": "portrait",
+      "margins": {
+        "top": 25.4,
+        "right": 25.4,
+        "bottom": 25.4,
+        "left": 25.4
+      },
+      "header": "Project Report",
+      "footer": "",
+      "pageNumbers": true
+    },
+    "mode": "advanced"
+  },
+  "version": 1,
+  "createdAt": "2026-11-12T09:00:00.000Z",
+  "updatedAt": "2026-11-12T09:00:00.000Z",
+  "deletedAt": null,
+  "ownerDeviceId": "a15fdf7b-5552-417c-9212-f9bf0b2a668f",
+  "favorite": false,
+  "templateId": "project-report",
+  "lastSnapshotAt": "2026-11-12T09:00:00.000Z"
+}

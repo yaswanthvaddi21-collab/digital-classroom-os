@@ -130,6 +130,14 @@ export function styledEdge(edge: Connector): Connector {
   };
 }
 
+/** Newest diagram content schema this build reads and writes. Newer content opens read-only. */
+export const DIAGRAM_SCHEMA = 1;
+
+export function diagramSchemaOf(raw: unknown): number {
+  const v = raw && typeof raw === 'object' ? (raw as { schemaVersion?: unknown }).schemaVersion : undefined;
+  return typeof v === 'number' && v >= 1 ? v : 1;
+}
+
 export function createEmptyDiagram(): DiagramContent {
   return { schemaVersion: 1, nodes: [], edges: [], viewport: null, settings: { ...DEFAULT_SETTINGS } };
 }

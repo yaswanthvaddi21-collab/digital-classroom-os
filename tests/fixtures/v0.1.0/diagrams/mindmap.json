@@ -1,0 +1,396 @@
+{
+  "id": "bec91a44-264f-4253-9b34-b63ad123b9cb",
+  "kind": "diagram",
+  "title": "Mind map",
+  "content": {
+    "schemaVersion": 1,
+    "nodes": [
+      {
+        "id": "n1",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "width": 180,
+        "height": 80,
+        "data": {
+          "shape": "ellipse",
+          "fill": "#4f46e5",
+          "stroke": "#4338ca",
+          "strokeWidth": 2,
+          "textColor": "#ffffff",
+          "fontSize": 16,
+          "dashed": false,
+          "bold": true,
+          "label": "Photosynthesis"
+        }
+      },
+      {
+        "id": "n2",
+        "position": {
+          "x": 250,
+          "y": -152
+        },
+        "width": 140,
+        "height": 48,
+        "data": {
+          "shape": "rounded",
+          "fill": "#dcfce7",
+          "stroke": "#15803d",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Inputs"
+        }
+      },
+      {
+        "id": "n3",
+        "position": {
+          "x": 460,
+          "y": -236
+        },
+        "width": 140,
+        "height": 48,
+        "data": {
+          "shape": "rectangle",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 1,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Sunlight"
+        }
+      },
+      {
+        "id": "n4",
+        "position": {
+          "x": 460,
+          "y": -152
+        },
+        "width": 140,
+        "height": 48,
+        "data": {
+          "shape": "rectangle",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 1,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Water"
+        }
+      },
+      {
+        "id": "n5",
+        "position": {
+          "x": 460,
+          "y": -68
+        },
+        "width": 140,
+        "height": 48,
+        "data": {
+          "shape": "rectangle",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 1,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "CO₂"
+        }
+      },
+      {
+        "id": "n6",
+        "position": {
+          "x": 250,
+          "y": 58
+        },
+        "width": 140,
+        "height": 48,
+        "data": {
+          "shape": "rounded",
+          "fill": "#dcfce7",
+          "stroke": "#15803d",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Process"
+        }
+      },
+      {
+        "id": "n7",
+        "position": {
+          "x": 460,
+          "y": 16
+        },
+        "width": 140,
+        "height": 48,
+        "data": {
+          "shape": "rectangle",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 1,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Light reactions"
+        }
+      },
+      {
+        "id": "n8",
+        "position": {
+          "x": 460,
+          "y": 100
+        },
+        "width": 140,
+        "height": 48,
+        "data": {
+          "shape": "rectangle",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 1,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Calvin cycle"
+        }
+      },
+      {
+        "id": "n9",
+        "position": {
+          "x": 250,
+          "y": 226
+        },
+        "width": 140,
+        "height": 48,
+        "data": {
+          "shape": "rounded",
+          "fill": "#dcfce7",
+          "stroke": "#15803d",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Outputs"
+        }
+      },
+      {
+        "id": "n10",
+        "position": {
+          "x": 460,
+          "y": 184
+        },
+        "width": 140,
+        "height": 48,
+        "data": {
+          "shape": "rectangle",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 1,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Glucose"
+        }
+      },
+      {
+        "id": "n11",
+        "position": {
+          "x": 460,
+          "y": 268
+        },
+        "width": 140,
+        "height": 48,
+        "data": {
+          "shape": "rectangle",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 1,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Oxygen"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-n1-n2",
+        "source": "n1",
+        "target": "n2",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n2-n3",
+        "source": "n2",
+        "target": "n3",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n2-n4",
+        "source": "n2",
+        "target": "n4",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n2-n5",
+        "source": "n2",
+        "target": "n5",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n1-n6",
+        "source": "n1",
+        "target": "n6",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n6-n7",
+        "source": "n6",
+        "target": "n7",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n6-n8",
+        "source": "n6",
+        "target": "n8",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n1-n9",
+        "source": "n1",
+        "target": "n9",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n9-n10",
+        "source": "n9",
+        "target": "n10",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-n9-n11",
+        "source": "n9",
+        "target": "n11",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      }
+    ],
+    "viewport": null,
+    "settings": {
+      "snapToGrid": true,
+      "showGrid": true,
+      "autoLayout": "LR"
+    }
+  },
+  "version": 1,
+  "createdAt": "2026-11-12T09:00:00.000Z",
+  "updatedAt": "2026-11-12T09:00:00.000Z",
+  "deletedAt": null,
+  "ownerDeviceId": "a15fdf7b-5552-417c-9212-f9bf0b2a668f",
+  "favorite": false,
+  "templateId": "mindmap",
+  "lastSnapshotAt": "2026-11-12T09:00:00.000Z"
+}

@@ -1,0 +1,186 @@
+{
+  "id": "7cf93153-ed1b-44a7-9e45-4df51a7e0c39",
+  "kind": "diagram",
+  "title": "Process diagram",
+  "content": {
+    "schemaVersion": 1,
+    "nodes": [
+      {
+        "id": "s0",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "width": 160,
+        "height": 76,
+        "data": {
+          "shape": "hexagon",
+          "fill": "#e0e7ff",
+          "stroke": "#4f46e5",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Research"
+        }
+      },
+      {
+        "id": "s1",
+        "position": {
+          "x": 210,
+          "y": 0
+        },
+        "width": 160,
+        "height": 76,
+        "data": {
+          "shape": "hexagon",
+          "fill": "#dcfce7",
+          "stroke": "#15803d",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Plan"
+        }
+      },
+      {
+        "id": "s2",
+        "position": {
+          "x": 420,
+          "y": 0
+        },
+        "width": 160,
+        "height": 76,
+        "data": {
+          "shape": "hexagon",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Draft"
+        }
+      },
+      {
+        "id": "s3",
+        "position": {
+          "x": 630,
+          "y": 0
+        },
+        "width": 160,
+        "height": 76,
+        "data": {
+          "shape": "hexagon",
+          "fill": "#fce7f3",
+          "stroke": "#be185d",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Review"
+        }
+      },
+      {
+        "id": "s4",
+        "position": {
+          "x": 840,
+          "y": 0
+        },
+        "width": 160,
+        "height": 76,
+        "data": {
+          "shape": "hexagon",
+          "fill": "#e0f2fe",
+          "stroke": "#0369a1",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Submit"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-s0-s1",
+        "source": "s0",
+        "target": "s1",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "straight",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-s1-s2",
+        "source": "s1",
+        "target": "s2",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "straight",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-s2-s3",
+        "source": "s2",
+        "target": "s3",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "straight",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-s3-s4",
+        "source": "s3",
+        "target": "s4",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "straight",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      }
+    ],
+    "viewport": null,
+    "settings": {
+      "snapToGrid": true,
+      "showGrid": true,
+      "autoLayout": "none"
+    }
+  },
+  "version": 1,
+  "createdAt": "2026-11-12T09:00:00.000Z",
+  "updatedAt": "2026-11-12T09:00:00.000Z",
+  "deletedAt": null,
+  "ownerDeviceId": "a15fdf7b-5552-417c-9212-f9bf0b2a668f",
+  "favorite": false,
+  "templateId": "process",
+  "lastSnapshotAt": "2026-11-12T09:00:00.000Z"
+}

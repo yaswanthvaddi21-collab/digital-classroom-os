@@ -1,0 +1,256 @@
+{
+  "id": "943ff7e3-1afa-434e-bff8-06cd86b94d45",
+  "kind": "diagram",
+  "title": "Network diagram",
+  "content": {
+    "schemaVersion": 1,
+    "nodes": [
+      {
+        "id": "router",
+        "position": {
+          "x": 300,
+          "y": 160
+        },
+        "width": 110,
+        "height": 110,
+        "data": {
+          "shape": "circle",
+          "fill": "#e0e7ff",
+          "stroke": "#4f46e5",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": true,
+          "label": "Router"
+        }
+      },
+      {
+        "id": "server",
+        "position": {
+          "x": 295,
+          "y": 0
+        },
+        "width": 120,
+        "height": 110,
+        "data": {
+          "shape": "cylinder",
+          "fill": "#e0f2fe",
+          "stroke": "#0369a1",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "File server"
+        }
+      },
+      {
+        "id": "pc1",
+        "position": {
+          "x": 40,
+          "y": 320
+        },
+        "width": 120,
+        "height": 60,
+        "data": {
+          "shape": "rectangle",
+          "fill": "#ffffff",
+          "stroke": "#334155",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "PC 1"
+        }
+      },
+      {
+        "id": "pc2",
+        "position": {
+          "x": 200,
+          "y": 340
+        },
+        "width": 120,
+        "height": 60,
+        "data": {
+          "shape": "rectangle",
+          "fill": "#ffffff",
+          "stroke": "#334155",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "PC 2"
+        }
+      },
+      {
+        "id": "pc3",
+        "position": {
+          "x": 380,
+          "y": 340
+        },
+        "width": 120,
+        "height": 60,
+        "data": {
+          "shape": "rectangle",
+          "fill": "#ffffff",
+          "stroke": "#334155",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "PC 3"
+        }
+      },
+      {
+        "id": "printer",
+        "position": {
+          "x": 540,
+          "y": 320
+        },
+        "width": 120,
+        "height": 60,
+        "data": {
+          "shape": "rectangle",
+          "fill": "#f1f5f9",
+          "stroke": "#334155",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Printer"
+        }
+      },
+      {
+        "id": "net",
+        "position": {
+          "x": 560,
+          "y": 60
+        },
+        "width": 150,
+        "height": 80,
+        "data": {
+          "shape": "ellipse",
+          "fill": "#e0f2fe",
+          "stroke": "#0369a1",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Internet"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-router-server",
+        "source": "router",
+        "target": "server",
+        "sourceHandle": "t",
+        "targetHandle": "b",
+        "type": "straight",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "none"
+        }
+      },
+      {
+        "id": "e-router-pc1",
+        "source": "router",
+        "target": "pc1",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "straight",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "none"
+        }
+      },
+      {
+        "id": "e-router-pc2",
+        "source": "router",
+        "target": "pc2",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "straight",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "none"
+        }
+      },
+      {
+        "id": "e-router-pc3",
+        "source": "router",
+        "target": "pc3",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "straight",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "none"
+        }
+      },
+      {
+        "id": "e-router-printer",
+        "source": "router",
+        "target": "printer",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "straight",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "none"
+        }
+      },
+      {
+        "id": "e-router-net",
+        "source": "router",
+        "target": "net",
+        "sourceHandle": "r",
+        "targetHandle": "l",
+        "type": "straight",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": true,
+          "arrow": "none"
+        }
+      }
+    ],
+    "viewport": null,
+    "settings": {
+      "snapToGrid": true,
+      "showGrid": true,
+      "autoLayout": "none"
+    }
+  },
+  "version": 1,
+  "createdAt": "2026-11-12T09:00:00.000Z",
+  "updatedAt": "2026-11-12T09:00:00.000Z",
+  "deletedAt": null,
+  "ownerDeviceId": "a15fdf7b-5552-417c-9212-f9bf0b2a668f",
+  "favorite": false,
+  "templateId": "network",
+  "lastSnapshotAt": "2026-11-12T09:00:00.000Z"
+}

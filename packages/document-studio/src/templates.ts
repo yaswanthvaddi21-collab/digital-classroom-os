@@ -3,9 +3,10 @@ import { createEmptyDocument, type DocumentContent } from './types';
 
 const text = (t: string, marks?: JSONContent['marks']): JSONContent => ({ type: 'text', text: t, ...(marks ? { marks } : {}) });
 const h = (level: number, t: string): JSONContent => ({ type: 'heading', attrs: { level, textAlign: null }, content: [text(t)] });
+// Empty strings are skipped: the schema rejects empty text nodes (they made v0.1.0 Lab reports open blank).
 const p = (...parts: Array<string | JSONContent>): JSONContent => ({
   type: 'paragraph',
-  content: parts.map((x) => (typeof x === 'string' ? text(x) : x)),
+  content: parts.filter((x) => x !== '').map((x) => (typeof x === 'string' ? text(x) : x)),
 });
 const center = (node: JSONContent): JSONContent => ({ ...node, attrs: { ...node.attrs, textAlign: 'center' } });
 const bold = (t: string) => text(t, [{ type: 'bold' }]);

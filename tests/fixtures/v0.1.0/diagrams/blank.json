@@ -1,0 +1,24 @@
+{
+  "id": "3746ebf0-875a-4821-8151-653a29b6c30e",
+  "kind": "diagram",
+  "title": "Blank canvas",
+  "content": {
+    "schemaVersion": 1,
+    "nodes": [],
+    "edges": [],
+    "viewport": null,
+    "settings": {
+      "snapToGrid": true,
+      "showGrid": true,
+      "autoLayout": "none"
+    }
+  },
+  "version": 2,
+  "createdAt": "2026-11-12T09:00:00.000Z",
+  "updatedAt": "2026-11-12T09:20:00.000Z",
+  "deletedAt": "2026-11-12T09:20:00.000Z",
+  "ownerDeviceId": "a15fdf7b-5552-417c-9212-f9bf0b2a668f",
+  "favorite": false,
+  "templateId": "blank",
+  "lastSnapshotAt": "2026-11-12T09:00:00.000Z"
+}

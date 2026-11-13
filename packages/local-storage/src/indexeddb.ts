@@ -1,53 +1,94 @@
 import { openDB, type DBSchema, type IDBPDatabase, type IDBPTransaction, type StoreNames } from 'idb';
-import { ConflictError, InvalidBackupError, NotFoundError } from './errors';
+import { BACKUP_FORMAT_VERSION, contentSchemaOf, validateBackup } from './backup';
+import { ConflictError, NotFoundError } from './errors';
 import { nowIso, uuid } from './ids';
 import type {
   BackupFile,
   CreateItemInput,
+  Draft,
   ImportReport,
   ItemKind,
   ItemSummary,
   ItemVersion,
   ItemVersionSummary,
-  SaveOptions,
   SavePatch,
   StorageAdapter,
   StorageInfo,
+  VersionReason,
   WorkspaceItem,
 } from './types';
 
-export const SCHEMA_VERSION = 1;
+/** IndexedDB schema version. v1 = items/versions/meta (frozen). v2 adds item_index, drafts, attachments. */
+export const SCHEMA_VERSION = 2;
 /** Minimum time between automatic version snapshots of one item. */
 export const AUTO_SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000;
-/** Versions kept per item; oldest automatic snapshots are pruned first. */
+/**
+ * Versions kept per item. When over the limit, autosave snapshots go first (oldest first), then older manual
+ * saves, then older 'before restore' copies. The creation version, the newest manual save and the newest
+ * restore point are never pruned.
+ */
 export const MAX_VERSIONS_PER_ITEM = 50;
 
+export interface AttachmentRecord {
+  id: string;
+  sha256: string;
+  mimeType: string;
+  sizeBytes: number;
+  blob: Blob;
+  createdAt: string;
+}
+
 interface DcosDB extends DBSchema {
+  // ── v1 (frozen: never rename, reshape or remove) ──
   documents: { key: string; value: WorkspaceItem };
   diagrams: { key: string; value: WorkspaceItem };
   document_versions: { key: string; value: ItemVersion; indexes: { by_item: string } };
   diagram_versions: { key: string; value: ItemVersion; indexes: { by_item: string } };
   meta: { key: string; value: { key: string; value: string } };
+  // ── v2 ──
+  item_index: { key: string; value: ItemSummary; indexes: { by_kind: string } };
+  drafts: { key: string; value: Draft };
+  attachments: { key: string; value: AttachmentRecord; indexes: { by_sha256: string } };
 }
 
 type ItemStore = 'documents' | 'diagrams';
 type VersionStore = 'document_versions' | 'diagram_versions';
+type WriteTx = IDBPTransaction<DcosDB, StoreNames<DcosDB>[], 'readwrite'>;
+type UpgradeTx = IDBPTransaction<DcosDB, StoreNames<DcosDB>[], 'versionchange'>;
 
-const itemStore = (kind: ItemKind): ItemStore => (kind === 'document' ? 'documents' : 'diagrams');
-const versionStore = (kind: ItemKind): VersionStore => (kind === 'document' ? 'document_versions' : 'diagram_versions');
-const ALL_STORES: StoreNames<DcosDB>[] = ['documents', 'diagrams', 'document_versions', 'diagram_versions', 'meta'];
+/** Exhaustive: adding an ItemKind without stores is a compile error. */
+const STORES: Record<ItemKind, { items: ItemStore; versions: VersionStore }> = {
+  document: { items: 'documents', versions: 'document_versions' },
+  diagram: { items: 'diagrams', versions: 'diagram_versions' },
+};
+const V1_STORES = ['documents', 'diagrams', 'document_versions', 'diagram_versions', 'meta'] as const;
 
 /**
  * Ordered schema migrations. Index i upgrades a database from version i to i + 1.
  * Never edit a shipped migration; append a new one and bump SCHEMA_VERSION.
+ * Inside a migration only IndexedDB requests may be awaited (anything else lets the transaction commit early).
  */
-const MIGRATIONS: Array<(db: IDBPDatabase<DcosDB>) => void> = [
+const MIGRATIONS: Array<(db: IDBPDatabase<DcosDB>, tx: UpgradeTx) => Promise<void> | void> = [
   (db) => {
     db.createObjectStore('documents', { keyPath: 'id' });
     db.createObjectStore('diagrams', { keyPath: 'id' });
     db.createObjectStore('document_versions', { keyPath: 'id' }).createIndex('by_item', 'itemId');
     db.createObjectStore('diagram_versions', { keyPath: 'id' }).createIndex('by_item', 'itemId');
     db.createObjectStore('meta', { keyPath: 'key' });
+  },
+  async (db, tx) => {
+    db.createObjectStore('item_index', { keyPath: 'id' }).createIndex('by_kind', 'kind');
+    db.createObjectStore('drafts', { keyPath: 'key' });
+    db.createObjectStore('attachments', { keyPath: 'id' }).createIndex('by_sha256', 'sha256', { unique: true });
+    // Backfill the list index from the existing records. Existing records are only read.
+    const index = tx.objectStore('item_index');
+    for (const store of ['documents', 'diagrams'] as const) {
+      let cursor = await tx.objectStore(store).openCursor();
+      while (cursor) {
+        await index.put(summarize(cursor.value));
+        cursor = await cursor.continue();
+      }
+    }
   },
 ];
 
@@ -61,20 +102,115 @@ function stripContent(v: ItemVersion): ItemVersionSummary {
   return rest;
 }
 
+const byNewest = (a: ItemSummary, b: ItemSummary) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '');
+const draftKey = (kind: ItemKind, id: string) => `${kind}:${id}`;
+
+/** Reads the version of an existing database without creating it. Returns 0 when it does not exist. */
+async function existingVersion(name: string): Promise<number> {
+  if (typeof indexedDB.databases === 'function') {
+    const found = (await indexedDB.databases()).find((d) => d.name === name);
+    return found?.version ?? 0;
+  }
+  return new Promise((resolve, reject) => {
+    let created = false;
+    const req = indexedDB.open(name);
+    req.onupgradeneeded = () => {
+      created = true;
+      req.transaction?.abort(); // it did not exist; do not create it
+    };
+    req.onsuccess = () => {
+      const v = req.result.version;
+      req.result.close();
+      resolve(v);
+    };
+    req.onerror = () => (created ? resolve(0) : reject(req.error));
+  });
+}
+
+/** Copies every store of `from` (at its current version) into a new database `to`, before an upgrade. */
+async function copyDatabase(from: string, to: string, fromVersion: number) {
+  const src = await openDB(from, fromVersion);
+  const data: Record<string, unknown[]> = {};
+  for (const name of Array.from(src.objectStoreNames)) data[name] = await src.getAll(name);
+  const layout = Array.from(src.objectStoreNames).map((name) => {
+    const s = src.transaction(name).objectStore(name);
+    return { name, keyPath: s.keyPath as string, indexes: Array.from(s.indexNames).map((i) => ({ name: i, keyPath: s.index(i).keyPath as string })) };
+  });
+  src.close();
+  await deleteDatabase(to);
+  const dst = await openDB(to, 1, {
+    upgrade(db) {
+      for (const l of layout) {
+        const store = db.createObjectStore(l.name, { keyPath: l.keyPath });
+        for (const ix of l.indexes) store.createIndex(ix.name, ix.keyPath);
+      }
+      db.createObjectStore('__copy', { keyPath: 'key' });
+    },
+  });
+  const tx = dst.transaction([...layout.map((l) => l.name), '__copy'], 'readwrite');
+  for (const l of layout) for (const rec of data[l.name]) await tx.objectStore(l.name).put(rec);
+  await tx.objectStore('__copy').put({ key: 'info', copiedAt: nowIso(), fromVersion, source: from });
+  await tx.done;
+  // Verify before the original is upgraded.
+  for (const l of layout) {
+    if ((await dst.count(l.name)) !== data[l.name].length) throw new Error(`Safety copy of ${l.name} is incomplete; upgrade stopped`);
+  }
+  dst.close();
+}
+
+function deleteDatabase(name: string) {
+  return new Promise<void>((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(name);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => resolve();
+  });
+}
+
+export interface IndexedDbAdapterOptions {
+  /** Another tab is upgrading the database. The connection closes once the returned promise settles. */
+  onVersionChange?: () => void | Promise<void>;
+  /** This tab wants to upgrade but another tab still has the old version open. */
+  onBlocked?: () => void;
+}
+
 export class IndexedDbAdapter implements StorageAdapter {
   private dbPromise: Promise<IDBPDatabase<DcosDB>>;
   private deviceIdPromise: Promise<string> | null = null;
+  private readonly safetyPrefix: string;
 
-  constructor(dbName = 'digital-classroom-os') {
-    this.dbPromise = openDB<DcosDB>(dbName, SCHEMA_VERSION, {
-      upgrade(db, oldVersion) {
-        for (let v = oldVersion; v < SCHEMA_VERSION; v++) MIGRATIONS[v](db);
+  constructor(
+    private readonly dbName = 'digital-classroom-os',
+    private readonly options: IndexedDbAdapterOptions = {},
+  ) {
+    this.safetyPrefix = `${dbName}-backup-v`;
+    this.dbPromise = this.open();
+  }
+
+  private async open() {
+    const current = await existingVersion(this.dbName);
+    if (current > 0 && current < SCHEMA_VERSION) {
+      await copyDatabase(this.dbName, `${this.safetyPrefix}${current}`, current);
+    }
+    const options = this.options;
+    const db = await openDB<DcosDB>(this.dbName, SCHEMA_VERSION, {
+      async upgrade(database, oldVersion, _newVersion, tx) {
+        for (let v = oldVersion; v < SCHEMA_VERSION; v++) await MIGRATIONS[v](database, tx);
+      },
+      blocked() {
+        options.onBlocked?.();
       },
       blocking() {
-        // Another tab wants to upgrade the schema; reload picks up the new version.
-        if (typeof location !== 'undefined') location.reload();
+        // Let the app save pending edits first; the upgrading tab waits until we close.
+        Promise.resolve(options.onVersionChange?.())
+          .catch(() => undefined)
+          .finally(() => db.close());
       },
     });
+    if (current > 0 && current < SCHEMA_VERSION) {
+      await db.put('meta', { key: 'migratedFrom', value: `${current}@${nowIso()}` });
+    }
+    return db;
   }
 
   private db() {
@@ -101,21 +237,30 @@ export class IndexedDbAdapter implements StorageAdapter {
   }
 
   async info(): Promise<StorageInfo> {
-    return { deviceId: await this.deviceId(), schemaVersion: SCHEMA_VERSION, backend: 'IndexedDB' };
+    const names = typeof indexedDB.databases === 'function' ? (await indexedDB.databases()).map((d) => d.name ?? '') : [];
+    return {
+      deviceId: await this.deviceId(),
+      schemaVersion: SCHEMA_VERSION,
+      backend: 'IndexedDB',
+      safetyCopies: names.filter((n) => n.startsWith(this.safetyPrefix)),
+    };
   }
 
   async list(kind: ItemKind, opts: { trashed?: boolean } = {}): Promise<ItemSummary[]> {
     const db = await this.db();
-    const all = await db.getAll(itemStore(kind));
-    return all
-      .filter((i) => (opts.trashed ? i.deletedAt !== null : i.deletedAt === null))
-      .map(summarize)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const all = await db.getAllFromIndex('item_index', 'by_kind', kind);
+    return all.filter((i) => (opts.trashed ? i.deletedAt !== null : i.deletedAt === null)).sort(byNewest);
+  }
+
+  async listAll(opts: { trashed?: boolean } = {}): Promise<ItemSummary[]> {
+    const db = await this.db();
+    const all = await db.getAll('item_index');
+    return all.filter((i) => (opts.trashed ? i.deletedAt !== null : i.deletedAt === null)).sort(byNewest);
   }
 
   async get<C>(kind: ItemKind, id: string): Promise<WorkspaceItem<C> | undefined> {
     const db = await this.db();
-    return (await db.get(itemStore(kind), id)) as WorkspaceItem<C> | undefined;
+    return (await db.get(STORES[kind].items, id)) as WorkspaceItem<C> | undefined;
   }
 
   async create<C>(kind: ItemKind, input: CreateItemInput<C>): Promise<WorkspaceItem<C>> {
@@ -136,18 +281,20 @@ export class IndexedDbAdapter implements StorageAdapter {
       templateId: input.templateId ?? null,
       lastSnapshotAt: now,
     };
-    const tx = db.transaction([itemStore(kind), versionStore(kind)], 'readwrite');
-    await tx.objectStore(itemStore(kind)).add(item as WorkspaceItem);
-    await tx.objectStore(versionStore(kind)).add(this.versionOf(item as WorkspaceItem, 'create'));
+    const tx = db.transaction([STORES[kind].items, STORES[kind].versions, 'item_index'], 'readwrite');
+    await tx.objectStore(STORES[kind].items).add(item as WorkspaceItem);
+    await tx.objectStore(STORES[kind].versions).add(this.versionOf(item as WorkspaceItem, 'create'));
+    await tx.objectStore('item_index').put(summarize(item as WorkspaceItem));
     await tx.done;
     return item;
   }
 
-  async save<C>(kind: ItemKind, id: string, patch: SavePatch<C>, expectedVersion: number, opts: SaveOptions = {}): Promise<WorkspaceItem<C>> {
+  async save<C>(kind: ItemKind, id: string, patch: SavePatch<C>, expectedVersion: number): Promise<WorkspaceItem<C>> {
     const db = await this.db();
+    const { items: itemStore, versions: versionStore } = STORES[kind];
     // Read-check-write in a single transaction: either the whole save lands or nothing does.
-    const tx = db.transaction([itemStore(kind), versionStore(kind)], 'readwrite');
-    const items = tx.objectStore(itemStore(kind));
+    const tx = db.transaction([itemStore, versionStore, 'item_index'], 'readwrite');
+    const items = tx.objectStore(itemStore);
     const current = await items.get(id);
     if (!current) {
       tx.abort();
@@ -159,25 +306,56 @@ export class IndexedDbAdapter implements StorageAdapter {
       await tx.done.catch(() => undefined);
       throw new ConflictError(current, expectedVersion);
     }
+    const contentChanged = patch.content !== undefined || patch.title !== undefined;
     const now = nowIso();
     const next: WorkspaceItem = {
       ...current,
       title: patch.title !== undefined ? patch.title.trim() || 'Untitled' : current.title,
       content: patch.content !== undefined ? patch.content : current.content,
       favorite: patch.favorite ?? current.favorite,
-      version: current.version + 1,
-      updatedAt: now,
+      // Metadata-only patches (favorite) neither count as an edit nor invalidate open editors.
+      version: contentChanged ? current.version + 1 : current.version,
+      updatedAt: contentChanged ? now : current.updatedAt,
     };
-    const contentChanged = patch.content !== undefined || patch.title !== undefined;
     const due = !current.lastSnapshotAt || Date.now() - Date.parse(current.lastSnapshotAt) >= AUTO_SNAPSHOT_INTERVAL_MS;
-    if (opts.snapshot || (contentChanged && due)) {
+    if (contentChanged && due) {
       next.lastSnapshotAt = now;
-      await tx.objectStore(versionStore(kind)).add(this.versionOf(next, opts.snapshot ? 'manual' : 'auto'));
+      await tx.objectStore(versionStore).add(this.versionOf(next, 'auto'));
       await this.prune(tx, kind, id);
     }
     await items.put(next);
+    await tx.objectStore('item_index').put(summarize(next));
     await tx.done;
     return next as WorkspaceItem<C>;
+  }
+
+  async snapshot(kind: ItemKind, id: string): Promise<boolean> {
+    const db = await this.db();
+    const { items: itemStore, versions: versionStore } = STORES[kind];
+    const tx = db.transaction([itemStore, versionStore, 'item_index'], 'readwrite');
+    const current = await tx.objectStore(itemStore).get(id);
+    if (!current) {
+      tx.abort();
+      await tx.done.catch(() => undefined);
+      throw new NotFoundError(kind, id);
+    }
+    const versions = await tx.objectStore(versionStore).index('by_item').getAll(id);
+    const newest = versions.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    if (newest && newest.title === current.title && JSON.stringify(newest.content) === JSON.stringify(current.content)) {
+      await tx.done;
+      return false;
+    }
+    const next = { ...current, lastSnapshotAt: nowIso() };
+    await tx.objectStore(versionStore).add(this.versionOf(next, 'manual'));
+    await this.prune(tx, kind, id);
+    await tx.objectStore(itemStore).put(next);
+    await tx.objectStore('item_index').put(summarize(next));
+    await tx.done;
+    return true;
+  }
+
+  async setFavorite(kind: ItemKind, id: string, favorite: boolean): Promise<void> {
+    await this.updateMetadata(kind, id, { favorite });
   }
 
   async duplicate(kind: ItemKind, id: string): Promise<WorkspaceItem> {
@@ -187,47 +365,61 @@ export class IndexedDbAdapter implements StorageAdapter {
   }
 
   async trash(kind: ItemKind, id: string): Promise<void> {
-    await this.setDeleted(kind, id, nowIso());
+    await this.updateMetadata(kind, id, { deletedAt: nowIso() });
   }
 
   async restore(kind: ItemKind, id: string): Promise<void> {
-    await this.setDeleted(kind, id, null);
+    await this.updateMetadata(kind, id, { deletedAt: null });
   }
 
-  private async setDeleted(kind: ItemKind, id: string, deletedAt: string | null) {
+  /** Favorite and trash state live beside the content: changing them does not bump version or updatedAt. */
+  private async updateMetadata(kind: ItemKind, id: string, patch: Partial<Pick<WorkspaceItem, 'favorite' | 'deletedAt'>>) {
     const db = await this.db();
-    const tx = db.transaction(itemStore(kind), 'readwrite');
-    const current = await tx.store.get(id);
-    if (!current) throw new NotFoundError(kind, id);
-    await tx.store.put({ ...current, deletedAt, version: current.version + 1, updatedAt: nowIso() });
+    const tx = db.transaction([STORES[kind].items, 'item_index'], 'readwrite');
+    const current = await tx.objectStore(STORES[kind].items).get(id);
+    if (!current) {
+      tx.abort();
+      await tx.done.catch(() => undefined);
+      throw new NotFoundError(kind, id);
+    }
+    const next = { ...current, ...patch };
+    await tx.objectStore(STORES[kind].items).put(next);
+    await tx.objectStore('item_index').put(summarize(next));
     await tx.done;
   }
 
   async purge(kind: ItemKind, id: string): Promise<void> {
     const db = await this.db();
-    const tx = db.transaction([itemStore(kind), versionStore(kind)], 'readwrite');
-    await tx.objectStore(itemStore(kind)).delete(id);
-    const versions = tx.objectStore(versionStore(kind));
+    const tx = db.transaction([STORES[kind].items, STORES[kind].versions, 'item_index', 'drafts'], 'readwrite');
+    await tx.objectStore(STORES[kind].items).delete(id);
+    await tx.objectStore('item_index').delete(id);
+    await tx.objectStore('drafts').delete(draftKey(kind, id));
+    const versions = tx.objectStore(STORES[kind].versions);
     for (const key of await versions.index('by_item').getAllKeys(id)) await versions.delete(key);
     await tx.done;
   }
 
   async listVersions(kind: ItemKind, id: string): Promise<ItemVersionSummary[]> {
     const db = await this.db();
-    const versions = await db.getAllFromIndex(versionStore(kind), 'by_item', id);
+    const versions = await db.getAllFromIndex(STORES[kind].versions, 'by_item', id);
     return versions.map(stripContent).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.version - a.version);
   }
 
   async restoreVersion(kind: ItemKind, id: string, versionId: string): Promise<WorkspaceItem> {
     const db = await this.db();
-    const tx = db.transaction([itemStore(kind), versionStore(kind)], 'readwrite');
-    const items = tx.objectStore(itemStore(kind));
+    const { items: itemStore, versions: versionStore } = STORES[kind];
+    const tx = db.transaction([itemStore, versionStore, 'item_index'], 'readwrite');
+    const items = tx.objectStore(itemStore);
     const current = await items.get(id);
-    const snapshot = await tx.objectStore(versionStore(kind)).get(versionId);
-    if (!current || !snapshot || snapshot.itemId !== id) throw new NotFoundError(kind, id);
+    const snapshot = await tx.objectStore(versionStore).get(versionId);
+    if (!current || !snapshot || snapshot.itemId !== id) {
+      tx.abort();
+      await tx.done.catch(() => undefined);
+      throw new NotFoundError(kind, id);
+    }
     const now = nowIso();
     // Keep the pre-restore state as a version too, so restoring is itself reversible.
-    await tx.objectStore(versionStore(kind)).add(this.versionOf(current, 'restore'));
+    await tx.objectStore(versionStore).add(this.versionOf(current, 'restore'));
     const next: WorkspaceItem = {
       ...current,
       title: snapshot.title,
@@ -236,14 +428,16 @@ export class IndexedDbAdapter implements StorageAdapter {
       updatedAt: now,
       lastSnapshotAt: now,
     };
+    await this.prune(tx, kind, id);
     await items.put(next);
+    await tx.objectStore('item_index').put(summarize(next));
     await tx.done;
     return next;
   }
 
   async exportBackup(): Promise<BackupFile> {
     const db = await this.db();
-    const tx = db.transaction(ALL_STORES, 'readonly');
+    const tx = db.transaction(['documents', 'diagrams', 'document_versions', 'diagram_versions'], 'readonly');
     const [documents, diagrams, documentVersions, diagramVersions] = await Promise.all([
       tx.objectStore('documents').getAll(),
       tx.objectStore('diagrams').getAll(),
@@ -251,44 +445,62 @@ export class IndexedDbAdapter implements StorageAdapter {
       tx.objectStore('diagram_versions').getAll(),
     ]);
     await tx.done;
+    const items = [...documents, ...diagrams];
+    const versions = [...documentVersions, ...diagramVersions];
     return {
       format: 'dcos-backup',
-      schemaVersion: SCHEMA_VERSION,
+      formatVersion: BACKUP_FORMAT_VERSION,
+      // Older apps accept the file only while every piece of content is still schema 1 (see backup.ts).
+      schemaVersion: Math.max(1, ...items.map((i) => contentSchemaOf(i.content)), ...versions.map((v) => contentSchemaOf(v.content))),
       exportedAt: nowIso(),
       deviceId: await this.deviceId(),
-      items: [...documents, ...diagrams],
-      versions: [...documentVersions, ...diagramVersions],
+      items,
+      versions,
     };
   }
 
   async importBackup(raw: unknown): Promise<ImportReport> {
-    const file = validateBackup(raw);
+    const { items, versions, unsupported } = validateBackup(raw);
     const db = await this.db();
-    const report: ImportReport = { added: 0, skipped: 0, copied: 0, versionsAdded: 0 };
+    const report: ImportReport = { added: 0, skipped: 0, copied: 0, versionsAdded: 0, unsupported };
     const idMap = new Map<string, string>();
-    const tx = db.transaction(['documents', 'diagrams', 'document_versions', 'diagram_versions'], 'readwrite');
+    const tx = db.transaction(['documents', 'diagrams', 'document_versions', 'diagram_versions', 'item_index'], 'readwrite');
+    const index = tx.objectStore('item_index');
+    const restoredKeys = new Set(
+      (await index.getAll()).filter((s) => s.restoredFrom).map((s) => `${s.restoredFrom!.itemId}@${s.restoredFrom!.version}@${s.restoredFrom!.updatedAt}`),
+    );
 
-    for (const item of file.items) {
-      const store = tx.objectStore(itemStore(item.kind));
+    for (const item of items) {
+      const store = tx.objectStore(STORES[item.kind].items);
       const existing = await store.get(item.id);
       if (!existing) {
         await store.add(item);
+        await index.put(summarize(item));
         idMap.set(item.id, item.id);
         report.added++;
       } else if (existing.version === item.version && existing.updatedAt === item.updatedAt) {
         report.skipped++;
+      } else if (restoredKeys.has(`${item.id}@${item.version}@${item.updatedAt}`)) {
+        // This exact copy was already restored from a backup earlier.
+        report.skipped++;
       } else {
         // Divergent copy: never overwrite local work. Import alongside it under a new id.
-        const copyId = uuid();
-        await store.add({ ...item, id: copyId, title: `${item.title} (restored)` });
-        idMap.set(item.id, copyId);
+        const copy: WorkspaceItem = {
+          ...item,
+          id: uuid(),
+          title: `${item.title} (restored)`,
+          restoredFrom: { itemId: item.id, version: item.version, updatedAt: item.updatedAt },
+        };
+        await store.add(copy);
+        await index.put(summarize(copy));
+        idMap.set(item.id, copy.id);
         report.copied++;
       }
     }
-    for (const v of file.versions) {
+    for (const v of versions) {
       const targetId = idMap.get(v.itemId);
       if (!targetId) continue;
-      const store = tx.objectStore(versionStore(v.kind));
+      const store = tx.objectStore(STORES[v.kind].versions);
       const id = targetId === v.itemId ? v.id : uuid();
       if (await store.get(id)) continue;
       await store.add({ ...v, id, itemId: targetId });
@@ -298,7 +510,51 @@ export class IndexedDbAdapter implements StorageAdapter {
     return report;
   }
 
-  private versionOf(item: WorkspaceItem, reason: ItemVersion['reason']): ItemVersion {
+  async getMeta(key: string): Promise<string | undefined> {
+    return (await (await this.db()).get('meta', key))?.value;
+  }
+
+  async setMeta(key: string, value: string): Promise<void> {
+    await (await this.db()).put('meta', { key, value });
+  }
+
+  async saveDraft<C>(draft: Omit<Draft<C>, 'key' | 'savedAt'>): Promise<void> {
+    await (await this.db()).put('drafts', { ...draft, key: draftKey(draft.kind, draft.itemId), savedAt: nowIso() } as Draft);
+  }
+
+  async getDraft<C>(kind: ItemKind, itemId: string): Promise<Draft<C> | undefined> {
+    return (await (await this.db()).get('drafts', draftKey(kind, itemId))) as Draft<C> | undefined;
+  }
+
+  async deleteDraft(kind: ItemKind, itemId: string): Promise<void> {
+    await (await this.db()).delete('drafts', draftKey(kind, itemId));
+  }
+
+  async exportSafetyCopy(name: string): Promise<BackupFile> {
+    if (!name.startsWith(this.safetyPrefix)) throw new Error(`${name} is not a safety copy`);
+    const copy = await openDB(name);
+    const read = (s: string) => (copy.objectStoreNames.contains(s) ? copy.getAll(s) : Promise.resolve([]));
+    const [documents, diagrams, dv, gv, meta] = await Promise.all([read('documents'), read('diagrams'), read('document_versions'), read('diagram_versions'), read('meta')]);
+    copy.close();
+    const items = [...documents, ...diagrams] as WorkspaceItem[];
+    const versions = [...dv, ...gv] as ItemVersion[];
+    return {
+      format: 'dcos-backup',
+      formatVersion: BACKUP_FORMAT_VERSION,
+      schemaVersion: Math.max(1, ...items.map((i) => contentSchemaOf(i.content))),
+      exportedAt: nowIso(),
+      deviceId: (meta as Array<{ key: string; value: string }>).find((m) => m.key === 'deviceId')?.value ?? 'unknown-device',
+      items,
+      versions,
+    };
+  }
+
+  async deleteSafetyCopy(name: string): Promise<void> {
+    if (!name.startsWith(this.safetyPrefix)) throw new Error(`${name} is not a safety copy`);
+    await deleteDatabase(name);
+  }
+
+  private versionOf(item: WorkspaceItem, reason: VersionReason): ItemVersion {
     return {
       id: uuid(),
       itemId: item.id,
@@ -311,41 +567,30 @@ export class IndexedDbAdapter implements StorageAdapter {
     };
   }
 
-  private async prune(tx: IDBPTransaction<DcosDB, StoreNames<DcosDB>[], 'readwrite'>, kind: ItemKind, id: string) {
-    const store = tx.objectStore(versionStore(kind));
-    const versions = await store.index('by_item').getAll(id);
-    const excess = versions.length + 1 - MAX_VERSIONS_PER_ITEM;
+  /** Brings an item's history down to MAX_VERSIONS_PER_ITEM. Call after adding a version in the same transaction. */
+  private async prune(tx: WriteTx, kind: ItemKind, id: string) {
+    const store = tx.objectStore(STORES[kind].versions);
+    const versions = (await store.index('by_item').getAll(id)).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    let excess = versions.length - MAX_VERSIONS_PER_ITEM;
     if (excess <= 0) return;
-    const removable = versions
-      .filter((v) => v.reason !== 'create')
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-    for (const v of removable.slice(0, excess)) await store.delete(v.id);
+    const newest = (reason: VersionReason) => versions.filter((v) => v.reason === reason).at(-1)?.id;
+    const keep = new Set([newest('manual'), newest('restore')]);
+    const candidates = [
+      ...versions.filter((v) => v.reason === 'auto'),
+      ...versions.filter((v) => v.reason === 'manual' && !keep.has(v.id)),
+      ...versions.filter((v) => v.reason === 'restore' && !keep.has(v.id)),
+    ];
+    for (const v of candidates) {
+      if (excess-- <= 0) break;
+      await store.delete(v.id);
+    }
   }
 
   /** Closes the connection. Mainly for tests. */
   async close() {
     (await this.db()).close();
   }
-}
 
-function validateBackup(raw: unknown): BackupFile {
-  if (!raw || typeof raw !== 'object') throw new InvalidBackupError('not an object');
-  const f = raw as Partial<BackupFile>;
-  if (f.format !== 'dcos-backup') throw new InvalidBackupError('unrecognised format');
-  if (typeof f.schemaVersion !== 'number' || f.schemaVersion > SCHEMA_VERSION) {
-    throw new InvalidBackupError(`schema version ${String(f.schemaVersion)} is newer than this app supports`);
-  }
-  if (!Array.isArray(f.items) || !Array.isArray(f.versions)) throw new InvalidBackupError('missing items or versions');
-  const kinds: ItemKind[] = ['document', 'diagram'];
-  for (const i of f.items) {
-    if (!i || typeof i.id !== 'string' || !kinds.includes(i.kind) || typeof i.version !== 'number' || typeof i.title !== 'string') {
-      throw new InvalidBackupError('malformed item record');
-    }
-  }
-  for (const v of f.versions) {
-    if (!v || typeof v.id !== 'string' || typeof v.itemId !== 'string' || !kinds.includes(v.kind)) {
-      throw new InvalidBackupError('malformed version record');
-    }
-  }
-  return f as BackupFile;
+  /** Database names, for tests and diagnostics. */
+  static readonly V1_STORES = V1_STORES;
 }

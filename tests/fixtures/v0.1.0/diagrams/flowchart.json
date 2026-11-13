@@ -1,0 +1,236 @@
+{
+  "id": "cf5ce547-4778-478a-b746-d65a50a38818",
+  "kind": "diagram",
+  "title": "Flowchart",
+  "content": {
+    "schemaVersion": 1,
+    "nodes": [
+      {
+        "id": "start",
+        "position": {
+          "x": 200,
+          "y": 0
+        },
+        "width": 150,
+        "height": 80,
+        "data": {
+          "shape": "ellipse",
+          "fill": "#e0e7ff",
+          "stroke": "#4f46e5",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Start"
+        }
+      },
+      {
+        "id": "input",
+        "position": {
+          "x": 190,
+          "y": 130
+        },
+        "width": 170,
+        "height": 70,
+        "data": {
+          "shape": "parallelogram",
+          "fill": "#dcfce7",
+          "stroke": "#15803d",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Read number N"
+        }
+      },
+      {
+        "id": "decide",
+        "position": {
+          "x": 200,
+          "y": 250
+        },
+        "width": 150,
+        "height": 110,
+        "data": {
+          "shape": "diamond",
+          "fill": "#fef3c7",
+          "stroke": "#b45309",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Is N even?"
+        }
+      },
+      {
+        "id": "even",
+        "position": {
+          "x": 20,
+          "y": 420
+        },
+        "width": 160,
+        "height": 70,
+        "data": {
+          "shape": "rounded",
+          "fill": "#ffffff",
+          "stroke": "#334155",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Print \"Even\""
+        }
+      },
+      {
+        "id": "odd",
+        "position": {
+          "x": 370,
+          "y": 420
+        },
+        "width": 160,
+        "height": 70,
+        "data": {
+          "shape": "rounded",
+          "fill": "#ffffff",
+          "stroke": "#334155",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "Print \"Odd\""
+        }
+      },
+      {
+        "id": "end",
+        "position": {
+          "x": 200,
+          "y": 560
+        },
+        "width": 150,
+        "height": 80,
+        "data": {
+          "shape": "ellipse",
+          "fill": "#e0e7ff",
+          "stroke": "#4f46e5",
+          "strokeWidth": 2,
+          "textColor": "#0f172a",
+          "fontSize": 14,
+          "dashed": false,
+          "bold": false,
+          "label": "End"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-start-input",
+        "source": "start",
+        "target": "input",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-input-decide",
+        "source": "input",
+        "target": "decide",
+        "sourceHandle": "b",
+        "targetHandle": "t",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-decide-even",
+        "source": "decide",
+        "target": "even",
+        "sourceHandle": "l",
+        "targetHandle": "t",
+        "type": "smoothstep",
+        "label": "Yes",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-decide-odd",
+        "source": "decide",
+        "target": "odd",
+        "sourceHandle": "r",
+        "targetHandle": "t",
+        "type": "smoothstep",
+        "label": "No",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-even-end",
+        "source": "even",
+        "target": "end",
+        "sourceHandle": "b",
+        "targetHandle": "l",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      },
+      {
+        "id": "e-odd-end",
+        "source": "odd",
+        "target": "end",
+        "sourceHandle": "b",
+        "targetHandle": "r",
+        "type": "smoothstep",
+        "label": "",
+        "data": {
+          "color": "#475569",
+          "width": 2,
+          "dashed": false,
+          "arrow": "end"
+        }
+      }
+    ],
+    "viewport": null,
+    "settings": {
+      "snapToGrid": true,
+      "showGrid": true,
+      "autoLayout": "none"
+    }
+  },
+  "version": 1,
+  "createdAt": "2026-11-12T09:00:00.000Z",
+  "updatedAt": "2026-11-12T09:00:00.000Z",
+  "deletedAt": null,
+  "ownerDeviceId": "a15fdf7b-5552-417c-9212-f9bf0b2a668f",
+  "favorite": false,
+  "templateId": "flowchart",
+  "lastSnapshotAt": "2026-11-12T09:00:00.000Z"
+}

@@ -30,6 +30,7 @@ import {
   CornerDownRight,
   Download,
   FileImage,
+  FileJson,
   FileText,
   Grid3x3,
   Magnet,
@@ -37,6 +38,7 @@ import {
   Network,
   Plus,
   Redo2,
+  ShieldAlert,
   Trash2,
   Undo2,
 } from 'lucide-react';
@@ -60,6 +62,8 @@ import {
   type ShapeData,
   type ShapeKind,
   type ShapeNode,
+  DIAGRAM_SCHEMA,
+  diagramSchemaOf,
 } from './types';
 
 const nodeTypes: NodeTypes = { shape: ShapeNodeView };
@@ -72,6 +76,8 @@ const newId = (prefix: string) =>
 interface Snapshot {
   nodes: ShapeNode[];
   edges: Connector[];
+  /** Included so undoing an Arrange also turns auto-arrange back off (audit DIAG-2). */
+  settings?: DiagramSettings;
 }
 
 export interface DiagramEditorProps {
@@ -95,8 +101,17 @@ function isTyping(target: EventTarget | null) {
   return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
 }
 
+/** Tree shortcuts (Tab, Enter, F2) belong to the canvas; on buttons and menus they keep their normal meaning (audit DIAG-5). */
+function onCanvas(target: EventTarget | null) {
+  const el = target as HTMLElement | null;
+  return !!el?.closest('.react-flow') && !el.closest('button, a, [role="menuitem"], .react-flow__panel');
+}
+
+const ARROWS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
+
 function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
   const [initial] = useState(() => deserializeDiagram(initialContent));
+  const readOnly = diagramSchemaOf(initialContent) > DIAGRAM_SCHEMA;
   const [nodes, setNodes, onNodesChange] = useNodesState<ShapeNode>(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Connector>(initial.edges);
   const [settings, setSettings] = useState<DiagramSettings>(initial.settings);
@@ -116,25 +131,37 @@ function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
 
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  // Only real changes are reported: opening, selecting, panning and zooming are not edits (audit FUNC-28).
+  // Compared without the viewport, which is saved along with real edits but never triggers a save itself.
+  const lastEmitted = useRef(JSON.stringify(serializeDiagram(initial.nodes, initial.edges, null, initial.settings)));
   const emit = useCallback(() => {
+    if (readOnly) return;
+    const json = JSON.stringify(serializeDiagram(current.current.nodes, current.current.edges, null, settingsRef.current));
+    if (json === lastEmitted.current) return;
+    lastEmitted.current = json;
     onChangeRef.current(serializeDiagram(current.current.nodes, current.current.edges, viewport.current, settingsRef.current));
-  }, []);
+  }, [readOnly]);
   useEffect(emit, [nodes, edges, settings, emit]);
 
   // ── History ──────────────────────────────────────────────────────────────
   const snapshot = useCallback(() => {
-    history.current.push(current.current);
+    history.current.push({ ...current.current, settings: settingsRef.current });
     rerender();
   }, []);
+  /** Inspector focus records the pre-edit state here; it becomes an undo step only if something changes (audit DIAG-3). */
+  const baseline = useRef<Snapshot | null>(null);
+  const lastArrowSnapshot = useRef(0);
   const restore = (s: Snapshot | undefined) => {
     if (!s) return;
     setNodes(s.nodes);
     setEdges(s.edges);
+    if (s.settings) setSettings(s.settings);
     setEditingId(null);
+    baseline.current = null;
     rerender();
   };
-  const undo = () => restore(history.current.undo(current.current));
-  const redo = () => restore(history.current.redo(current.current));
+  const undo = () => restore(history.current.undo({ ...current.current, settings: settingsRef.current }));
+  const redo = () => restore(history.current.redo({ ...current.current, settings: settingsRef.current }));
 
   // ── Mutations ────────────────────────────────────────────────────────────
   const updateNodeData = useCallback(
@@ -282,15 +309,35 @@ function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
     );
   };
 
+  /** Pushes an undo step for an inspector change: the focus baseline if there is one, else the current state. */
+  const recordInspectorChange = (opts: PatchOpts) => {
+    if (baseline.current) {
+      history.current.push(baseline.current);
+      baseline.current = null;
+      rerender();
+    } else if (opts.snapshot) {
+      snapshot();
+    }
+  };
+
   const patchNodes = (patch: Partial<ShapeData>, opts: PatchOpts) => {
-    if (opts.snapshot) snapshot();
-    if (!Object.keys(patch).length) return;
+    if (!Object.keys(patch).length) {
+      // Focus on a text field: remember the state, but do not create an undo step yet.
+      if (opts.snapshot) baseline.current = { ...current.current, settings: settingsRef.current };
+      return;
+    }
+    const keys = Object.keys(patch) as Array<keyof ShapeData>;
+    if (selectedNodes.every((n) => keys.every((k) => n.data[k] === patch[k]))) return; // nothing would change
+    recordInspectorChange(opts);
     setNodes((ns) => ns.map((n) => (n.selected ? { ...n, data: { ...n.data, ...patch } } : n)));
   };
 
   const patchEdges = (patch: EdgePatch, opts: PatchOpts) => {
-    if (opts.snapshot) snapshot();
-    if (!Object.keys(patch).length) return;
+    if (!Object.keys(patch).length) {
+      if (opts.snapshot) baseline.current = { ...current.current, settings: settingsRef.current };
+      return;
+    }
+    recordInspectorChange(opts);
     setEdges((es) =>
       es.map((e) =>
         e.selected
@@ -322,8 +369,16 @@ function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
     addShape(shape, rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
   };
 
+  /** Runs before React Flow moves nodes with the arrow keys, so the move can be undone (audit DIAG-4). */
+  const onKeyDownCapture = (e: KeyboardEvent) => {
+    if (readOnly || isTyping(e.target) || !ARROWS.has(e.key.toLowerCase()) || !selectedNodes.length || !onCanvas(e.target)) return;
+    // One undo step per burst of arrow presses.
+    if (Date.now() - lastArrowSnapshot.current > 800) snapshot();
+    lastArrowSnapshot.current = Date.now();
+  };
+
   const onKeyDown = (e: KeyboardEvent) => {
-    if (isTyping(e.target)) return;
+    if (readOnly || isTyping(e.target)) return;
     const mod = e.metaKey || e.ctrlKey;
     const key = e.key.toLowerCase();
     const handled = () => {
@@ -336,9 +391,10 @@ function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
     if (mod && key === 'c') return copy();
     if (mod && key === 'v') return handled(), paste();
     if (mod && key === 'a') return handled(), setNodes((ns) => ns.map((n) => ({ ...n, selected: true })));
-    if (key === 'tab' && selectedNodes.length === 1) return handled(), addChild();
-    if (key === 'enter' && selectedNodes.length === 1) return handled(), addSibling();
-    if (key === 'f2' && selectedNodes.length === 1) return handled(), setEditingId(selectedNodes[0].id);
+    if (!onCanvas(e.target) || selectedNodes.length !== 1) return;
+    if (key === 'tab') return handled(), addChild();
+    if (key === 'enter') return handled(), addSibling();
+    if (key === 'f2') return handled(), setEditingId(selectedNodes[0].id);
   };
 
   // ── Export ───────────────────────────────────────────────────────────────
@@ -363,7 +419,23 @@ function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
 
   return (
     <DiagramActionsContext.Provider value={actions}>
-      <div className="flex h-full flex-col" onKeyDown={onKeyDown}>
+      <div className="flex h-full flex-col" onKeyDown={onKeyDown} onKeyDownCapture={onKeyDownCapture}>
+        {readOnly && (
+          <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-warning/30 bg-warning/10 px-4 py-3 text-sm">
+            <ShieldAlert size={18} className="shrink-0 text-warning" />
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold">Opened read-only to protect this diagram</div>
+              <p className="text-muted">It was saved by a newer version of Classroom OS. Update the app on this device to edit it. Nothing has been changed.</p>
+            </div>
+            <Button
+              size="sm"
+              icon={<FileJson size={14} />}
+              onClick={() => downloadBlob(new Blob([JSON.stringify(initialContent, null, 2)], { type: 'application/json' }), `${safeFileName(title)} (original data).json`)}
+            >
+              Download original data
+            </Button>
+          </div>
+        )}
         <div className="flex items-center border-b border-border bg-surface">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:thin]" role="toolbar" aria-label="Diagram tools">
           <IconButton label="Undo (Ctrl+Z)" disabled={!history.current.canUndo} onClick={undo}>
@@ -440,7 +512,7 @@ function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
             <Menu
               align="end"
               trigger={(p) => (
-                <Button size="sm" variant="primary" icon={<Download size={14} />} {...p}>
+                <Button size="sm" variant="primary" icon={<Download size={14} />} aria-label="Export" {...p}>
                   <span className="hidden sm:inline">Export</span> <ChevronDown size={13} />
                 </Button>
               )}
@@ -503,9 +575,14 @@ function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
               onNodeDoubleClick={(_, n) => setEditingId(n.id)}
               onPaneClick={() => setEditingId(null)}
               onMoveEnd={(_, vp) => {
+                // Remembered and saved with the next real edit; moving the view is not an edit itself.
                 viewport.current = vp;
-                emit();
               }}
+              nodesDraggable={!readOnly}
+              nodesConnectable={!readOnly}
+              edgesReconnectable={!readOnly}
+              elementsSelectable={!readOnly}
+              deleteKeyCode={readOnly ? null : ['Delete', 'Backspace']}
               connectionMode={ConnectionMode.Loose}
               connectionLineType={ConnectionLineType.SmoothStep}
               snapToGrid={settings.snapToGrid}
@@ -515,7 +592,6 @@ function Editor({ initialContent, title, onChange }: DiagramEditorProps) {
               fitViewOptions={{ padding: 0.2, maxZoom: 1.2 }}
               minZoom={0.1}
               maxZoom={4}
-              deleteKeyCode={['Delete', 'Backspace']}
               multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
               elevateEdgesOnSelect
               zoomOnDoubleClick={false}
