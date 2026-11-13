@@ -95,6 +95,8 @@ export interface DiagramSettings {
   showGrid: boolean;
   /** Tree-style diagrams re-layout automatically when children are added. */
   autoLayout: AutoLayout;
+  /** schema 2: line style for newly drawn connectors (default elbow). Existing connectors keep their own. */
+  connector?: EdgeLineType;
 }
 
 /** Persisted node: only what is needed to rebuild it. Selection and measurements are runtime state. */

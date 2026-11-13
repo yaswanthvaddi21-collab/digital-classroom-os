@@ -1,4 +1,4 @@
-import { Button, cn, downloadBlob, IconButton, Menu, safeFileName, Separator, useToast } from '@dcos/ui';
+import { Button, cn, downloadBlob, IconButton, Menu, safeFileName, Select, Separator, useToast } from '@dcos/ui';
 import {
   addEdge,
   Background,
@@ -51,6 +51,8 @@ import { EdgeInspector, NodeInspector, type EdgePatch, type PatchOpts } from './
 import { layoutTree, type LayoutDirection } from './layout';
 import { DiagramActionsContext, ShapeNode as ShapeNodeView, type DiagramActions } from './ShapeNode';
 import { edgeTypes } from './edges';
+import { QuickConnect } from './QuickConnect';
+import { canConnect, directionFromKey, facingHandles, HANDLES_FOR, placeNew, type Box, type Direction } from './quickConnectGeometry';
 import { DEFAULT_LABELS, SHAPE_CATALOG, ShapeSvg } from './shapes';
 import {
   DEFAULT_CONNECTOR,
@@ -61,6 +63,7 @@ import {
   type Connector,
   type DiagramContent,
   type DiagramSettings,
+  type EdgeLineType,
   type ShapeData,
   type ShapeKind,
   type ShapeNode,
@@ -372,9 +375,62 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
   };
 
   // ── React Flow handlers ──────────────────────────────────────────────────
+  const lineType = settings.connector ?? 'smoothstep';
   const onConnect = (c: Connection) => {
     snapshot();
-    setEdges((es) => addEdge(styledEdge({ ...c, id: newId('e'), type: 'smoothstep', data: { ...DEFAULT_CONNECTOR } }), es));
+    setEdges((es) => addEdge(styledEdge({ ...c, id: newId('e'), type: lineType, data: { ...DEFAULT_CONNECTOR } }), es));
+  };
+
+  // ── Quick connect (draw.io-style blue arrows) ─────────────────────────────
+  const boxOf = (n: ShapeNode): Box => ({ id: n.id, x: n.position.x, y: n.position.y, width: n.width ?? n.measured?.width ?? 160, height: n.height ?? n.measured?.height ?? 70 });
+
+  /** Pans (keeping the zoom) so a box is fully on screen, as diagrams.net does after quick-connect creates a shape. */
+  const ensureVisible = (box: Box) => {
+    requestAnimationFrame(() => {
+      const r = wrapper.current?.getBoundingClientRect();
+      if (!r) return;
+      const tl = rf.flowToScreenPosition({ x: box.x, y: box.y });
+      const br = rf.flowToScreenPosition({ x: box.x + box.width, y: box.y + box.height });
+      const margin = 24;
+      if (tl.x >= r.left + margin && tl.y >= r.top + margin && br.x <= r.right - margin && br.y <= r.bottom - margin) return;
+      void rf.setCenter(box.x + box.width / 2, box.y + box.height / 2, { zoom: rf.getZoom(), duration: 250 });
+    });
+  };
+
+  /** New shape beside the selected one, connected to it, and selected. One undo step covers both. */
+  const quickCreate = (dir: Direction, shape?: ShapeKind, at?: { x: number; y: number }) => {
+    const source = selectedNodes.length === 1 ? selectedNodes[0] : undefined;
+    if (!source || readOnly) return;
+    const defaults = shape ? shapeDefaults(shape) : null;
+    const width = defaults?.width ?? source.width ?? 160;
+    const height = defaults?.height ?? source.height ?? 70;
+    const data: ShapeData = defaults
+      ? { ...(({ width: _w, height: _h, ...style }) => style)(defaults), label: DEFAULT_LABELS[defaults.shape] ?? '' }
+      : { ...source.data, label: '' };
+    const position = at
+      ? { x: Math.round(at.x - width / 2), y: Math.round(at.y - height / 2) }
+      : placeNew(boxOf(source), dir, { width, height }, nodes.map(boxOf));
+    const node: ShapeNode = { id: newId('n'), type: 'shape', position, width, height, selected: true, data };
+    const handles = at ? facingHandles(boxOf(source), { id: node.id, ...position, width, height }) : { sourceHandle: HANDLES_FOR[dir].source, targetHandle: HANDLES_FOR[dir].target };
+    snapshot();
+    setNodes((ns) => [...ns.map((n) => (n.selected ? { ...n, selected: false } : n)), node]);
+    setEdges((es) => [...es.map((e) => (e.selected ? { ...e, selected: false } : e)), styledEdge({ id: newId('e'), source: source.id, target: node.id, ...handles, type: lineType, data: { ...DEFAULT_CONNECTOR } })]);
+    ensureVisible({ id: node.id, ...position, width, height });
+  };
+
+  /** Arrow dragged onto a shape (connect, if allowed) or onto empty canvas (new connected shape there). */
+  const quickDrop = (dir: Direction, targetId: string | null, at: { x: number; y: number }) => {
+    const source = selectedNodes.length === 1 ? selectedNodes[0] : undefined;
+    if (!source || readOnly) return;
+    if (!targetId) return quickCreate(dir, undefined, at);
+    const check = canConnect(edges, new Set(nodes.map((n) => n.id)), source.id, targetId);
+    if (!check.ok) {
+      toast(check.reason === 'duplicate' ? 'These shapes are already connected.' : check.reason === 'self' ? 'A shape cannot be connected to itself.' : 'That shape no longer exists.', 'info');
+      return;
+    }
+    const target = nodes.find((n) => n.id === targetId)!;
+    snapshot();
+    setEdges((es) => [...es, styledEdge({ id: newId('e'), source: source.id, target: targetId, ...facingHandles(boxOf(source), boxOf(target)), type: lineType, data: { ...DEFAULT_CONNECTOR } })]);
   };
   const onReconnect = (oldEdge: Connector, c: Connection) => {
     snapshot();
@@ -390,6 +446,14 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
 
   /** Runs before React Flow moves nodes with the arrow keys, so the move can be undone (audit DIAG-4). */
   const onKeyDownCapture = (e: KeyboardEvent) => {
+    // Alt+Shift+Arrow: add a connected shape in that direction (the diagrams.net shortcut).
+    const quickDir = e.altKey && e.shiftKey ? directionFromKey(e.key) : null;
+    if (quickDir && !readOnly && !isTyping(e.target) && selectedNodes.length === 1) {
+      e.preventDefault();
+      e.stopPropagation();
+      quickCreate(quickDir);
+      return;
+    }
     if (readOnly || isTyping(e.target) || !ARROWS.has(e.key.toLowerCase()) || !selectedNodes.length || !onCanvas(e.target)) return;
     // One undo step per burst of arrow presses.
     if (Date.now() - lastArrowSnapshot.current > 800) snapshot();
@@ -468,6 +532,12 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
   };
 
   const single = selectedNodes.length === 1;
+  const inspector =
+    selectedNodes.length > 0 ? (
+      <NodeInspector nodes={selectedNodes} onPatch={patchNodes} />
+    ) : selectedEdges.length > 0 ? (
+      <EdgeInspector edges={selectedEdges} onPatch={patchEdges} />
+    ) : null;
 
   return (
     <DiagramActionsContext.Provider value={actions}>
@@ -559,6 +629,19 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
           <IconButton label="Fit diagram to screen" onClick={() => rf.fitView({ padding: 0.2, duration: 300, maxZoom: 1.2 })}>
             <Maximize size={16} />
           </IconButton>
+          <Separator vertical />
+          <Select
+            aria-label="Line style for new connectors"
+            title="Line style for new connectors"
+            value={lineType}
+            disabled={readOnly}
+            onChange={(e) => setSettings((s) => ({ ...s, connector: e.target.value as EdgeLineType }))}
+          >
+            <option value="smoothstep">New lines: Elbow</option>
+            <option value="step">New lines: Orthogonal</option>
+            <option value="straight">New lines: Straight</option>
+            <option value="default">New lines: Curved</option>
+          </Select>
         </div>
           <div className="shrink-0 border-l border-border px-2 py-1.5">
             <Menu
@@ -653,14 +736,15 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
             >
               {settings.showGrid && <Background variant={BackgroundVariant.Dots} gap={20} size={1.3} color="#c4c8d4" />}
               <Controls showInteractive={false} position="bottom-left" />
-              <MiniMap<ShapeNode> pannable zoomable position="bottom-right" nodeColor={(n) => (n.data.fill === 'transparent' ? '#cbd5e1' : n.data.fill)} nodeStrokeColor="#94a3b8" />
-              {(selectedNodes.length > 0 || selectedEdges.length > 0) && (
-                <Panel position="top-right">
-                  <div
-                    className={cn('max-h-[calc(100vh-220px)] w-60 overflow-y-auto rounded-xl border border-border bg-surface p-3.5 text-fg shadow-lg')}
-                    onKeyDown={(e) => e.stopPropagation()}
-                  >
-                    {selectedNodes.length > 0 ? <NodeInspector nodes={selectedNodes} onPatch={patchNodes} /> : <EdgeInspector edges={selectedEdges} onPatch={patchEdges} />}
+              <MiniMap<ShapeNode> pannable zoomable position="bottom-right" style={{ width: 150, height: 96 }} nodeColor={(n) => (n.data.fill === 'transparent' ? '#cbd5e1' : n.data.fill)} nodeStrokeColor="#94a3b8" />
+              {selectedNodes.length === 1 && selectedEdges.length === 0 && !editingId && !readOnly && (
+                <QuickConnect node={selectedNodes[0]} nodes={nodes} onCreate={(dir, shape) => quickCreate(dir, shape)} onDrop={quickDrop} />
+              )}
+              {inspector && (
+                // Phones: floating panel. Wider screens get the docked panel beside the canvas instead.
+                <Panel position="top-right" className="md:hidden">
+                  <div className={cn('max-h-[calc(100vh-220px)] w-60 overflow-y-auto rounded-xl border border-border bg-surface p-3.5 text-fg shadow-lg')} onKeyDown={(e) => e.stopPropagation()}>
+                    {inspector}
                   </div>
                 </Panel>
               )}
@@ -674,6 +758,12 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
               )}
             </ReactFlow>
           </div>
+          {inspector && (
+            // Docked like diagrams.net's Format panel, so it never covers the drawing or the quick-connect arrows.
+            <aside aria-label="Format" className="hidden w-64 shrink-0 overflow-y-auto border-l border-border bg-surface p-3.5 text-fg md:block" onKeyDown={(e) => e.stopPropagation()}>
+              {inspector}
+            </aside>
+          )}
         </div>
       </div>
     </DiagramActionsContext.Provider>

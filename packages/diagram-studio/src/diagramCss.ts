@@ -36,4 +36,35 @@ export const diagramCss = `
 .react-flow__controls-button { width: 28px; height: 28px; }
 .react-flow__minimap { border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
 @media (max-width: 640px) { .react-flow__minimap { display: none; } }
+
+/* Quick connect: blue directional arrows around the selected shape (diagrams.net style).
+   The renderer must not form its own stacking context, or the minimap and controls would cover the arrows. */
+.dcos-flow .react-flow__renderer { z-index: auto; }
+.dcos-qc { z-index: 5; }
+.dcos-qc-group { display: flex; align-items: center; gap: 6px; animation: dcos-qc-in 140ms ease-out; }
+.dcos-qc-top .dcos-qc-group { flex-direction: column-reverse; }
+.dcos-qc-bottom .dcos-qc-group { flex-direction: column; }
+.dcos-qc-left .dcos-qc-group { flex-direction: row-reverse; }
+.dcos-qc-arrow {
+  display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0;
+  border-radius: 9999px; background: transparent; color: rgba(41, 151, 242, 0.75); cursor: pointer; touch-action: none;
+  transition: color 120ms, background-color 120ms, scale 120ms;
+}
+.dcos-qc-arrow:hover, .dcos-qc-arrow:focus-visible { color: #1a7fe0; background: rgba(41, 151, 242, 0.12); scale: 1.15; outline: none; }
+.dcos-qc-arrow:focus-visible { box-shadow: 0 0 0 2px #1a7fe0; }
+.dcos-qc-arrow:active { scale: 0.95; }
+.dcos-qc-palette {
+  z-index: 60; font-family: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  display: grid; grid-template-columns: repeat(5, 30px); gap: 2px; padding: 4px; border-radius: 10px;
+  background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 6px 20px rgba(15, 23, 42, 0.14); animation: dcos-qc-in 120ms ease-out;
+}
+.dcos-qc-shape { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: #0f172a; cursor: pointer; }
+.dcos-qc-shape:hover, .dcos-qc-shape:focus-visible { background: #e0f0ff; outline: none; }
+.dcos-qc-ghost { position: absolute; left: 0; top: 0; border: 2px dashed #2997f2; border-radius: 8px; background: rgba(41, 151, 242, 0.06); pointer-events: none; }
+.dcos-qc-preview { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.dcos-qc-preview line { stroke: #2997f2; stroke-width: 2; stroke-dasharray: 6 4; }
+.dcos-qc-preview circle { fill: #2997f2; }
+.dcos-qc-target { fill: rgba(41, 151, 242, 0.08); stroke: #2997f2; stroke-width: 2; }
+@keyframes dcos-qc-in { from { opacity: 0; scale: 0.85; } }
+@media (prefers-reduced-motion: reduce) { .dcos-qc-group, .dcos-qc-palette { animation: none; } .dcos-qc-arrow { transition: none; } }
 `;

@@ -230,6 +230,7 @@ const SHORTCUTS: Array<{ area: string; items: Array<[string, string]> }> = [
   {
     area: 'Diagrams (with a shape selected)',
     items: [
+      ['Alt Shift Arrow', 'Add a connected shape in that direction (or click a blue arrow)'],
       ['Tab', 'Add a child shape'],
       ['Enter', 'Add a sibling shape'],
       ['F2 or double-click', 'Edit the text'],

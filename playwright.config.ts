@@ -23,6 +23,6 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'firefox', use: { ...devices['Desktop Firefox'] }, testIgnore: /chromium-only/ },
     { name: 'webkit', use: { ...devices['Desktop Safari'] }, testIgnore: /chromium-only/ },
-    { name: 'mobile-chromium', use: { ...devices['Pixel 7'] }, testMatch: /(navigation|document)\.spec\.ts/ },
+    { name: 'mobile-chromium', use: { ...devices['Pixel 7'] }, testMatch: /(navigation|document|quick-connect-touch)\.spec\.ts/ },
   ],
 });

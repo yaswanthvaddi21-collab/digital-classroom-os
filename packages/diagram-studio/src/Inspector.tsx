@@ -143,7 +143,7 @@ export function EdgeInspector({ edges, onPatch }: { edges: Connector[]; onPatch:
         <div className="grid grid-cols-2 gap-2">
           <Select value={e.type ?? 'smoothstep'} onChange={(ev) => set({ type: ev.target.value as EdgeLineType })} aria-label="Line shape">
             <option value="smoothstep">Elbow</option>
-            <option value="step">Square elbow</option>
+            <option value="step">Orthogonal</option>
             <option value="straight">Straight</option>
             <option value="default">Curved</option>
           </Select>
