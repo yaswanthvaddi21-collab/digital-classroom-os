@@ -11,17 +11,27 @@ export interface SearchMatch {
 export interface SearchState {
   term: string;
   caseSensitive: boolean;
+  /** Only matches that are whole words (not part of a longer word). */
+  wholeWord: boolean;
   index: number;
   results: SearchMatch[];
   decorations: DecorationSet;
 }
 
-type SearchMeta = Partial<Pick<SearchState, 'term' | 'caseSensitive' | 'index'>>;
+type SearchMeta = Partial<Pick<SearchState, 'term' | 'caseSensitive' | 'wholeWord' | 'index'>>;
+
+/** Letters, digits (any script) and underscore: what a whole-word match may not be next to. */
+const WORD_CHAR = /[\p{L}\p{N}\p{M}_]/u;
+const isWordChar = (c: string | undefined) => !!c && WORD_CHAR.test(c);
 
 export const searchKey = new PluginKey<SearchState>('dcosSearch');
 
-/** Finds matches per textblock so terms spanning differently-formatted text (e.g. half-bold) are still found. */
-export function findMatches(doc: PMNode, term: string, caseSensitive: boolean): SearchMatch[] {
+/**
+ * Finds matches per textblock so terms spanning differently-formatted text (e.g. half-bold) are still found.
+ * With `wholeWord`, a match must not continue a word on either side (where the term itself starts or ends with a
+ * letter or digit), as in Word's "Find whole words only".
+ */
+export function findMatches(doc: PMNode, term: string, caseSensitive: boolean, wholeWord = false): SearchMatch[] {
   if (!term) return [];
   const needle = caseSensitive ? term : term.toLowerCase();
   const results: SearchMatch[] = [];
@@ -46,6 +56,11 @@ export function findMatches(doc: PMNode, term: string, caseSensitive: boolean): 
     });
     let i = hay.indexOf(needle);
     while (i !== -1) {
+      const whole = !wholeWord || ((!isWordChar(needle[0]) || !isWordChar(hay[i - 1])) && (!isWordChar(needle[needle.length - 1]) || !isWordChar(hay[i + needle.length])));
+      if (!whole) {
+        i = hay.indexOf(needle, i + 1);
+        continue;
+      }
       results.push({ from: positions[i], to: positions[i + needle.length - 1] + 1 });
       i = hay.indexOf(needle, i + needle.length);
     }
@@ -54,14 +69,14 @@ export function findMatches(doc: PMNode, term: string, caseSensitive: boolean): 
   return results;
 }
 
-function build(doc: PMNode, term: string, caseSensitive: boolean, index: number): SearchState {
-  const results = findMatches(doc, term, caseSensitive);
+function build(doc: PMNode, term: string, caseSensitive: boolean, wholeWord: boolean, index: number): SearchState {
+  const results = findMatches(doc, term, caseSensitive, wholeWord);
   const clamped = results.length ? Math.min(Math.max(index, 0), results.length - 1) : 0;
   const decorations = DecorationSet.create(
     doc,
     results.map((r, i) => Decoration.inline(r.from, r.to, { class: i === clamped ? 'dcos-search-match dcos-search-current' : 'dcos-search-match' })),
   );
-  return { term, caseSensitive, index: clamped, results, decorations };
+  return { term, caseSensitive, wholeWord, index: clamped, results, decorations };
 }
 
 export const SearchReplace = Extension.create({
@@ -71,12 +86,12 @@ export const SearchReplace = Extension.create({
       new Plugin<SearchState>({
         key: searchKey,
         state: {
-          init: (_, state) => build(state.doc, '', false, 0),
+          init: (_, state) => build(state.doc, '', false, false, 0),
           apply(tr, prev) {
             const meta = tr.getMeta(searchKey) as SearchMeta | undefined;
             if (!meta && !tr.docChanged) return prev;
             const next = { ...prev, ...meta };
-            return build(tr.doc, next.term, next.caseSensitive, next.index);
+            return build(tr.doc, next.term, next.caseSensitive, next.wholeWord, next.index);
           },
         },
         props: {

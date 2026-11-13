@@ -70,3 +70,25 @@ Audited commit `ea7f316`, 2026-11-13. Debt here means structural problems that m
 
 - **Build-chain advisories.** The 6 `npm audit` advisories are in `vite-plugin-pwa → workbox-build`, which is build time only. npm's suggested fix is a major downgrade. Track upstream rather than downgrade; `SECURITY.md` already records this.
 - **Earlier debt is already paid.** Several items from the Release 0.2 audit were fixed in `ff53b49`–`ea7f316`: version pruning, the save queue, drafts, cross-tab sync, the safety copy and backup format 2. They are not repeated here.
+
+## Status after Phase 4 (Document Studio)
+
+| # | Status | Where |
+|---|---|---|
+| TD-2 images inline as data URLs | ⬜ Not changed. Phase 4 kept images inline in document content, and pasted web pictures are now stored inline too. Version history stores large images once (Phase 3), but the live document and backups still carry each image | [ADR 0011](../adr/0011-document-format-phase4.md) §10, [ADR 0005](../adr/0005-version-history.md) |
+| TD-8 page settings and mode outside validation and schema versioning | ✅ Fixed: every page setting, layout field, mode and content field is checked; unknown values open the protected view; `contentSchemaFor()` covers the body, page and top-level fields through the frozen v0.1.0 vocabulary | `types.ts`, `pageLayout.ts`, `compat.ts`; ADR 0011 §1–3 |
+| TD-9 print HTML built by string templates | 🟡 The injection is fixed (`cssString()` escapes `<` and `>`; tested with `</style>`), and print rules and DOM changes are registries (`PRINT_CSS`, `PRINT_DOM`). The page is still assembled as a string | `export/print.ts` |
+| TD-10 DOCX fidelity gaps | ✅ Fixed in the XML: line spacing, column widths (with row spans), list and quote alignment, highlight as `w:highlight`, named colours, a real table-of-contents field; remote pictures are stored or written as reported placeholders. Not yet tested in Word or Pages | `export/docx/`; [DOCUMENT_COMPATIBILITY.md](../DOCUMENT_COMPATIBILITY.md) §3, §8 |
+| TD-11 DOCX tests check stability, not correctness | 🟡 Better: mammoth now checks every paragraph, list item, table cell and image; schema-2 goldens for formatting, layout and a v2 kitchen sink (DOCX and ODT); export is deterministic. Still no OOXML or ODF schema validation and no Word, Pages or LibreOffice check | `tests/integration/*golden*.test.ts`; DOCUMENT_COMPATIBILITY.md §7 |
+| TD-12 no component tests for the toolbar and dialogs | ✅ Fixed: ribbon, format, layout, insert and review component tests, including Simple/Advanced gating, Page setup guards and the find options | `ui/ribbon/**/*.test.tsx`, `ui/insert/InsertObjects.test.tsx`, `review/Review.test.tsx` |
+| TD-13 TXT export drops images and the table of contents | ✅ Fixed, inside table cells too | `export/text.ts` |
+| TD-14 diagram preview URLs never revoked; failures cached | ✅ Fixed: reference-counted cache, failures never cached, unused URLs revoked least recently used first | `extensions/previewCache.ts` |
+
+New debt from Phase 4:
+
+| # | Debt | Where | Impact | Effort |
+|---|---|---|---|---|
+| TD-38 | **Deterministic TOC bookmarks rely on a private `docx` 9.15.3 property** (`Body.headingBookmarkIds`, set through a cast) | `export/docx/index.ts` | A `docx` upgrade that renames it brings back session-wide ids; the determinism tests would fail and flag it | S |
+| TD-39 | **ODT import has no overall cap on repeated rows and columns** (50 per row, 64 per cell, unbounded in total) | `import/odt.ts` | A small crafted file can build a very large table and exhaust memory | S |
+| TD-40 | **Imports run on the main thread** | `import/` | A large file blocks the tab while it imports | M |
+| TD-41 | **The DOCX import's formatting note is worked out from raw XML**, and private-use characters carry alignment and page breaks through mammoth | `import/docx.ts` | The note can name formatting that was imported; U+E000/U+E001 in a document's own text are misread | S |

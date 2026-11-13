@@ -1,20 +1,46 @@
 import { documentContentCss } from '../contentCss';
 import { paperSize, type PageSettings } from '../types';
+import { layoutPrintCss, printSections } from './printLayout'; // G-LAYOUT
 
-const cssString = (s: string) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ')}"`;
+/**
+ * A CSS string literal that is safe inside a <style> element: quotes and backslashes are escaped, and so are
+ * < and > (as CSS hex escapes), so text such as "</style><script>" can never end the style element (audit DS-1).
+ */
+export const cssString = (value: unknown) =>
+  `"${String(value ?? '').replace(/[\\"<>\r\n\f]/g, (c) => (c === '\n' || c === '\r' || c === '\f' ? ' ' : `\\${c.charCodeAt(0).toString(16).toUpperCase()} `))}"`;
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /** Copies the rendered editor DOM, minus editing-only artefacts (search highlights, resize handles). */
-function cleanClone(editorDom: HTMLElement) {
+export function cleanClone(editorDom: HTMLElement, page?: PageSettings) {
   const clone = editorDom.cloneNode(true) as HTMLElement;
   clone.removeAttribute('contenteditable');
   clone.querySelectorAll('[contenteditable]').forEach((el) => el.removeAttribute('contenteditable'));
   clone.querySelectorAll('.dcos-search-match').forEach((el) => el.replaceWith(...Array.from(el.childNodes)));
-  clone.querySelectorAll('[data-resize-handle], .column-resize-handle, .ProseMirror-gapcursor, .ProseMirror-separator, .ProseMirror-trailingBreak, .dcos-diagram-handle, .dcos-diagram-busy').forEach((el) => el.remove());
+  clone.querySelectorAll('[data-resize-handle], .column-resize-handle, .ProseMirror-gapcursor, .ProseMirror-separator, .ProseMirror-trailingBreak, .dcos-diagram-handle, .dcos-diagram-busy, .dcos-diagram-alert').forEach((el) => el.remove());
+  clone.querySelectorAll('.dcos-image-remote').forEach((el) => el.classList.remove('dcos-image-remote'));
   clone.querySelectorAll('.ProseMirror-selectednode, .selectedCell, .is-selected').forEach((el) => el.classList.remove('ProseMirror-selectednode', 'selectedCell', 'is-selected'));
   clone.querySelectorAll('.is-editor-empty').forEach((el) => el.removeAttribute('data-placeholder'));
+  if (page) for (const change of PRINT_DOM) change(clone, page);
   return clone.innerHTML;
 }
+
+/**
+ * Extra print rules from later features, given the page settings (e.g. named pages or columns). Each returns CSS,
+ * which must quote any user text with cssString().
+ */
+export const PRINT_CSS: Array<(page: PageSettings) => string> = [
+  // G-REVIEW: comments are never printed (the text prints without its highlight; threads are not part of the page).
+  () => '.dcos-doc .dcos-comment, .dcos-doc .dcos-comment-pending { background: none !important; border: none !important; }',
+  // @phase4:print-css — add print rules for new features here.
+  // G-LAYOUT: header/footer parts, page number format and start, different first page (page-margin boxes).
+  layoutPrintCss,
+];
+
+/**
+ * Changes to the print copy of the document body, given the page settings (G-LAYOUT: section wrappers for columns
+ * and named pages). Each runs on the cleaned clone before it is serialised.
+ */
+export const PRINT_DOM: Array<(root: HTMLElement, page: PageSettings) => void> = [printSections];
 
 /** Builds a standalone, print-ready HTML page. Exported for tests and for future native PDF rendering. */
 export function buildPrintHtml(bodyHtml: string, page: PageSettings, title: string) {
@@ -36,6 +62,7 @@ export function buildPrintHtml(bodyHtml: string, page: PageSettings, title: stri
 }
 html, body { margin: 0; padding: 0; background: #fff; }
 ${documentContentCss}
+${PRINT_CSS.map((css) => css(page)).join('\n')}
 </style></head>
 <body><div class="dcos-doc">${bodyHtml}</div></body></html>`;
 }
@@ -54,7 +81,7 @@ export function printDocument(editorDom: HTMLElement, page: PageSettings, title:
     const win = iframe.contentWindow!;
     const doc = win.document;
     doc.open();
-    doc.write(buildPrintHtml(cleanClone(editorDom), page, title));
+    doc.write(buildPrintHtml(cleanClone(editorDom, page), page, title));
     doc.close();
 
     let done = false;

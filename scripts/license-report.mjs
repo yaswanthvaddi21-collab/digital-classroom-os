@@ -15,6 +15,11 @@ const DUAL_OK = {
   'MIT OR SEE LICENSE IN FEEL-FREE.md': 'MIT', // rgbcolor
 };
 
+// Packages whose licence field is not an SPDX id, mapped after reading the LICENSE file they ship. Exact name@version.
+const REVIEWED = {
+  'duck@0.1.12': 'BSD-2-Clause', // dependency of mammoth (via lop); its LICENSE file is the BSD 2-Clause text
+};
+
 const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
 const rows = new Map();
 for (const [path, pkg] of Object.entries(lock.packages ?? {})) {
@@ -24,7 +29,7 @@ for (const [path, pkg] of Object.entries(lock.packages ?? {})) {
   const name = path.slice(path.lastIndexOf('node_modules/') + 'node_modules/'.length);
   if (name.startsWith('@dcos/') || name.startsWith('@types/')) continue;
   const key = `${name}@${pkg.version}`;
-  if (!rows.has(key)) rows.set(key, { name, version: pkg.version, license: pkg.license ?? 'UNKNOWN' });
+  if (!rows.has(key)) rows.set(key, { name, version: pkg.version, license: REVIEWED[key] ?? pkg.license ?? 'UNKNOWN' });
 }
 
 const list = [...rows.values()].sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));

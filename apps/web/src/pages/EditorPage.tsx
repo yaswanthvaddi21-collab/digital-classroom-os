@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { useDiagramHost } from '../components/DiagramDialogs';
 import { EditorFrame, MissingItem } from '../components/EditorFrame';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { setPreference, usePreferences } from '../lib/preferences';
 import { useEditableItem } from '../lib/storage';
 import { useModuleEditor, type EditorProps, type ModuleDef } from '../modules';
 
@@ -20,6 +21,9 @@ function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string
   const { host: diagramHost, dialogs, active: diagramDialogOpen } = useDiagramHost();
   const { item, status, saveNow, holdExternalUpdates } = editable;
   const toast = useToast();
+  // @phase4:review — the comment author name and the remembered spell check setting, for documents.
+  const prefs = usePreferences();
+  const documentPrefs = { authorName: prefs.authorName, spellcheck: prefs.spellCheck, onSpellcheckChange: (on: boolean) => setPreference('spellCheck', on) };
 
   // A diagram dialog writes into the editor it was opened from. Remounting that editor for another tab's save would
   // drop the diagram, so while one is open external versions wait and later edits go through the conflict flow.
@@ -73,6 +77,7 @@ function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string
           title={editable.title}
           onChange={editable.updateContent}
           diagramHost={module.kind === 'document' ? diagramHost : undefined}
+          {...(module.kind === 'document' ? documentPrefs : {})}
         />
       </ErrorBoundary>
       {dialogs}

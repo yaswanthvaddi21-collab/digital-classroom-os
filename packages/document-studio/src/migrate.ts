@@ -1,9 +1,12 @@
 import type { JSONContent } from '@tiptap/core';
+import { contentNovelty, docNovelty } from './compat';
+import { documentSchema } from './schema';
 import { normalizeDocument, type DocumentContent } from './types';
 
 /**
  * Newest document content schema this build reads and writes.
- * 1 = v0.1.0. 2 = may contain embedded diagrams (`diagram` nodes); older builds must open it read-only.
+ * 1 = v0.1.0. 2 = uses something v0.1.0 cannot store (embedded diagrams and every later addition: see compat.ts);
+ * older builds must open it read-only.
  */
 export const DOCUMENT_SCHEMA = 2;
 
@@ -11,17 +14,21 @@ export const DOCUMENT_SCHEMA = 2;
  * Ordered upgraders: UPGRADERS[i] turns schema i + 1 into schema i + 2. Pure functions, never edited once shipped.
  */
 const UPGRADERS: Array<(content: Record<string, unknown>) => Record<string, unknown>> = [
-  // 1 → 2: no structural change; schema 2 only adds the `diagram` node type.
+  // 1 → 2: no structural change; schema 2 only adds vocabulary (see compat.ts).
   (c) => ({ ...c, schemaVersion: 2 }),
 ];
 
 /**
- * The schema a document needs: 2 only when it contains an embedded diagram. Everything else stays schema 1, so
- * ordinary documents (and backups of them) remain readable by v0.1.0.
+ * The schema a document body needs: 1 when it uses only what v0.1.0 could store (the frozen vocabulary in
+ * compat.ts), otherwise 2. Ordinary documents (and backups of them) so remain readable by v0.1.0.
  */
 export function schemaFor(doc: JSONContent): number {
-  const has = (n: JSONContent): boolean => n.type === 'diagram' || (n.content ?? []).some(has);
-  return has(doc) ? 2 : 1;
+  return docNovelty(doc, documentSchema()) ? 2 : 1;
+}
+
+/** The schema a whole stored document needs: its body, page settings and any top-level fields (see schemaFor). */
+export function contentSchemaFor(content: Pick<DocumentContent, 'doc'> & Record<string, unknown>): number {
+  return contentNovelty(content) || docNovelty(content.doc, documentSchema()) ? 2 : 1;
 }
 
 export type MigrateDocumentResult =

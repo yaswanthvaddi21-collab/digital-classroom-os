@@ -1,0 +1,909 @@
+{
+ "schemaVersion": 2,
+ "doc": {
+  "type": "doc",
+  "content": [
+   {
+    "type": "paragraph",
+    "attrs": {
+     "paragraphStyle": "title",
+     "textAlign": "center"
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "Kitchen sink v2"
+     }
+    ]
+   },
+   {
+    "type": "paragraph",
+    "attrs": {
+     "paragraphStyle": "subtitle",
+     "textAlign": "center"
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "Every Phase 4 feature in one document"
+     }
+    ]
+   },
+   {
+    "type": "tableOfContents"
+   },
+   {
+    "type": "heading",
+    "attrs": {
+     "level": 1
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "Formatting",
+      "marks": [
+       {
+        "type": "comment",
+        "attrs": {
+         "commentId": "cHead"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "type": "paragraph",
+    "attrs": {
+     "lineSpacing": 1.5,
+     "spaceBefore": 12,
+     "spaceAfter": 6
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "Line spacing 1.5 with space before and after, "
+     },
+     {
+      "type": "text",
+      "text": "a custom colour",
+      "marks": [
+       {
+        "type": "textStyle",
+        "attrs": {
+         "color": "#0e7490"
+        }
+       }
+      ]
+     },
+     {
+      "type": "text",
+      "text": ", "
+     },
+     {
+      "type": "text",
+      "text": "a custom highlight",
+      "marks": [
+       {
+        "type": "highlight",
+        "attrs": {
+         "color": "#fde68a"
+        }
+       }
+      ]
+     },
+     {
+      "type": "text",
+      "text": " and "
+     },
+     {
+      "type": "text",
+      "text": "13.5 pt text",
+      "marks": [
+       {
+        "type": "textStyle",
+        "attrs": {
+         "fontSize": "13.5pt"
+        }
+       }
+      ]
+     },
+     {
+      "type": "text",
+      "text": "."
+     }
+    ]
+   },
+   {
+    "type": "paragraph",
+    "attrs": {
+     "indentLeft": 36,
+     "indentFirstLine": -36
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "A hanging indent: the first line starts at the margin and the rest is indented by half an inch."
+     }
+    ]
+   },
+   {
+    "type": "paragraph",
+    "attrs": {
+     "indentFirstLine": 36,
+     "indentRight": 36,
+     "textAlign": "justify"
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "A first-line indent and a right indent."
+     }
+    ]
+   },
+   {
+    "type": "heading",
+    "attrs": {
+     "level": 2,
+     "lineSpacing": 1.15
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "Lists"
+     }
+    ]
+   },
+   {
+    "type": "bulletList",
+    "attrs": {
+     "bulletStyle": "square"
+    },
+    "content": [
+     {
+      "type": "listItem",
+      "content": [
+       {
+        "type": "paragraph",
+        "content": [
+         {
+          "type": "text",
+          "text": "Square bullet"
+         }
+        ]
+       },
+       {
+        "type": "bulletList",
+        "attrs": {
+         "bulletStyle": "dash"
+        },
+        "content": [
+         {
+          "type": "listItem",
+          "content": [
+           {
+            "type": "paragraph",
+            "content": [
+             {
+              "type": "text",
+              "text": "Dash bullet, nested"
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "listItem",
+      "content": [
+       {
+        "type": "paragraph",
+        "content": [
+         {
+          "type": "text",
+          "text": "Item with a second paragraph"
+         }
+        ]
+       },
+       {
+        "type": "paragraph",
+        "attrs": {
+         "indentLeft": 18
+        },
+        "content": [
+         {
+          "type": "text",
+          "text": "The continuation keeps its own indent."
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "type": "orderedList",
+    "attrs": {
+     "numberFormat": "upper-roman",
+     "start": 4
+    },
+    "content": [
+     {
+      "type": "listItem",
+      "content": [
+       {
+        "type": "paragraph",
+        "content": [
+         {
+          "type": "text",
+          "text": "Item",
+          "marks": [
+           {
+            "type": "comment",
+            "attrs": {
+             "commentId": "cList"
+            }
+           }
+          ]
+         },
+         {
+          "type": "text",
+          "text": " four, upper-roman from IV"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "listItem",
+      "content": [
+       {
+        "type": "paragraph",
+        "content": [
+         {
+          "type": "text",
+          "text": "Item five"
+         }
+        ]
+       },
+       {
+        "type": "orderedList",
+        "attrs": {
+         "numberFormat": "lower-alpha",
+         "start": 2
+        },
+        "content": [
+         {
+          "type": "listItem",
+          "content": [
+           {
+            "type": "paragraph",
+            "content": [
+             {
+              "type": "text",
+              "text": "nested from b"
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "type": "heading",
+    "attrs": {
+     "level": 3
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "Quote and code"
+     }
+    ]
+   },
+   {
+    "type": "blockquote",
+    "content": [
+     {
+      "type": "paragraph",
+      "content": [
+       {
+        "type": "text",
+        "text": "A quoted line in the Quote style."
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "type": "codeBlock",
+    "attrs": {
+     "language": null
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "let x = 1;"
+     }
+    ]
+   },
+   {
+    "type": "paragraph",
+    "attrs": {
+     "paragraphStyle": "caption"
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "A caption-styled paragraph."
+     }
+    ]
+   },
+   {
+    "type": "heading",
+    "attrs": {
+     "level": 1
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "Insert"
+     }
+    ]
+   },
+   {
+    "type": "paragraph",
+    "content": [
+     {
+      "type": "text",
+      "text": "Inline equations: "
+     },
+     {
+      "type": "inlineMath",
+      "attrs": {
+       "latex": "E = mc^2"
+      }
+     },
+     {
+      "type": "text",
+      "text": " and a coloured one "
+     },
+     {
+      "type": "inlineMath",
+      "attrs": {
+       "latex": "\\color{red}{x} + y"
+      }
+     },
+     {
+      "type": "text",
+      "text": "."
+     }
+    ]
+   },
+   {
+    "type": "blockMath",
+    "attrs": {
+     "latex": "\\int_0^1 x^2\\,dx = \\frac{1}{3}"
+    }
+   },
+   {
+    "type": "blockMath",
+    "attrs": {
+     "latex": "\\overgroup{AB}"
+    }
+   },
+   {
+    "type": "shape",
+    "attrs": {
+     "kind": "roundRect",
+     "width": 200,
+     "height": 80,
+     "fill": "#dbeafe",
+     "stroke": "#1d4ed8",
+     "strokeWidth": 2,
+     "text": "Start here",
+     "align": "center"
+    }
+   },
+   {
+    "type": "shape",
+    "attrs": {
+     "kind": "ellipse",
+     "width": 120,
+     "height": 60,
+     "fill": "#fde68a",
+     "stroke": "#b45309",
+     "strokeWidth": 1,
+     "text": "Not drawn",
+     "align": "right"
+    }
+   },
+   {
+    "type": "textBox",
+    "attrs": {
+     "float": "right",
+     "width": 220,
+     "fill": "#f1f5f9",
+     "borderColor": "#334155",
+     "borderWidth": 1
+    },
+    "content": [
+     {
+      "type": "paragraph",
+      "content": [
+       {
+        "type": "text",
+        "text": "Box heading",
+        "marks": [
+         {
+          "type": "bold"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "orderedList",
+      "attrs": {
+       "numberFormat": "lower-roman"
+      },
+      "content": [
+       {
+        "type": "listItem",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "boxed i"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "listItem",
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "boxed ii"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "image",
+      "attrs": {
+       "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAD0lEQVR4nGP4z8DAwPAfAAcAAf9+CLHQAAAAAElFTkSuQmCC",
+       "alt": "boxed pixel",
+       "width": 40,
+       "height": 20
+      }
+     }
+    ]
+   },
+   {
+    "type": "paragraph",
+    "content": [
+     {
+      "type": "text",
+      "text": "Text beside the floating box."
+     }
+    ]
+   },
+   {
+    "type": "image",
+    "attrs": {
+     "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAD0lEQVR4nGP4z8DAwPAfAAcAAf9+CLHQAAAAAElFTkSuQmCC",
+     "alt": "pixel",
+     "width": 60,
+     "height": 30,
+     "align": "right",
+     "caption": "Figure 1: A right-aligned picture"
+    }
+   },
+   {
+    "type": "paragraph",
+    "attrs": {
+     "paragraphStyle": "caption"
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "Table 1: An equation in a table cell"
+     }
+    ]
+   },
+   {
+    "type": "table",
+    "content": [
+     {
+      "type": "tableRow",
+      "content": [
+       {
+        "type": "tableHeader",
+        "attrs": {
+         "colspan": 1,
+         "rowspan": 1,
+         "colwidth": null
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Quantity"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "tableHeader",
+        "attrs": {
+         "colspan": 1,
+         "rowspan": 1,
+         "colwidth": null
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Value"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "tableRow",
+      "content": [
+       {
+        "type": "tableCell",
+        "attrs": {
+         "colspan": 1,
+         "rowspan": 1,
+         "colwidth": null
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Energy"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "tableCell",
+        "attrs": {
+         "colspan": 1,
+         "rowspan": 1,
+         "colwidth": null
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "inlineMath",
+            "attrs": {
+             "latex": "E = mc^2"
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "tableRow",
+      "content": [
+       {
+        "type": "tableCell",
+        "attrs": {
+         "colspan": 1,
+         "rowspan": 1,
+         "colwidth": null
+        },
+        "content": [
+         {
+          "type": "paragraph",
+          "content": [
+           {
+            "type": "text",
+            "text": "Area"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "type": "tableCell",
+        "attrs": {
+         "colspan": 1,
+         "rowspan": 1,
+         "colwidth": null,
+         "align": "center"
+        },
+        "content": [
+         {
+          "type": "blockMath",
+          "attrs": {
+           "latex": "\\pi r^2"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "type": "sectionBreak",
+    "attrs": {
+     "breakType": "nextPage",
+     "orientation": "landscape",
+     "columns": 2,
+     "columnSpacing": 10,
+     "numberStart": 1,
+     "numberFormat": "decimal"
+    }
+   },
+   {
+    "type": "heading",
+    "attrs": {
+     "level": 1
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "Two columns"
+     }
+    ]
+   },
+   {
+    "type": "paragraph",
+    "content": [
+     {
+      "type": "text",
+      "text": "This landscape section has two columns, restarts page numbers at 1 and holds a picture and an equation."
+     }
+    ]
+   },
+   {
+    "type": "image",
+    "attrs": {
+     "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAD0lEQVR4nGP4z8DAwPAfAAcAAf9+CLHQAAAAAElFTkSuQmCC",
+     "alt": "column picture",
+     "width": 600,
+     "height": 300
+    }
+   },
+   {
+    "type": "blockMath",
+    "attrs": {
+     "latex": "a^2 + b^2 = c^2"
+    }
+   },
+   {
+    "type": "orderedList",
+    "attrs": {
+     "numberFormat": "upper-roman",
+     "start": 6
+    },
+    "content": [
+     {
+      "type": "listItem",
+      "content": [
+       {
+        "type": "paragraph",
+        "content": [
+         {
+          "type": "text",
+          "text": "Styled list after the break, from VI"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "type": "sectionBreak",
+    "attrs": {
+     "breakType": "continuous",
+     "columns": 3
+    }
+   },
+   {
+    "type": "paragraph",
+    "content": [
+     {
+      "type": "text",
+      "text": "Three columns in a continuous section."
+     }
+    ]
+   },
+   {
+    "type": "sectionBreak",
+    "attrs": {
+     "breakType": "nextPage",
+     "orientation": "portrait",
+     "columns": 1,
+     "numberFormat": "upperLetter"
+    }
+   },
+   {
+    "type": "heading",
+    "attrs": {
+     "level": 1
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "Review"
+     }
+    ]
+   },
+   {
+    "type": "paragraph",
+    "content": [
+     {
+      "type": "text",
+      "text": "A "
+     },
+     {
+      "type": "text",
+      "text": "link",
+      "marks": [
+       {
+        "type": "link",
+        "attrs": {
+         "href": "https://example.com/",
+         "target": "_blank",
+         "rel": "noopener noreferrer nofollow",
+         "class": null,
+         "title": null
+        }
+       }
+      ]
+     },
+     {
+      "type": "text",
+      "text": " and "
+     },
+     {
+      "type": "text",
+      "text": "resolved comment",
+      "marks": [
+       {
+        "type": "comment",
+        "attrs": {
+         "commentId": "cDone"
+        }
+       }
+      ]
+     },
+     {
+      "type": "text",
+      "text": "."
+     }
+    ]
+   },
+   {
+    "type": "pageBreak"
+   },
+   {
+    "type": "paragraph",
+    "content": [
+     {
+      "type": "text",
+      "text": "Last page."
+     }
+    ]
+   }
+  ]
+ },
+ "page": {
+  "size": "A4",
+  "orientation": "portrait",
+  "margins": {
+   "top": 25.4,
+   "right": 25.4,
+   "bottom": 25.4,
+   "left": 25.4
+  },
+  "header": "Phase 4",
+  "footer": "",
+  "pageNumbers": true,
+  "columns": 1,
+  "columnSpacing": 12.7,
+  "pageNumberFormat": "lowerRoman",
+  "pageNumberStart": 1,
+  "pageNumberAlign": "right",
+  "pageNumberText": "page",
+  "headerLeft": "Physics 101",
+  "headerRight": "A. Student",
+  "footerLeft": "Draft",
+  "footerRight": "",
+  "firstPage": {
+   "header": {
+    "left": "",
+    "center": "Cover page",
+    "right": ""
+   },
+   "footer": {
+    "left": "",
+    "center": "",
+    "right": ""
+   },
+   "pageNumbers": false
+  }
+ },
+ "mode": "advanced",
+ "comments": [
+  {
+   "id": "cHead",
+   "author": "Ada Lovelace",
+   "createdAt": "2026-03-01T10:00:00.000Z",
+   "text": "Is this the right heading?",
+   "resolved": false,
+   "replies": [
+    {
+     "id": "cHeadR1",
+     "author": "Grace Hopper",
+     "createdAt": "2026-03-01T11:00:00.000Z",
+     "text": "Yes, keep it."
+    }
+   ]
+  },
+  {
+   "id": "cList",
+   "author": "Ada Lovelace",
+   "createdAt": "2026-03-01T10:05:00.000Z",
+   "text": "Why start at four?",
+   "resolved": false,
+   "replies": []
+  },
+  {
+   "id": "cDone",
+   "author": "Grace Hopper",
+   "createdAt": "2026-03-02T09:00:00.000Z",
+   "text": "Fixed.",
+   "resolved": true,
+   "replies": [
+    {
+     "id": "cDoneR1",
+     "author": "Ada Lovelace",
+     "createdAt": "2026-03-02T09:30:00.000Z",
+     "text": "Thanks."
+    }
+   ]
+  }
+ ],
+ "language": "en-GB"
+}

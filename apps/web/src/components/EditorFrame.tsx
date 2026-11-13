@@ -17,6 +17,7 @@ import {
 } from '../lib/storage';
 import { itemHref, type ModuleDef } from '../modules';
 import { ThemeSwitcher } from './AppShell';
+import { OpenTabs } from './OpenTabs';
 
 function StatusIndicator({ status, error }: { status: SaveStatus; error: string | null }) {
   const online = useOnline();
@@ -268,6 +269,7 @@ export function EditorFrame(props: EditorFrameProps) {
             </div>
           </div>
         </header>
+        <OpenTabs kind={module.kind} id={id} title={title} />
 
         {hasConflict && (
           <Notice

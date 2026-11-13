@@ -6,9 +6,11 @@
 <w:pStyle w:val="Heading1"/>
 <w:jc w:val="center"/>
 </w:pPr>
+<w:bookmarkStart w:name="_Toc1" w:id="1"/>
 <w:r>
 <w:t xml:space="preserve">Project Report Title</w:t>
 </w:r>
+<w:bookmarkEnd w:id="1"/>
 </w:p>
 <w:p>
 <w:pPr>
@@ -82,84 +84,216 @@
 </w:p>
 <w:p>
 <w:pPr>
-<w:pStyle w:val="Heading2"/>
+<w:keepNext/>
+<w:spacing w:after="120"/>
 </w:pPr>
 <w:r>
+<w:rPr>
+<w:b/>
+<w:bCs/>
+<w:sz w:val="26"/>
+<w:szCs w:val="26"/>
+</w:rPr>
 <w:t xml:space="preserve">Table of Contents</w:t>
 </w:r>
 </w:p>
+<w:sdt>
+<w:sdtPr>
+<w:alias w:val="Table of Contents"/>
+<w:docPartObj>
+<w:docPartGallery w:val="Table of Contents"/>
+<w:docPartUnique/>
+</w:docPartObj>
+</w:sdtPr>
+<w:sdtContent>
 <w:p>
 <w:pPr>
-<w:spacing w:after="60"/>
-<w:ind w:left="0"/>
+<w:pStyle w:val="TOC1"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
 </w:pPr>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">TOC \h \o &quot;1-4&quot;</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+</w:r>
+<w:hyperlink w:history="1" w:anchor="_Toc1">
 <w:r>
 <w:t xml:space="preserve">Project Report Title</w:t>
 </w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc1 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
 </w:p>
 <w:p>
 <w:pPr>
-<w:spacing w:after="60"/>
-<w:ind w:left="0"/>
+<w:pStyle w:val="TOC1"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
 </w:pPr>
+<w:hyperlink w:history="1" w:anchor="_Toc2">
 <w:r>
 <w:t xml:space="preserve">1. Introduction</w:t>
 </w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc2 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
 </w:p>
 <w:p>
 <w:pPr>
-<w:spacing w:after="60"/>
-<w:ind w:left="360"/>
+<w:pStyle w:val="TOC2"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
 </w:pPr>
+<w:hyperlink w:history="1" w:anchor="_Toc3">
 <w:r>
 <w:t xml:space="preserve">1.1 Objectives</w:t>
 </w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc3 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
 </w:p>
 <w:p>
 <w:pPr>
-<w:spacing w:after="60"/>
-<w:ind w:left="0"/>
+<w:pStyle w:val="TOC1"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
 </w:pPr>
+<w:hyperlink w:history="1" w:anchor="_Toc4">
 <w:r>
 <w:t xml:space="preserve">2. Literature Review</w:t>
 </w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc4 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
 </w:p>
 <w:p>
 <w:pPr>
-<w:spacing w:after="60"/>
-<w:ind w:left="0"/>
+<w:pStyle w:val="TOC1"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
 </w:pPr>
+<w:hyperlink w:history="1" w:anchor="_Toc5">
 <w:r>
 <w:t xml:space="preserve">3. Methodology</w:t>
 </w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc5 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
 </w:p>
 <w:p>
 <w:pPr>
-<w:spacing w:after="60"/>
-<w:ind w:left="0"/>
+<w:pStyle w:val="TOC1"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
 </w:pPr>
+<w:hyperlink w:history="1" w:anchor="_Toc6">
 <w:r>
 <w:t xml:space="preserve">4. Results and Discussion</w:t>
 </w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc6 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
 </w:p>
 <w:p>
 <w:pPr>
-<w:spacing w:after="60"/>
-<w:ind w:left="0"/>
+<w:pStyle w:val="TOC1"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
 </w:pPr>
+<w:hyperlink w:history="1" w:anchor="_Toc7">
 <w:r>
 <w:t xml:space="preserve">5. Conclusion</w:t>
 </w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc7 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
 </w:p>
 <w:p>
 <w:pPr>
-<w:spacing w:after="60"/>
-<w:ind w:left="0"/>
+<w:pStyle w:val="TOC1"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
 </w:pPr>
+<w:hyperlink w:history="1" w:anchor="_Toc8">
 <w:r>
 <w:t xml:space="preserve">References</w:t>
 </w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc8 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
 </w:p>
+<w:p>
+<w:r>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:p>
+</w:sdtContent>
+</w:sdt>
 <w:p>
 <w:r>
 <w:br w:type="page"/>
@@ -169,9 +303,11 @@
 <w:pPr>
 <w:pStyle w:val="Heading1"/>
 </w:pPr>
+<w:bookmarkStart w:name="_Toc2" w:id="2"/>
 <w:r>
 <w:t xml:space="preserve">1. Introduction</w:t>
 </w:r>
+<w:bookmarkEnd w:id="2"/>
 </w:p>
 <w:p>
 <w:r>
@@ -182,9 +318,11 @@
 <w:pPr>
 <w:pStyle w:val="Heading2"/>
 </w:pPr>
+<w:bookmarkStart w:name="_Toc3" w:id="3"/>
 <w:r>
 <w:t xml:space="preserve">1.1 Objectives</w:t>
 </w:r>
+<w:bookmarkEnd w:id="3"/>
 </w:p>
 <w:p>
 <w:pPr>
@@ -214,9 +352,11 @@
 <w:pPr>
 <w:pStyle w:val="Heading1"/>
 </w:pPr>
+<w:bookmarkStart w:name="_Toc4" w:id="4"/>
 <w:r>
 <w:t xml:space="preserve">2. Literature Review</w:t>
 </w:r>
+<w:bookmarkEnd w:id="4"/>
 </w:p>
 <w:p>
 <w:r>
@@ -227,9 +367,11 @@
 <w:pPr>
 <w:pStyle w:val="Heading1"/>
 </w:pPr>
+<w:bookmarkStart w:name="_Toc5" w:id="5"/>
 <w:r>
 <w:t xml:space="preserve">3. Methodology</w:t>
 </w:r>
+<w:bookmarkEnd w:id="5"/>
 </w:p>
 <w:p>
 <w:r>
@@ -240,9 +382,11 @@
 <w:pPr>
 <w:pStyle w:val="Heading1"/>
 </w:pPr>
+<w:bookmarkStart w:name="_Toc6" w:id="6"/>
 <w:r>
 <w:t xml:space="preserve">4. Results and Discussion</w:t>
 </w:r>
+<w:bookmarkEnd w:id="6"/>
 </w:p>
 <w:p>
 <w:r>
@@ -253,9 +397,11 @@
 <w:pPr>
 <w:pStyle w:val="Heading1"/>
 </w:pPr>
+<w:bookmarkStart w:name="_Toc7" w:id="7"/>
 <w:r>
 <w:t xml:space="preserve">5. Conclusion</w:t>
 </w:r>
+<w:bookmarkEnd w:id="7"/>
 </w:p>
 <w:p>
 <w:r>
@@ -266,9 +412,11 @@
 <w:pPr>
 <w:pStyle w:val="Heading1"/>
 </w:pPr>
+<w:bookmarkStart w:name="_Toc8" w:id="8"/>
 <w:r>
 <w:t xml:space="preserve">References</w:t>
 </w:r>
+<w:bookmarkEnd w:id="8"/>
 </w:p>
 <w:p>
 <w:pPr>

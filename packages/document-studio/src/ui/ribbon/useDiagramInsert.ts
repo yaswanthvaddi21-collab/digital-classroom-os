@@ -1,0 +1,55 @@
+import { useToast } from '@dcos/ui';
+import type { Editor } from '@tiptap/core';
+import { useState } from 'react';
+import { RELOADED_NOT_INSERTED, type DiagramHost, type DiagramStart } from '../../extensions/diagramEmbed';
+
+/**
+ * Creating and inserting diagrams, shared by the Insert tab and the Diagram tab. `run` guards against double
+ * clicks and reports errors; every await can outlive the editor (the document reloaded meanwhile), so success is
+ * never reported into a dead editor.
+ */
+export function useDiagramInsert(editor: Editor, host: DiagramHost | undefined, maxWidth: number) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+
+  const run = async (fn: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fn();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Opens the diagram editor and places the result. Call inside `run`. */
+  const editAndInsert = async (start?: DiagramStart) => {
+    if (!host) return;
+    if (editor.isDestroyed) throw new Error(RELOADED_NOT_INSERTED);
+    const diagram = await host.edit(null, start);
+    if (diagram && editor.isDestroyed) throw new Error(RELOADED_NOT_INSERTED);
+    if (diagram) {
+      editor.chain().focus().insertDiagram(diagram, maxWidth).run();
+      toast('Diagram added. Double-click it to edit.', 'success');
+    }
+  };
+
+  return {
+    busy,
+    run,
+    editAndInsert,
+    fromTemplate: (templateId: string, title: string) => void run(() => editAndInsert({ templateId, title })),
+    fromLibrary: () =>
+      void run(async () => {
+        const start = await host?.pickFromLibrary();
+        if (start) await editAndInsert(start);
+      }),
+    importFile: () =>
+      void run(async () => {
+        const start = await host?.importFile();
+        if (start) await editAndInsert(start);
+      }),
+  };
+}

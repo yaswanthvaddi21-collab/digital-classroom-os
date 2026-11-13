@@ -4,6 +4,7 @@ import { Clock, FileInput, FolderOpen, Plus, Search, Star, Trash2 } from 'lucide
 import { useNavigate } from 'react-router-dom';
 import { chooseDrawioFile } from '../components/DiagramDialogs';
 import { useMemo, useState, type ReactNode } from 'react';
+import { ImportReportDialog, useImportDocument } from '../components/ImportDocument';
 import { ItemRow } from '../components/ItemRow';
 import { NewItemDialog } from '../components/NewItemDialog';
 import { notifyStorageChanged, purgeItems, requestPersistentStorage, storage, useItems } from '../lib/storage';
@@ -42,6 +43,7 @@ export function ItemListPage({ view }: { view: ListView }) {
 
   const copy = describe(view);
   const navigate = useNavigate();
+  const importer = useImportDocument();
 
   /** Creates a new diagram from a diagrams.net / draw.io file, and says what (if anything) did not carry over. */
   const importDrawio = async () => {
@@ -92,6 +94,11 @@ export function ItemListPage({ view }: { view: ListView }) {
         {view.type === 'kind' && view.kind === 'diagram' && (
           <Button icon={<FileInput size={16} />} onClick={() => void importDrawio()}>
             Import diagrams.net
+          </Button>
+        )}
+        {view.type === 'kind' && view.kind === 'document' && (
+          <Button icon={<FileInput size={16} />} disabled={importer.busy} title="Word (.docx) or OpenDocument (.odt) files" onClick={() => void importer.start()}>
+            {importer.busy ? 'Importing…' : 'Import Word document'}
           </Button>
         )}
         {view.type === 'kind' && (
@@ -167,6 +174,7 @@ export function ItemListPage({ view }: { view: ListView }) {
       </Card>
 
       {creating && <NewItemDialog kind={creating} open onClose={() => setCreating(null)} />}
+      <ImportReportDialog outcome={importer.outcome} onOpen={importer.open} onClose={importer.dismiss} />
       <Dialog
         open={!!purging}
         onClose={() => setPurging(null)}

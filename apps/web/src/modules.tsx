@@ -11,6 +11,12 @@ export interface EditorProps {
   onChange: (content: unknown) => void;
   /** Documents only: enables embedded diagrams. */
   diagramHost?: DiagramHost;
+  // @phase4:review — documents only: per-device preferences (Settings → General).
+  /** Name new comments are written under. */
+  authorName?: string;
+  /** Whether spell checking starts on; the editor reports changes through onSpellcheckChange. */
+  spellcheck?: boolean;
+  onSpellcheckChange?: (on: boolean) => void;
 }
 
 export interface TemplateOption {

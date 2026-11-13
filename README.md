@@ -2,7 +2,7 @@
 
 Offline-first academic workspace: documents and diagrams today, with notebooks, assignments and classroom sharing to follow. Everything is saved on the device and works without internet.
 
-**Status:** Phase 0 (foundation) and the Phase 1 Document Studio and Diagram Studio foundations are built. Release 0.2 added data-safety fixes, automated browser tests, editable diagrams inside documents, diagrams.net import/export and draw.io-style quick connect. See [tests/acceptance/CHECKLIST.md](tests/acceptance/CHECKLIST.md).
+**Status:** Phase 0 (foundation) and the Phase 1 Document Studio and Diagram Studio foundations are built. Release 0.2 added data-safety fixes, automated browser tests, editable diagrams inside documents, diagrams.net import/export and draw.io-style quick connect. Phases 2–4 of v0.2.0 added Git and backup safety, storage hardening, and the Document Studio features below. See [tests/acceptance/CHECKLIST.md](tests/acceptance/CHECKLIST.md).
 
 ## Run it
 
@@ -17,11 +17,12 @@ Other commands: `npm test`, `npm run test:e2e` (Playwright), `npm run typecheck`
 
 ## What works
 
-**Document Studio**: Word/Pages-style editor on a real page.
-- *Simple mode:* headings, bold/italic/underline/strike, colour, highlight, lists, quotes, alignment, links, images (paste, drop or upload), tables, page numbers, and academic templates (Assignment, Lab report, Essay, Project report).
-- *Advanced mode:* fonts and sizes, sub/superscript, page breaks, live table of contents, find & replace, spell-check toggle, page setup (A4/Letter, orientation, margins, header, footer), and table merge/split.
+**Document Studio**: a word processor with a Word-style ribbon (Home, Insert, Layout, Review, Diagram) on a page-sized sheet.
+- *Simple mode:* named styles (Title, Subtitle, Heading 1–4, Quote, Caption, Code), bold/italic/underline/strike, text and highlight colours (custom colours too), lists, quotes, alignment, line spacing, links, pictures (paste, drop or upload, with alignment and captions), tables, embedded diagrams, and templates (Assignment, Lab report, Essay, Project report, Research paper in APA style, MLA essay, Cover page, Formal letter).
+- *Advanced mode adds:* fonts and custom font sizes, sub/superscript, paragraph spacing and indents with a Paragraph dialog and a ruler, bullet glyphs and number formats, equations (LaTeX with a live preview), shapes, text boxes, page breaks, a live table of contents; the Layout tab (A3, A4, A5, Letter, Legal; orientation; margins; section breaks with their own orientation, columns and page numbering; header and footer in left/centre/right parts with a different first page; page number format, start and position); and the Review tab (comments with replies and resolve, under the name set in Settings; find & replace with match case and whole words; word count; spell check that is remembered; document language).
 - *Diagram tab:* insert an editable diagram (from a template, from My Diagrams or from a diagrams.net file). Double-click to edit it, resize with the aspect ratio kept, download it as PNG or .drawio.
-- Export to **DOCX**, **PDF** (print → Save as PDF, real text) and **TXT**. Diagrams are included as images.
+- Export to **DOCX**, **ODT**, **PDF** (print → Save as PDF, real text) and **TXT**; import **DOCX** and **ODT** files as new documents. Anything an export writes approximately (for example shapes as pictures in DOCX) or an import leaves out is reported. Exported files have not yet been tested in Word, Pages or LibreOffice: see [docs/DOCUMENT_COMPATIBILITY.md](docs/DOCUMENT_COMPATIBILITY.md).
+- Open documents and diagrams appear as tabs above the editor.
 
 **Diagram Studio**: flowcharts, trees, mind maps, org charts, hierarchy, process, timeline, Venn, network, UML class and ER templates.
 - Basic, UML (class, actor, package) and ER (entity) shapes, start/end markers including UML and crow's-foot, drag-and-drop, connectors that stay attached, editable text, colours, borders, grid and snap, alignment, zoom and pan, minimap.
@@ -48,4 +49,4 @@ docs/               PRD, architecture, database, API, security, testing, deploym
 
 ## Docs
 
-[PRD](docs/PRD.md) · [Architecture](docs/ARCHITECTURE.md) · [Database](docs/DATABASE.md) · [API](docs/API.md) · [Security](docs/SECURITY.md) · [Testing](docs/TESTING.md) · [Deployment](docs/DEPLOYMENT.md) · [Dependencies](docs/DEPENDENCIES.md)
+[PRD](docs/PRD.md) · [Architecture](docs/ARCHITECTURE.md) · [Document compatibility](docs/DOCUMENT_COMPATIBILITY.md) · [Database](docs/DATABASE.md) · [API](docs/API.md) · [Security](docs/SECURITY.md) · [Testing](docs/TESTING.md) · [Deployment](docs/DEPLOYMENT.md) · [Dependencies](docs/DEPENDENCIES.md)

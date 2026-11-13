@@ -1,0 +1,1161 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document mc:Ignorable="w14 w15 wp14" xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" xmlns:cx1="http://schemas.microsoft.com/office/drawing/2015/9/8/chartex" xmlns:cx2="http://schemas.microsoft.com/office/drawing/2015/10/21/chartex" xmlns:cx3="http://schemas.microsoft.com/office/drawing/2016/5/9/chartex" xmlns:cx4="http://schemas.microsoft.com/office/drawing/2016/5/10/chartex" xmlns:cx5="http://schemas.microsoft.com/office/drawing/2016/5/11/chartex" xmlns:cx6="http://schemas.microsoft.com/office/drawing/2016/5/12/chartex" xmlns:cx7="http://schemas.microsoft.com/office/drawing/2016/5/13/chartex" xmlns:cx8="http://schemas.microsoft.com/office/drawing/2016/5/14/chartex" xmlns:aink="http://schemas.microsoft.com/office/drawing/2016/ink" xmlns:am3d="http://schemas.microsoft.com/office/drawing/2017/model3d" xmlns:w16cex="http://schemas.microsoft.com/office/word/2018/wordml/cex" xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid" xmlns:w16="http://schemas.microsoft.com/office/word/2018/wordml" xmlns:w16sdtdh="http://schemas.microsoft.com/office/word/2020/wordml/sdtdatahash" xmlns:w16se="http://schemas.microsoft.com/office/word/2015/wordml/symex">
+<w:body>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="Title"/>
+<w:jc w:val="center"/>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">Kitchen sink v2</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="Subtitle"/>
+<w:jc w:val="center"/>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">Every Phase 4 feature in one document</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:keepNext/>
+<w:spacing w:after="120"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:bCs/>
+<w:sz w:val="26"/>
+<w:szCs w:val="26"/>
+</w:rPr>
+<w:t xml:space="preserve">Table of Contents</w:t>
+</w:r>
+</w:p>
+<w:sdt>
+<w:sdtPr>
+<w:alias w:val="Table of Contents"/>
+<w:docPartObj>
+<w:docPartGallery w:val="Table of Contents"/>
+<w:docPartUnique/>
+</w:docPartObj>
+</w:sdtPr>
+<w:sdtContent>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="TOC1"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
+</w:pPr>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">TOC \h \o &quot;1-4&quot;</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+</w:r>
+<w:hyperlink w:history="1" w:anchor="_Toc1">
+<w:r>
+<w:t xml:space="preserve">Formatting</w:t>
+</w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc1 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="TOC2"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
+</w:pPr>
+<w:hyperlink w:history="1" w:anchor="_Toc2">
+<w:r>
+<w:t xml:space="preserve">Lists</w:t>
+</w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc2 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="TOC3"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
+</w:pPr>
+<w:hyperlink w:history="1" w:anchor="_Toc3">
+<w:r>
+<w:t xml:space="preserve">Quote and code</w:t>
+</w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc3 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="TOC1"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
+</w:pPr>
+<w:hyperlink w:history="1" w:anchor="_Toc4">
+<w:r>
+<w:t xml:space="preserve">Insert</w:t>
+</w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc4 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="TOC1"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
+</w:pPr>
+<w:hyperlink w:history="1" w:anchor="_Toc5">
+<w:r>
+<w:t xml:space="preserve">Two columns</w:t>
+</w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc5 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="TOC1"/>
+<w:tabs>
+<w:tab w:val="right" w:pos="9026" w:leader="dot"/>
+</w:tabs>
+</w:pPr>
+<w:hyperlink w:history="1" w:anchor="_Toc6">
+<w:r>
+<w:t xml:space="preserve">Review</w:t>
+</w:r>
+<w:r>
+<w:tab/>
+</w:r>
+<w:r>
+<w:fldChar w:fldCharType="begin" w:dirty="true"/>
+<w:instrText xml:space="preserve">PAGEREF _Toc6 \h</w:instrText>
+<w:fldChar w:fldCharType="separate"/>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:hyperlink>
+</w:p>
+<w:p>
+<w:r>
+<w:fldChar w:fldCharType="end"/>
+</w:r>
+</w:p>
+</w:sdtContent>
+</w:sdt>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="Heading1"/>
+</w:pPr>
+<w:bookmarkStart w:name="_Toc1" w:id="1"/>
+<w:commentRangeStart w:id="0"/>
+<w:r>
+<w:t xml:space="preserve">Formatting</w:t>
+</w:r>
+<w:commentRangeEnd w:id="0"/>
+<w:r>
+<w:commentReference w:id="0"/>
+</w:r>
+<w:bookmarkEnd w:id="1"/>
+</w:p>
+<w:p>
+<w:pPr>
+<w:spacing w:after="120" w:before="240" w:line="360"/>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">Line spacing 1.5 with space before and after, </w:t>
+</w:r>
+<w:r>
+<w:rPr>
+<w:color w:val="0E7490"/>
+</w:rPr>
+<w:t xml:space="preserve">a custom colour</w:t>
+</w:r>
+<w:r>
+<w:t xml:space="preserve">, </w:t>
+</w:r>
+<w:r>
+<w:rPr>
+<w:highlight w:val="yellow"/>
+</w:rPr>
+<w:t xml:space="preserve">a custom highlight</w:t>
+</w:r>
+<w:r>
+<w:t xml:space="preserve"> and </w:t>
+</w:r>
+<w:r>
+<w:rPr>
+<w:sz w:val="27"/>
+<w:szCs w:val="27"/>
+</w:rPr>
+<w:t xml:space="preserve">13.5 pt text</w:t>
+</w:r>
+<w:r>
+<w:t xml:space="preserve">.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="720" w:hanging="720"/>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">A hanging indent: the first line starts at the margin and the rest is indented by half an inch.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:right="720" w:firstLine="720"/>
+<w:jc w:val="both"/>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">A first-line indent and a right indent.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="Heading2"/>
+<w:spacing w:line="276"/>
+</w:pPr>
+<w:bookmarkStart w:name="_Toc2" w:id="2"/>
+<w:r>
+<w:t xml:space="preserve">Lists</w:t>
+</w:r>
+<w:bookmarkEnd w:id="2"/>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="ListParagraph"/>
+<w:numPr>
+<w:ilvl w:val="0"/>
+<w:numId w:val="2"/>
+</w:numPr>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">Square bullet</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="ListParagraph"/>
+<w:numPr>
+<w:ilvl w:val="1"/>
+<w:numId w:val="3"/>
+</w:numPr>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">Dash bullet, nested</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="ListParagraph"/>
+<w:numPr>
+<w:ilvl w:val="0"/>
+<w:numId w:val="2"/>
+</w:numPr>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">Item with a second paragraph</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:ind w:left="1080"/>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">The continuation keeps its own indent.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="ListParagraph"/>
+<w:numPr>
+<w:ilvl w:val="0"/>
+<w:numId w:val="4"/>
+</w:numPr>
+</w:pPr>
+<w:commentRangeStart w:id="2"/>
+<w:r>
+<w:t xml:space="preserve">Item</w:t>
+</w:r>
+<w:commentRangeEnd w:id="2"/>
+<w:r>
+<w:commentReference w:id="2"/>
+</w:r>
+<w:r>
+<w:t xml:space="preserve"> four, upper-roman from IV</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="ListParagraph"/>
+<w:numPr>
+<w:ilvl w:val="0"/>
+<w:numId w:val="4"/>
+</w:numPr>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">Item five</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="ListParagraph"/>
+<w:numPr>
+<w:ilvl w:val="1"/>
+<w:numId w:val="5"/>
+</w:numPr>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">nested from b</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="Heading3"/>
+</w:pPr>
+<w:bookmarkStart w:name="_Toc3" w:id="3"/>
+<w:r>
+<w:t xml:space="preserve">Quote and code</w:t>
+</w:r>
+<w:bookmarkEnd w:id="3"/>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="Quote"/>
+<w:pBdr>
+<w:left w:val="single" w:color="C7C7D1" w:sz="18" w:space="12"/>
+</w:pBdr>
+<w:ind w:left="720"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:color w:val="555555"/>
+</w:rPr>
+<w:t xml:space="preserve">A quoted line in the Quote style.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="Code"/>
+<w:shd w:fill="F4F4F6" w:color="auto" w:val="clear"/>
+<w:spacing w:after="0"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:rFonts w:ascii="Courier New" w:cs="Courier New" w:eastAsia="Courier New" w:hAnsi="Courier New"/>
+<w:sz w:val="20"/>
+<w:szCs w:val="20"/>
+</w:rPr>
+<w:t xml:space="preserve">let x = 1;</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="Caption"/>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">A caption-styled paragraph.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="Heading1"/>
+</w:pPr>
+<w:bookmarkStart w:name="_Toc4" w:id="4"/>
+<w:r>
+<w:t xml:space="preserve">Insert</w:t>
+</w:r>
+<w:bookmarkEnd w:id="4"/>
+</w:p>
+<w:p>
+<w:r>
+<w:t xml:space="preserve">Inline equations: </w:t>
+</w:r>
+<m:oMath>
+<m:r>
+<m:t>E=m</m:t>
+</m:r>
+<m:sSup>
+<m:sSupPr/>
+<m:e>
+<m:r>
+<m:t>c</m:t>
+</m:r>
+</m:e>
+<m:sup>
+<m:r>
+<m:t>2</m:t>
+</m:r>
+</m:sup>
+</m:sSup>
+</m:oMath>
+<w:r>
+<w:t xml:space="preserve"> and a coloured one </w:t>
+</w:r>
+<m:oMath>
+<m:r>
+<m:t>x+y</m:t>
+</m:r>
+</m:oMath>
+<w:r>
+<w:t xml:space="preserve">.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:spacing w:after="120" w:before="120"/>
+<w:jc w:val="center"/>
+</w:pPr>
+<m:oMathPara>
+<m:oMath>
+<m:nary>
+<m:naryPr>
+<m:chr m:val="∫"/>
+<m:limLoc m:val="subSup"/>
+</m:naryPr>
+<m:sub>
+<m:r>
+<m:t>0</m:t>
+</m:r>
+</m:sub>
+<m:sup>
+<m:r>
+<m:t>1</m:t>
+</m:r>
+</m:sup>
+<m:e>
+<m:sSup>
+<m:sSupPr/>
+<m:e>
+<m:r>
+<m:t>x</m:t>
+</m:r>
+</m:e>
+<m:sup>
+<m:r>
+<m:t>2</m:t>
+</m:r>
+</m:sup>
+</m:sSup>
+<m:r>
+<m:t xml:space="preserve"> dx</m:t>
+</m:r>
+</m:e>
+</m:nary>
+<m:r>
+<m:t>=</m:t>
+</m:r>
+<m:f>
+<m:num>
+<m:r>
+<m:t>1</m:t>
+</m:r>
+</m:num>
+<m:den>
+<m:r>
+<m:t>3</m:t>
+</m:r>
+</m:den>
+</m:f>
+</m:oMath>
+</m:oMathPara>
+</w:p>
+<w:p>
+<w:pPr>
+<w:spacing w:after="120" w:before="120"/>
+<w:jc w:val="center"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:rFonts w:ascii="Cambria Math" w:cs="Cambria Math" w:eastAsia="Cambria Math" w:hAnsi="Cambria Math"/>
+</w:rPr>
+<w:t xml:space="preserve">\overgroup{AB}</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:jc w:val="center"/>
+</w:pPr>
+<w:r>
+<w:drawing>
+<wp:inline distT="0" distB="0" distL="0" distR="0">
+<wp:extent cx="1905000" cy="762000"/>
+<wp:effectExtent t="0" r="0" b="0" l="0"/>
+<wp:docPr id="N" name="shape" descr="Rounded rectangle: Start here" title="Rounded rectangle: Start here"/>
+<wp:cNvGraphicFramePr>
+<a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/>
+</wp:cNvGraphicFramePr>
+<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<pic:nvPicPr>
+<pic:cNvPr id="N" name="" descr=""/>
+<pic:cNvPicPr>
+<a:picLocks noChangeAspect="1" noChangeArrowheads="1"/>
+</pic:cNvPicPr>
+</pic:nvPicPr>
+<pic:blipFill>
+<a:blip r:embed="ID1" cstate="none"/>
+<a:srcRect/>
+<a:stretch>
+<a:fillRect/>
+</a:stretch>
+</pic:blipFill>
+<pic:spPr bwMode="auto">
+<a:xfrm>
+<a:off x="0" y="0"/>
+<a:ext cx="1905000" cy="762000"/>
+</a:xfrm>
+<a:prstGeom prst="rect">
+<a:avLst/>
+</a:prstGeom>
+</pic:spPr>
+</pic:pic>
+</a:graphicData>
+</a:graphic>
+</wp:inline>
+</w:drawing>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:jc w:val="right"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:i/>
+<w:iCs/>
+<w:color w:val="888888"/>
+</w:rPr>
+<w:t xml:space="preserve">[Shape: Ellipse: Not drawn]</w:t>
+</w:r>
+</w:p>
+<w:tbl>
+<w:tblPr>
+<w:tblpPr w:leftFromText="240" w:rightFromText="0" w:topFromText="60" w:bottomFromText="120" w:horzAnchor="margin" w:tblpXSpec="right" w:vertAnchor="text"/>
+<w:tblW w:type="dxa" w:w="3300"/>
+<w:tblBorders>
+<w:top w:val="single" w:color="334155" w:sz="6"/>
+<w:left w:val="single" w:color="334155" w:sz="6"/>
+<w:bottom w:val="single" w:color="334155" w:sz="6"/>
+<w:right w:val="single" w:color="334155" w:sz="6"/>
+<w:insideH w:val="single" w:color="334155" w:sz="6"/>
+<w:insideV w:val="single" w:color="334155" w:sz="6"/>
+</w:tblBorders>
+<w:tblLayout w:type="fixed"/>
+</w:tblPr>
+<w:tblGrid>
+<w:gridCol w:w="3300"/>
+</w:tblGrid>
+<w:tr>
+<w:tc>
+<w:tcPr>
+<w:tcW w:type="dxa" w:w="3300"/>
+<w:shd w:fill="F1F5F9" w:color="auto" w:val="clear"/>
+<w:tcMar>
+<w:top w:type="dxa" w:w="120"/>
+<w:left w:type="dxa" w:w="180"/>
+<w:bottom w:type="dxa" w:w="120"/>
+<w:right w:type="dxa" w:w="180"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:rPr>
+<w:b/>
+<w:bCs/>
+</w:rPr>
+<w:t xml:space="preserve">Box heading</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="ListParagraph"/>
+<w:numPr>
+<w:ilvl w:val="0"/>
+<w:numId w:val="{dcos-ordered-lower-roman-5}"/>
+</w:numPr>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">boxed i</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="ListParagraph"/>
+<w:numPr>
+<w:ilvl w:val="0"/>
+<w:numId w:val="{dcos-ordered-lower-roman-5}"/>
+</w:numPr>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">boxed ii</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:jc w:val="center"/>
+</w:pPr>
+<w:r>
+<w:drawing>
+<wp:inline distT="0" distB="0" distL="0" distR="0">
+<wp:extent cx="381000" cy="190500"/>
+<wp:effectExtent t="0" r="0" b="0" l="0"/>
+<wp:docPr id="N" name="image" descr="boxed pixel"/>
+<wp:cNvGraphicFramePr>
+<a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/>
+</wp:cNvGraphicFramePr>
+<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<pic:nvPicPr>
+<pic:cNvPr id="N" name="" descr=""/>
+<pic:cNvPicPr>
+<a:picLocks noChangeAspect="1" noChangeArrowheads="1"/>
+</pic:cNvPicPr>
+</pic:nvPicPr>
+<pic:blipFill>
+<a:blip r:embed="ID1" cstate="none"/>
+<a:srcRect/>
+<a:stretch>
+<a:fillRect/>
+</a:stretch>
+</pic:blipFill>
+<pic:spPr bwMode="auto">
+<a:xfrm>
+<a:off x="0" y="0"/>
+<a:ext cx="381000" cy="190500"/>
+</a:xfrm>
+<a:prstGeom prst="rect">
+<a:avLst/>
+</a:prstGeom>
+</pic:spPr>
+</pic:pic>
+</a:graphicData>
+</a:graphic>
+</wp:inline>
+</w:drawing>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+</w:tbl>
+<w:p>
+<w:pPr>
+<w:spacing w:after="0" w:before="0" w:line="20" w:lineRule="exact"/>
+</w:pPr>
+</w:p>
+<w:p>
+<w:r>
+<w:t xml:space="preserve">Text beside the floating box.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:keepNext/>
+<w:jc w:val="right"/>
+</w:pPr>
+<w:r>
+<w:drawing>
+<wp:inline distT="0" distB="0" distL="0" distR="0">
+<wp:extent cx="571500" cy="285750"/>
+<wp:effectExtent t="0" r="0" b="0" l="0"/>
+<wp:docPr id="N" name="image" descr="pixel"/>
+<wp:cNvGraphicFramePr>
+<a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/>
+</wp:cNvGraphicFramePr>
+<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<pic:nvPicPr>
+<pic:cNvPr id="N" name="" descr=""/>
+<pic:cNvPicPr>
+<a:picLocks noChangeAspect="1" noChangeArrowheads="1"/>
+</pic:cNvPicPr>
+</pic:nvPicPr>
+<pic:blipFill>
+<a:blip r:embed="ID1" cstate="none"/>
+<a:srcRect/>
+<a:stretch>
+<a:fillRect/>
+</a:stretch>
+</pic:blipFill>
+<pic:spPr bwMode="auto">
+<a:xfrm>
+<a:off x="0" y="0"/>
+<a:ext cx="571500" cy="285750"/>
+</a:xfrm>
+<a:prstGeom prst="rect">
+<a:avLst/>
+</a:prstGeom>
+</pic:spPr>
+</pic:pic>
+</a:graphicData>
+</a:graphic>
+</wp:inline>
+</w:drawing>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="Caption"/>
+<w:spacing w:after="200" w:before="60"/>
+<w:jc w:val="right"/>
+</w:pPr>
+<w:r>
+<w:rPr>
+<w:i/>
+<w:iCs/>
+<w:color w:val="4B4B55"/>
+<w:sz w:val="20"/>
+<w:szCs w:val="20"/>
+</w:rPr>
+<w:t xml:space="preserve">Figure 1: A right-aligned picture</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="Caption"/>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">Table 1: An equation in a table cell</w:t>
+</w:r>
+</w:p>
+<w:tbl>
+<w:tblPr>
+<w:tblW w:type="pct" w:w="5000"/>
+<w:tblBorders>
+<w:top w:val="single" w:color="auto" w:sz="4"/>
+<w:left w:val="single" w:color="auto" w:sz="4"/>
+<w:bottom w:val="single" w:color="auto" w:sz="4"/>
+<w:right w:val="single" w:color="auto" w:sz="4"/>
+<w:insideH w:val="single" w:color="auto" w:sz="4"/>
+<w:insideV w:val="single" w:color="auto" w:sz="4"/>
+</w:tblBorders>
+</w:tblPr>
+<w:tblGrid>
+<w:gridCol w:w="4513"/>
+<w:gridCol w:w="4513"/>
+</w:tblGrid>
+<w:tr>
+<w:trPr>
+<w:tblHeader/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:gridSpan w:val="1"/>
+<w:shd w:fill="F1F1F4" w:color="auto" w:val="clear"/>
+<w:tcMar>
+<w:top w:type="dxa" w:w="60"/>
+<w:left w:type="dxa" w:w="100"/>
+<w:bottom w:type="dxa" w:w="60"/>
+<w:right w:type="dxa" w:w="100"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t xml:space="preserve">Quantity</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:gridSpan w:val="1"/>
+<w:shd w:fill="F1F1F4" w:color="auto" w:val="clear"/>
+<w:tcMar>
+<w:top w:type="dxa" w:w="60"/>
+<w:left w:type="dxa" w:w="100"/>
+<w:bottom w:type="dxa" w:w="60"/>
+<w:right w:type="dxa" w:w="100"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t xml:space="preserve">Value</w:t>
+</w:r>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:tblHeader w:val="off"/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:gridSpan w:val="1"/>
+<w:tcMar>
+<w:top w:type="dxa" w:w="60"/>
+<w:left w:type="dxa" w:w="100"/>
+<w:bottom w:type="dxa" w:w="60"/>
+<w:right w:type="dxa" w:w="100"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t xml:space="preserve">Energy</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:gridSpan w:val="1"/>
+<w:tcMar>
+<w:top w:type="dxa" w:w="60"/>
+<w:left w:type="dxa" w:w="100"/>
+<w:bottom w:type="dxa" w:w="60"/>
+<w:right w:type="dxa" w:w="100"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<m:oMath>
+<m:r>
+<m:t>E=m</m:t>
+</m:r>
+<m:sSup>
+<m:sSupPr/>
+<m:e>
+<m:r>
+<m:t>c</m:t>
+</m:r>
+</m:e>
+<m:sup>
+<m:r>
+<m:t>2</m:t>
+</m:r>
+</m:sup>
+</m:sSup>
+</m:oMath>
+</w:p>
+</w:tc>
+</w:tr>
+<w:tr>
+<w:trPr>
+<w:tblHeader w:val="off"/>
+</w:trPr>
+<w:tc>
+<w:tcPr>
+<w:gridSpan w:val="1"/>
+<w:tcMar>
+<w:top w:type="dxa" w:w="60"/>
+<w:left w:type="dxa" w:w="100"/>
+<w:bottom w:type="dxa" w:w="60"/>
+<w:right w:type="dxa" w:w="100"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:r>
+<w:t xml:space="preserve">Area</w:t>
+</w:r>
+</w:p>
+</w:tc>
+<w:tc>
+<w:tcPr>
+<w:gridSpan w:val="1"/>
+<w:tcMar>
+<w:top w:type="dxa" w:w="60"/>
+<w:left w:type="dxa" w:w="100"/>
+<w:bottom w:type="dxa" w:w="60"/>
+<w:right w:type="dxa" w:w="100"/>
+</w:tcMar>
+</w:tcPr>
+<w:p>
+<w:pPr>
+<w:spacing w:after="120" w:before="120"/>
+<w:jc w:val="center"/>
+</w:pPr>
+<m:oMathPara>
+<m:oMath>
+<m:r>
+<m:t>π</m:t>
+</m:r>
+<m:sSup>
+<m:sSupPr/>
+<m:e>
+<m:r>
+<m:t>r</m:t>
+</m:r>
+</m:e>
+<m:sup>
+<m:r>
+<m:t>2</m:t>
+</m:r>
+</m:sup>
+</m:sSup>
+</m:oMath>
+</m:oMathPara>
+</w:p>
+</w:tc>
+</w:tr>
+</w:tbl>
+<w:p>
+<w:pPr>
+<w:sectPr>
+<w:headerReference w:type="default" r:id="ID2"/>
+<w:headerReference w:type="first" r:id="ID3"/>
+<w:footerReference w:type="default" r:id="ID4"/>
+<w:footerReference w:type="first" r:id="ID5"/>
+<w:pgSz w:w="11906" w:h="16838" w:orient="portrait"/>
+<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>
+<w:pgNumType w:fmt="lowerRoman"/>
+<w:titlePg/>
+<w:docGrid w:linePitch="360"/>
+</w:sectPr>
+</w:pPr>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="Heading1"/>
+</w:pPr>
+<w:bookmarkStart w:name="_Toc5" w:id="5"/>
+<w:r>
+<w:t xml:space="preserve">Two columns</w:t>
+</w:r>
+<w:bookmarkEnd w:id="5"/>
+</w:p>
+<w:p>
+<w:r>
+<w:t xml:space="preserve">This landscape section has two columns, restarts page numbers at 1 and holds a picture and an equation.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:jc w:val="center"/>
+</w:pPr>
+<w:r>
+<w:drawing>
+<wp:inline distT="0" distB="0" distL="0" distR="0">
+<wp:extent cx="4248150" cy="2124075"/>
+<wp:effectExtent t="0" r="0" b="0" l="0"/>
+<wp:docPr id="N" name="image" descr="column picture"/>
+<wp:cNvGraphicFramePr>
+<a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/>
+</wp:cNvGraphicFramePr>
+<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<pic:nvPicPr>
+<pic:cNvPr id="N" name="" descr=""/>
+<pic:cNvPicPr>
+<a:picLocks noChangeAspect="1" noChangeArrowheads="1"/>
+</pic:cNvPicPr>
+</pic:nvPicPr>
+<pic:blipFill>
+<a:blip r:embed="ID1" cstate="none"/>
+<a:srcRect/>
+<a:stretch>
+<a:fillRect/>
+</a:stretch>
+</pic:blipFill>
+<pic:spPr bwMode="auto">
+<a:xfrm>
+<a:off x="0" y="0"/>
+<a:ext cx="4248150" cy="2124075"/>
+</a:xfrm>
+<a:prstGeom prst="rect">
+<a:avLst/>
+</a:prstGeom>
+</pic:spPr>
+</pic:pic>
+</a:graphicData>
+</a:graphic>
+</wp:inline>
+</w:drawing>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:spacing w:after="120" w:before="120"/>
+<w:jc w:val="center"/>
+</w:pPr>
+<m:oMathPara>
+<m:oMath>
+<m:sSup>
+<m:sSupPr/>
+<m:e>
+<m:r>
+<m:t>a</m:t>
+</m:r>
+</m:e>
+<m:sup>
+<m:r>
+<m:t>2</m:t>
+</m:r>
+</m:sup>
+</m:sSup>
+<m:r>
+<m:t>+</m:t>
+</m:r>
+<m:sSup>
+<m:sSupPr/>
+<m:e>
+<m:r>
+<m:t>b</m:t>
+</m:r>
+</m:e>
+<m:sup>
+<m:r>
+<m:t>2</m:t>
+</m:r>
+</m:sup>
+</m:sSup>
+<m:r>
+<m:t>=</m:t>
+</m:r>
+<m:sSup>
+<m:sSupPr/>
+<m:e>
+<m:r>
+<m:t>c</m:t>
+</m:r>
+</m:e>
+<m:sup>
+<m:r>
+<m:t>2</m:t>
+</m:r>
+</m:sup>
+</m:sSup>
+</m:oMath>
+</m:oMathPara>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="ListParagraph"/>
+<w:numPr>
+<w:ilvl w:val="0"/>
+<w:numId w:val="6"/>
+</w:numPr>
+<w:sectPr>
+<w:headerReference w:type="default" r:id="ID6"/>
+<w:footerReference w:type="default" r:id="ID7"/>
+<w:type w:val="nextPage"/>
+<w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/>
+<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>
+<w:pgNumType w:start="1"/>
+<w:cols w:space="567" w:num="2" w:equalWidth="true"/>
+<w:docGrid w:linePitch="360"/>
+</w:sectPr>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">Styled list after the break, from VI</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:sectPr>
+<w:headerReference w:type="default" r:id="ID8"/>
+<w:footerReference w:type="default" r:id="ID9"/>
+<w:type w:val="continuous"/>
+<w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/>
+<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>
+<w:pgNumType/>
+<w:cols w:space="567" w:num="3" w:equalWidth="true"/>
+<w:docGrid w:linePitch="360"/>
+</w:sectPr>
+</w:pPr>
+<w:r>
+<w:t xml:space="preserve">Three columns in a continuous section.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:pPr>
+<w:pStyle w:val="Heading1"/>
+</w:pPr>
+<w:bookmarkStart w:name="_Toc6" w:id="6"/>
+<w:r>
+<w:t xml:space="preserve">Review</w:t>
+</w:r>
+<w:bookmarkEnd w:id="6"/>
+</w:p>
+<w:p>
+<w:r>
+<w:t xml:space="preserve">A </w:t>
+</w:r>
+<w:hyperlink w:history="1" r:id="ID10">
+<w:r>
+<w:rPr>
+<w:rStyle w:val="Hyperlink"/>
+</w:rPr>
+<w:t xml:space="preserve">link</w:t>
+</w:r>
+</w:hyperlink>
+<w:r>
+<w:t xml:space="preserve"> and </w:t>
+</w:r>
+<w:commentRangeStart w:id="3"/>
+<w:r>
+<w:t xml:space="preserve">resolved comment</w:t>
+</w:r>
+<w:commentRangeEnd w:id="3"/>
+<w:r>
+<w:commentReference w:id="3"/>
+</w:r>
+<w:r>
+<w:t xml:space="preserve">.</w:t>
+</w:r>
+</w:p>
+<w:p>
+<w:r>
+<w:br w:type="page"/>
+</w:r>
+</w:p>
+<w:p>
+<w:r>
+<w:t xml:space="preserve">Last page.</w:t>
+</w:r>
+</w:p>
+<w:sectPr>
+<w:headerReference w:type="default" r:id="ID11"/>
+<w:footerReference w:type="default" r:id="ID12"/>
+<w:type w:val="nextPage"/>
+<w:pgSz w:w="11906" w:h="16838" w:orient="portrait"/>
+<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>
+<w:pgNumType w:fmt="upperLetter"/>
+<w:docGrid w:linePitch="360"/>
+</w:sectPr>
+</w:body>
+</w:document>

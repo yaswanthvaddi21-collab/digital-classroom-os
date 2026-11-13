@@ -14,3 +14,4 @@ Each record states one decision: the problem, what was decided, what it costs, a
 | [0008](0008-attachments.md) | Attachments: content-addressed, cleaned up only when provably unused | Accepted (Phase 3) |
 | [0009](0009-cross-tab-coordination.md) | Cross-tab coordination: change notices, holds, locks, and stopping after an upgrade | Accepted (Release 0.2, extended in Phases 2 and 3) |
 | [0010](0010-soft-delete-and-recovery.md) | Soft delete, purge, and recovering edits to deleted items | Accepted (v0.1.0, extended in Phase 3) |
+| [0011](0011-document-format-phase4.md) | Document format in Phase 4: schema 2 from a frozen v0.1.0 vocabulary, comments and sections in the content, equations as LaTeX, approximations reported | Accepted (Phase 4) |

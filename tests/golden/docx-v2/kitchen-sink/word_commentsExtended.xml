@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w15:commentsEx xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml" mc:Ignorable="w15">
+<w15:commentEx w15:paraId="00000001" w15:done="0"/>
+<w15:commentEx w15:paraId="00000002" w15:paraIdParent="00000001" w15:done="0"/>
+<w15:commentEx w15:paraId="00000003" w15:done="0"/>
+<w15:commentEx w15:paraId="00000004" w15:done="1"/>
+<w15:commentEx w15:paraId="00000005" w15:paraIdParent="00000004" w15:done="1"/>
+</w15:commentsEx>

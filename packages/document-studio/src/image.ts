@@ -22,7 +22,7 @@ const readAsDataUrl = (file: Blob) =>
 
 /**
  * Reads an image as an embeddable data URL, downscaling very large photos so documents stay small enough
- * to save quickly and export to DOCX. WebP is converted to PNG/JPEG because Word cannot display it.
+ * to save quickly and export to DOCX. Formats other than PNG, JPEG and GIF are converted to PNG for Word.
  */
 export async function readImageFile(file: File): Promise<{ src: string; width: number; height: number }> {
   if (!file.type.startsWith('image/')) throw new Error('Please choose an image file');
@@ -31,7 +31,8 @@ export async function readImageFile(file: File): Promise<{ src: string; width: n
   const img = await load(original);
   const scale = Math.min(1, MAX_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight));
   let src = original;
-  if (scale < 1 || file.type === 'image/webp') {
+  // Word shows PNG, JPEG and GIF; anything else (WebP, SVG, BMP…) is stored as PNG.
+  if (scale < 1 || !/^image\/(png|jpeg|gif)$/.test(file.type)) {
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(img.naturalWidth * scale);
     canvas.height = Math.round(img.naturalHeight * scale);
@@ -40,4 +41,30 @@ export async function readImageFile(file: File): Promise<{ src: string; width: n
   }
   const width = Math.min(DEFAULT_DISPLAY_WIDTH, img.naturalWidth);
   return { src, width, height: Math.round((img.naturalHeight / img.naturalWidth) * width) };
+}
+
+const FETCH_TIMEOUT_MS = 15_000;
+
+/**
+ * Fetches a picture from another website and returns it as a data URL to store in the document, or null when the
+ * website does not allow it (most do not let other sites read their images), the connection fails, or it is not an
+ * image. No cookies or referrer are sent.
+ */
+export async function inlineRemoteImage(src: string, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const url = src.startsWith('//') ? `https:${src}` : src;
+    const res = await fetchImpl(url, { mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer', signal: controller.signal });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const type = blob.type || res.headers.get('content-type') || '';
+    if (!type.startsWith('image/')) return null;
+    const name = decodeURIComponent(new URL(url).pathname.split('/').pop() || 'image');
+    return (await readImageFile(new File([blob], name, { type }))).src;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }

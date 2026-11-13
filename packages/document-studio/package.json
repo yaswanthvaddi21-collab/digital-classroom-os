@@ -13,6 +13,7 @@
     "@tiptap/core": "^3.0.0",
     "@tiptap/extension-highlight": "^3.0.0",
     "@tiptap/extension-image": "^3.0.0",
+    "@tiptap/extension-mathematics": "3.33.1",
     "@tiptap/extension-subscript": "^3.0.0",
     "@tiptap/extension-superscript": "^3.0.0",
     "@tiptap/extension-table": "^3.0.0",
@@ -22,7 +23,10 @@
     "@tiptap/pm": "^3.0.0",
     "@tiptap/react": "^3.0.0",
     "@tiptap/starter-kit": "^3.0.0",
-    "docx": "^9.5.0"
+    "docx": "^9.15.3",
+    "fflate": "^0.8.3",
+    "katex": "^0.18.11",
+    "mammoth": "^1.13.0"
   },
   "peerDependencies": {
     "react": "^19.0.0",

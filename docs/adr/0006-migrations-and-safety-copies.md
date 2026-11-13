@@ -21,7 +21,7 @@ The project rules forbid deleting user data, resetting the database and destruct
    - upgrade without the on-device copy, but only after that file was downloaded in this session and the user confirms it is saved
 4. **All or nothing.** An error inside a migration aborts the upgrade transaction, so the database stays at the old version. Before Phase 2 it could end half-migrated.
 5. **One tab at a time.** Copy and upgrade run under the Web Lock `dcos-upgrade:<db>`. A tab that waited re-reads the version and simply opens if the upgrade already happened. Browsers without Web Locks run unguarded, as before.
-6. **Content schemas are versioned separately** (documents: schema 1, or 2 with a diagram; diagrams: schema 2). Content from a newer app opens read-only.
+6. **Content schemas are versioned separately** (documents: schema 1, or 2 with a diagram or, since Phase 4, anything else outside the v0.1.0 vocabulary, see [0011](0011-document-format-phase4.md); diagrams: schema 2). Content from a newer app opens read-only.
 
 ## Consequences
 

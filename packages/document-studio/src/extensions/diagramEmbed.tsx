@@ -2,10 +2,16 @@ import { useToast } from '@dcos/ui';
 import { mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { PreviewUrlCache } from './previewCache';
 
 /** Shown when the editor a diagram dialog was opened from went away (the document was reloaded) before it closed. */
 export const RELOADED_NOT_INSERTED = 'The document was reloaded while you were editing. Your diagram was not inserted.';
 export const RELOADED_NOT_APPLIED = 'The document was reloaded while you were editing. Your changes to the diagram were not applied.';
+/** Shown instead of opening the editor for a diagram whose data is missing (e.g. a malformed paste; audit WEB-3). */
+export const DIAGRAM_DATA_MISSING = "This diagram's data is missing, so it can't be edited. You can remove it, or keep the picture as it is.";
+
+/** Whether a diagram node still carries its editable data. */
+export const hasDiagramSource = (attrs: { source?: unknown }) => !!attrs.source && typeof attrs.source === 'object';
 
 /** What the app hands back after a diagram has been created or edited. */
 export interface EmbeddedDiagram {
@@ -63,17 +69,8 @@ export function fitSize(naturalWidth: number, naturalHeight: number, width: numb
   return { width: w, height: Math.round((w * naturalHeight) / Math.max(1, naturalWidth)) };
 }
 
-const previewUrls = new Map<string, Promise<string | null>>();
-function previewUrl(host: DiagramHost | null, id: string | null): Promise<string | null> {
-  if (!host || !id) return Promise.resolve(null);
-  if (!previewUrls.has(id)) {
-    previewUrls.set(
-      id,
-      host.loadPreview(id).then((blob) => (blob ? URL.createObjectURL(blob) : null)),
-    );
-  }
-  return previewUrls.get(id)!;
-}
+/** Preview object URLs shared by every diagram on screen; failures are retried, unused URLs are revoked (LRU). */
+export const previewUrls = new PreviewUrlCache();
 
 function DiagramView({ node, selected, updateAttributes, editor, extension, getPos }: ReactNodeViewProps) {
   const host = (extension.options as { host: DiagramHost | null }).host;
@@ -82,19 +79,35 @@ function DiagramView({ node, selected, updateAttributes, editor, extension, getP
   const [url, setUrl] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [dragWidth, setDragWidth] = useState<number | null>(null);
+  const [missingData, setMissingData] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let live = true;
+    const id = attrs.previewId;
     setUrl(undefined);
-    previewUrl(host, attrs.previewId).then((u) => live && setUrl(u));
+    if (!host || !id) {
+      setUrl(null);
+      return;
+    }
+    previewUrls.acquire(id, (i) => host.loadPreview(i)).then((u) => live && setUrl(u));
     return () => {
       live = false;
+      previewUrls.release(id);
     };
   }, [host, attrs.previewId]);
 
+  const remove = () => {
+    const pos = getPos();
+    if (typeof pos === 'number') editor.chain().focus().deleteRange({ from: pos, to: pos + node.nodeSize }).run();
+  };
+
   const edit = async () => {
     if (!host || !editor.isEditable || busy) return;
+    if (!hasDiagramSource(attrs)) {
+      setMissingData(true);
+      return;
+    }
     setBusy(true);
     try {
       const next = await host.edit({ source: attrs.source, previewId: attrs.previewId, naturalWidth: attrs.naturalWidth, naturalHeight: attrs.naturalHeight, title: attrs.title });
@@ -146,7 +159,22 @@ function DiagramView({ node, selected, updateAttributes, editor, extension, getP
           <img src={url} alt={attrs.title || 'Diagram'} width={width} height={height} draggable={false} />
         ) : (
           <div className="dcos-diagram-missing" role="img" aria-label={attrs.title || 'Diagram'}>
-            {url === undefined ? 'Loading diagram…' : `Diagram “${attrs.title || 'Untitled'}” — preview unavailable. Double-click to open and re-render it.`}
+            {url === undefined
+              ? 'Loading diagram…'
+              : `Diagram “${attrs.title || 'Untitled'}” — preview unavailable.${hasDiagramSource(attrs) && editor.isEditable ? ' Double-click to open and re-render it.' : ''}`}
+          </div>
+        )}
+        {missingData && (
+          <div className="dcos-diagram-alert" role="alert" contentEditable={false} onMouseDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+            <p>{DIAGRAM_DATA_MISSING}</p>
+            <div>
+              <button type="button" className="is-danger" onClick={remove}>
+                Remove diagram
+              </button>
+              <button type="button" onClick={() => setMissingData(false)}>
+                Keep
+              </button>
+            </div>
           </div>
         )}
         {selected && editor.isEditable && <span className="dcos-diagram-handle" onPointerDown={startResize} aria-hidden />}

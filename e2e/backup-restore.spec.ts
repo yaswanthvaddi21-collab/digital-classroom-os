@@ -88,6 +88,7 @@ test('a backup exported in one browser profile restores completely into an empty
   await page.keyboard.press('End');
   await page.keyboard.type(' A queue is first-in, first-out.');
 
+  await page.getByRole('tab', { name: 'Insert' }).click(); // pictures are on the Insert tab of the ribbon
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Insert image' }).click()]);
   await chooser.setFiles({ name: 'swatch.png', mimeType: 'image/png', buffer: makePng(24, 16, [30, 120, 200]) });
   await expect(editor.locator('img[alt="swatch"]')).toBeVisible();

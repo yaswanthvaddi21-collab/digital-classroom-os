@@ -110,3 +110,28 @@ Scope decision: **option B, the full brief** (owner, 2026-11-13).
 | TD-3, TD-4, TD-5, TD-6, TD-7 (drafts, error classes, adapter injection, unguarded handlers, emergency drafts and preference sync) | ✅ Fixed | ADRs 0001, 0004, 0009 |
 | Ownership and permissions | Decided: device ownership now; explicit per-item sharing with accounts (phases 9–10); privacy enforced by an e2e test | [ADR 0002](../adr/0002-identity-ownership-privacy.md) |
 | TD-2 images inline in document content | ⬜ Phase 4 (a document-format decision) | — |
+
+## 8. Status after Phase 4 (Document Studio)
+
+Feature by feature, see [FEATURE_STATUS.md](FEATURE_STATUS.md) (Document Studio table) and [DOCUMENT_COMPATIBILITY.md](../DOCUMENT_COMPATIBILITY.md). Format decisions: [ADR 0011](../adr/0011-document-format-phase4.md).
+
+| Item | Status | Where |
+|---|---|---|
+| RG-4 HTML injection through the header/footer into the print page (DS-1) | ✅ Fixed: `cssString()` escapes `<` and `>` as CSS escapes; tested with `</style><img onerror>` in the header and in a left header part | `export/print.ts`; `export/docx.test.ts`, `export/layout-export.test.ts` |
+| RG-5 unvalidated page settings (DS-2) | ✅ Fixed: every stored page setting and layout field is checked; unknown values (e.g. a paper size this version doesn't know) open the protected view with the stored original unchanged; the dialogs refuse margins that leave no room for text in any section | `types.ts`, `pageLayout.ts`, `ui/ribbon/layout/useSection.ts`; `safety.test.ts`, `layout.test.ts`, `LayoutTab.test.tsx` |
+| RG-10 menu item that only shows a hint toast (DS-8) | ✅ Removed | `ui/DiagramRibbon.tsx`; `Ribbon.test.tsx`, `e2e/ribbon-document.spec.ts` |
+| RG-11 overstated claims | 🟡 The page-setup/PDF part (DS-5) is fixed: the export menu says the print dialog is used and that header, footer and page numbers need a recent Chrome or Edge, and Safari/Firefox get a toast when printing. The other claims remain for their phases | `ui/ExportMenu.tsx`, `export/printSupport.ts` |
+| RG-12 DOCX never opened in Word or LibreOffice (DS-4) | ⬜ **Still open.** Phase 4 adds many DOCX constructs (sections, comments, equations, styles, numbering) and an ODT export, all checked only as XML, by mammoth and by the app's own importers. No file has been opened in Microsoft Word, Apple Pages or LibreOffice. Stays open until those results exist | DOCUMENT_COMPATIBILITY.md §8 (pending) |
+| RR-3 web images on paste (DS-3) | 🟡 Done as far as the browser allows: a pasted web picture is fetched once (no cookies or referrer) and stored as a data URL; when the site refuses, which is common, it is kept, visibly marked "Not saved for offline use", and counted in the export toasts. Nothing is fetched when a document opens | `extensions/remoteImages.ts`; `remoteImages.test.ts`, `e2e/ribbon-document.spec.ts` |
+| RR-5 missing diagram data, failed preview load (WEB-3, WEB-10) | ✅ Fixed | `extensions/diagramEmbed.tsx`, `extensions/previewCache.ts`; `Ribbon.test.tsx`, `previewCache.test.ts` |
+| RR-12 DOCX fidelity (DS-6, TD-10) | ✅ Fixed in the XML (line height, column widths, list alignment, highlight, a real table-of-contents field). Not yet tested in Word or Pages | `export/docx/`; DOCUMENT_COMPATIBILITY.md §3 |
+| RR-2 / TD-2 images inline in document content | ⬜ Not changed in Phase 4 (no decision to move them was made); version history stores large images once since Phase 3 | ADR 0011 §10 |
+| DS-7 unvalidated hrefs; scheme-less links | ✅ Fixed: only allowed schemes are exported; the link box adds `https://` | `links.ts`; `links.test.ts`, `docx.test.ts` |
+| DS-9 export toasts assume `<a download>` and `print()` | ⬜ Unchanged; belongs with the native shells (TD-28) | — |
+| DS-10 preview cache never revokes URLs (TD-14) | ✅ Fixed | `extensions/previewCache.ts` |
+| TD-8, TD-12, TD-13, TD-14 | ✅ Fixed | [TECHNICAL_DEBT.md](TECHNICAL_DEBT.md), status after Phase 4 |
+| TD-9, TD-11 | 🟡 Improved; see TECHNICAL_DEBT.md | — |
+
+**§4, brief phase 4.** Implemented, with the limits listed in FEATURE_STATUS.md: comments, equations, columns, sections, text boxes, shapes, a ruler, line spacing and indentation controls, named styles, list styles, five paper sizes, header and footer parts, page number formats, a document language, DOCX import, and ODT export and import. Still missing: real pagination on screen. Approximated in exports and reported to the user: shapes (pictures in DOCX, text in ODT), text boxes (one-cell tables in DOCX), equations outside Word's subset, and in ODT comments, equations and sections.
+
+**Still open in Document Studio** (beyond RG-12): no on-screen pagination; PDF only through the browser print dialog, with header, footer and page numbers needing Chromium 131+; the DOCX import leaves out Phase 4 layout and list settings (reported) and has small silent losses; the ODT import's total table size is unbounded (TD-39); the APA and MLA templates lack double spacing and hanging indents until the owner decides whether templates may be schema 2. The full list is DOCUMENT_COMPATIBILITY.md §9.

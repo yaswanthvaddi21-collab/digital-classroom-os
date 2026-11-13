@@ -1,21 +1,32 @@
-import { Button, downloadBlob, Menu, safeFileName, useToast } from '@dcos/ui';
+import { Button, downloadBlob, safeFileName, useToast } from '@dcos/ui';
+import type { JSONContent } from '@tiptap/core';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
-import { ChevronDown, Download, FileJson, FileText, FileType, Printer, ShieldAlert } from 'lucide-react';
+import { FileJson, FileText, FileType, Printer, ShieldAlert } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { documentContentCss } from './contentCss';
 import { exportDocx } from './export/docx';
+import { exportOdt } from './export/odt'; // G-FILES
 import { printDocument } from './export/print';
+import { marginBoxSupport } from './export/printSupport';
+import { ExportReport, exportToast } from './export/report';
 import { documentToText } from './export/text';
 import { documentExtensions } from './extensions';
-import { readImageFile } from './image';
-import { schemaFor } from './migrate';
+import type { DiagramHost } from './extensions/diagramEmbed';
+import { sectionAt } from './extensions/sectionBreak';
+import { inlineRemoteImage, readImageFile } from './image';
+import { contentSchemaFor } from './migrate';
+import { commentsAppendix } from './review/comments';
+import { CommentsLayer } from './review/CommentsPanel';
+import { useReviewControls, useReviewState, withReviewFields } from './review/useReview';
 import { prepareDocument } from './safety';
-import { paperSize, type DocumentContent, type EditorMode, type PageSettings } from './types';
+import { CONTENT_FIELDS, paperSize, type DocumentContent, type EditorMode, type PageSettings } from './types';
+import { ExportMenu } from './ui/ExportMenu';
 import { FindReplaceBar } from './ui/FindReplaceBar';
 import { PageSetupDialog } from './ui/PageSetupDialog';
-import { DiagramRibbon } from './ui/DiagramRibbon';
-import { OPEN_LINK_EVENT, Toolbar } from './ui/Toolbar';
-import type { DiagramHost } from './extensions/diagramEmbed';
+import { PaperFooter, PaperHeader, usesHeaderFooter } from './ui/PaperChrome'; // G-LAYOUT
+import { OPEN_LINK_EVENT, type RibbonContext } from './ui/ribbon/context';
+import { Ribbon } from './ui/ribbon/Ribbon';
+import { Ruler } from './ui/ribbon/format/Ruler'; // G-FORMAT
 
 export interface DocumentEditorProps {
   /** Read once on mount. Remount (change `key`) to load different content. */
@@ -24,21 +35,29 @@ export interface DocumentEditorProps {
   onChange: (content: DocumentContent) => void;
   /** Enables embedded diagrams (the Diagram tab, editing, previews). Supplied by the app. */
   diagramHost?: DiagramHost;
+  // @phase4:review — per-device preferences the app passes in (Settings → General).
+  /** Name new comments are written under. */
+  authorName?: string;
+  /** Whether spell checking starts on (remembered by the app); defaults to on. */
+  spellcheck?: boolean;
+  /** Called when the user turns spell checking on or off, so the app can remember it. */
+  onSpellcheckChange?: (on: boolean) => void;
 }
 
 /**
  * Opens a stored document. Content the editor can represent exactly is editable. Anything else (content from a
  * newer app version, or content the schema rejects) opens in a protected read-only view and is never saved over.
  */
-export function DocumentEditor({ initialContent, title, onChange, diagramHost }: DocumentEditorProps) {
+export function DocumentEditor({ initialContent, title, onChange, diagramHost, ...prefs }: DocumentEditorProps) {
   const [prepared] = useState(() => prepareDocument(initialContent));
   if (prepared.state === 'editable')
-    return <DocumentWorkspace content={prepared.content} title={title} onChange={onChange} repaired={prepared.repairs.length > 0} diagramHost={diagramHost} />;
+    return <DocumentWorkspace content={prepared.content} title={title} onChange={onChange} repaired={prepared.repairs.length > 0} diagramHost={diagramHost} prefs={prefs} />;
   return (
     <DocumentWorkspace
       content={prepared.display}
       title={title}
       diagramHost={diagramHost}
+      prefs={prefs}
       protectedView={{ reason: prepared.reason, detail: prepared.detail, original: initialContent }}
     />
   );
@@ -57,6 +76,7 @@ function DocumentWorkspace({
   protectedView,
   repaired = false,
   diagramHost,
+  prefs = {},
 }: {
   content: DocumentContent;
   title: string;
@@ -64,24 +84,36 @@ function DocumentWorkspace({
   protectedView?: ProtectedView;
   repaired?: boolean;
   diagramHost?: DiagramHost;
+  prefs?: Pick<DocumentEditorProps, 'authorName' | 'spellcheck' | 'onSpellcheckChange'>;
 }) {
-  const [tab, setTab] = useState<'home' | 'diagram'>('home');
+  const [tab, setTab] = useState('home');
   const [showRepaired, setShowRepaired] = useState(repaired);
   const readOnly = !!protectedView;
   const [contentError, setContentError] = useState<string | null>(null);
   const blocked = useRef(readOnly);
   const [page, setPage] = useState<PageSettings>(initial.page);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
-  const [spellcheck, setSpellcheck] = useState(true);
+  const [spellcheck, setSpellcheck] = useState(prefs.spellcheck ?? true);
+  // @phase4:review — follow the remembered setting when it changes elsewhere (Settings, another tab).
+  useEffect(() => {
+    if (prefs.spellcheck !== undefined) setSpellcheck(prefs.spellcheck);
+  }, [prefs.spellcheck]);
   const [findOpen, setFindOpen] = useState(false);
   const [pageSetupOpen, setPageSetupOpen] = useState(false);
   const imageInput = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
-  const latest = useRef({ page, mode, onChange });
-  latest.current = { page, mode, onChange };
+  // Top-level fields later features keep beside the body (registered in CONTENT_FIELDS); carried through every save.
+  const [storedExtras] = useState(() => Object.fromEntries(Object.keys(CONTENT_FIELDS).filter((k) => (initial as unknown as Record<string, unknown>)[k] !== undefined).map((k) => [k, (initial as unknown as Record<string, unknown>)[k]])));
+  // @phase4:review — comments and the document language are edited here, so they replace their stored values.
+  const review = useReviewState(initial);
+  const extras = useMemo(() => withReviewFields(storedExtras, review.fields), [storedExtras, review.fields]);
+  const latest = useRef({ page, mode, onChange, extras });
+  latest.current = { page, mode, onChange, extras };
+  /** Prints with the current settings (Export menu and Ctrl/⌘+P); set on every render below. */
+  const printNow = useRef<() => void>(() => undefined);
 
-  const extensions = useMemo(() => documentExtensions({ diagramHost: diagramHost ?? null }), [diagramHost]);
+  const extensions = useMemo(() => documentExtensions({ diagramHost: diagramHost ?? null, inlineRemoteImage: readOnly ? null : (src) => inlineRemoteImage(src) }), [diagramHost, readOnly]);
   const editor = useEditor({
     extensions,
     content: initial.doc,
@@ -95,9 +127,8 @@ function DocumentWorkspace({
     editorProps: { attributes: { class: 'dcos-doc', spellcheck: 'true', 'aria-label': 'Document body', role: 'textbox', 'aria-multiline': 'true' } },
     onUpdate: ({ editor: e }) => {
       if (blocked.current) return;
-      const { page: p, mode: m, onChange: cb } = latest.current;
-      const doc = e.getJSON();
-      cb?.({ schemaVersion: schemaFor(doc), doc, page: p, mode: m });
+      const { page: p, mode: m, onChange: cb, extras: x } = latest.current;
+      cb?.(compose(e.getJSON(), p, m, x));
     },
   });
 
@@ -105,18 +136,22 @@ function DocumentWorkspace({
   // values (not a first-run flag) so React StrictMode's repeated effects never count as an edit.
   useEffect(() => {
     if (page === initial.page && mode === initial.mode) return;
-    if (editor && !blocked.current) {
-      const doc = editor.getJSON();
-      latest.current.onChange?.({ schemaVersion: schemaFor(doc), doc, page, mode });
-    }
+    if (editor && !blocked.current) latest.current.onChange?.(compose(editor.getJSON(), page, mode, latest.current.extras));
   }, [editor, page, mode, initial.page, initial.mode]);
+
+  // @phase4:review — comments and the language save like page settings (only after a change in this session).
+  const reviewControls = useReviewControls(editor, review, { authorName: prefs.authorName, readOnly: readOnly || !!contentError });
+  useEffect(() => {
+    if (!review.changed) return;
+    if (editor && !blocked.current) latest.current.onChange?.(compose(editor.getJSON(), latest.current.page, latest.current.mode, latest.current.extras));
+  }, [editor, review.changed, review.fields]);
 
   // Ctrl/⌘+P prints from anywhere on the page, not only when focus is inside the editor.
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'p' && editor) {
         e.preventDefault();
-        void printDocument(editor.view.dom, latest.current.page, title);
+        printNow.current();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -173,42 +208,46 @@ function DocumentWorkspace({
       e.preventDefault();
       setFindOpen(true);
     }
-    // Ctrl/⌘+K: insert or edit a link (the Link control lives on the Home tab).
+    // Ctrl/⌘+K: insert or edit a link (the Link control lives on the Insert tab).
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && !readOnly) {
       e.preventDefault();
-      setTab('home');
+      setTab('insert');
       requestAnimationFrame(() => window.dispatchEvent(new Event(OPEN_LINK_EVENT)));
     }
   };
 
-  const content = (): DocumentContent => {
-    const doc = editor.getJSON();
-    return { schemaVersion: schemaFor(doc), doc, page, mode };
-  };
+  const content = (): DocumentContent => compose(editor.getJSON(), page, mode, extras);
   const base = safeFileName(title);
 
+  // Header, footer and page numbers are drawn by the browser's print engine (CSS page margin boxes).
+  const marginBoxes = marginBoxSupport();
+  const usesMarginBoxes = usesHeaderFooter(page); // G-LAYOUT: left/right and first-page parts count too
+  printNow.current = () => {
+    if (usesMarginBoxes && marginBoxes === 'no') toast(PRINT_WITHOUT_MARGIN_BOXES, 'info');
+    void printDocument(editor.view.dom, page, title);
+  };
+
   const exportMenu = (
-    <Menu
-      align="end"
-      trigger={(p) => (
-        <Button size="sm" variant="primary" icon={<Download size={14} />} aria-label="Export" {...p}>
-          <span className="hidden sm:inline">Export</span> <ChevronDown size={13} />
-        </Button>
-      )}
+    <ExportMenu
       items={[
         {
           label: 'PDF (print / save as PDF)',
           icon: <Printer size={14} />,
           hint: '⌘P',
-          onSelect: () => void printDocument(editor.view.dom, page, title),
+          description: `Opens your browser's print dialog; choose “Save as PDF”.${
+            usesMarginBoxes ? (marginBoxes === 'no' ? ' This browser leaves out the header, footer and page numbers; they need a recent Chrome or Edge.' : ' The header, footer and page numbers need a recent Chrome or Edge.') : ''
+          }`,
+          onSelect: () => printNow.current(),
         },
         {
           label: 'Word document (.docx)',
           icon: <FileType size={14} />,
           onSelect: async () => {
             try {
-              downloadBlob(await exportDocx(content(), title, diagramHost?.loadPreview), `${base}.docx`);
-              toast('Exported Word document', 'success');
+              const report = new ExportReport();
+              downloadBlob(await exportDocx(content(), title, diagramHost?.loadPreview, report), `${base}.docx`);
+              const { message, kind } = exportToast('Word document', report);
+              toast(message, kind);
             } catch (err) {
               toast(`DOCX export failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
             }
@@ -217,8 +256,29 @@ function DocumentWorkspace({
         {
           label: 'Plain text (.txt)',
           icon: <FileText size={14} />,
-          onSelect: () => downloadBlob(new Blob([documentToText(editor.getJSON())], { type: 'text/plain;charset=utf-8' }), `${base}.txt`),
+          // @phase4:review — comments are listed after the text.
+          onSelect: () => {
+            const json = editor.getJSON();
+            const appendix = commentsAppendix(review.comments, json);
+            downloadBlob(new Blob([documentToText(json) + (appendix ? `\n${appendix}` : '')], { type: 'text/plain;charset=utf-8' }), `${base}.txt`);
+          },
         },
+        // G-FILES: OpenDocument text, for LibreOffice and other word processors; what it leaves out is in the toast.
+        {
+          label: 'OpenDocument text (.odt)',
+          icon: <FileType size={14} />,
+          onSelect: async () => {
+            try {
+              const report = new ExportReport();
+              downloadBlob(await exportOdt(content(), title, diagramHost?.loadPreview, report), `${base}.odt`);
+              const { message, kind } = exportToast('OpenDocument text', report);
+              toast(message, kind);
+            } catch (err) {
+              toast(`ODT export failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
+            }
+          },
+        },
+        // @phase4:export-menu — further export formats (e.g. ODT) go here; report approximations with exportToast.
       ]}
     />
   );
@@ -236,8 +296,27 @@ function DocumentWorkspace({
     '--m-left': `${m.left}mm`,
   } as CSSProperties;
 
-  // The editor shows one continuous sheet, so this is a preview of the footer text, not a page count.
-  const footerPreview = [page.footer, page.pageNumbers ? 'Page # of #' : ''].filter(Boolean).join('   ·   ');
+  const ribbon: RibbonContext = {
+    editor,
+    mode,
+    advanced: mode === 'advanced',
+    page,
+    textWidthPx,
+    diagramHost,
+    spellcheck,
+    onInsertImage: () => imageInput.current?.click(),
+    onToggleFind: () => setFindOpen((o) => !o),
+    onPageSetup: () => setPageSetupOpen(true),
+    onToggleSpellcheck: () => {
+      setSpellcheck(!spellcheck);
+      prefs.onSpellcheckChange?.(!spellcheck);
+    },
+    showTab: setTab,
+    review: reviewControls,
+    // @phase4:ribbon-context — fill in new ribbon context fields here.
+    onPageChange: setPage, // G-LAYOUT
+  };
+
   const protectedNotice = protectedView ?? (contentError ? { reason: 'invalid' as const, detail: contentError, original: initial } : null);
 
   return (
@@ -246,51 +325,15 @@ function DocumentWorkspace({
       {protectedNotice ? (
         <ProtectedBanner notice={protectedNotice} title={title} />
       ) : (
-      <>
-      {diagramHost && (
-        <div role="tablist" aria-label="Toolbar" className="flex items-end gap-1 border-b border-border bg-surface-2/50 px-2 pt-1">
-          {(
-            [
-              ['home', 'Home'],
-              ['diagram', 'Diagram'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={tab === id}
-              onClick={() => setTab(id)}
-              className={
-                tab === id
-                  ? '-mb-px rounded-t-md border border-b-surface border-border bg-surface px-3 py-1 text-xs font-semibold text-fg'
-                  : 'rounded-t-md px-3 py-1 text-xs font-medium text-muted hover:text-fg'
-              }
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-      {tab === 'diagram' && diagramHost ? (
-        <DiagramRibbon editor={editor} host={diagramHost} maxWidth={textWidthPx} mode={mode} onModeChange={setMode} exportMenu={exportMenu} />
-      ) : (
-      <Toolbar
-        editor={editor}
-        mode={mode}
+      <Ribbon
+        ctx={ribbon}
+        tab={tab}
+        exportMenu={exportMenu}
         onModeChange={(next) => {
           setMode(next);
           if (next === 'simple') setFindOpen(false);
         }}
-        onInsertImage={() => imageInput.current?.click()}
-        onToggleFind={() => setFindOpen((o) => !o)}
-        onPageSetup={() => setPageSetupOpen(true)}
-        spellcheck={spellcheck}
-        onToggleSpellcheck={() => setSpellcheck((v) => !v)}
-        exportMenu={exportMenu}
       />
-      )}
-      </>
       )}
       {showRepaired && !protectedNotice && (
         <div role="status" className="flex items-center gap-3 border-b border-accent/20 bg-accent-soft px-4 py-2 text-sm">
@@ -301,9 +344,13 @@ function DocumentWorkspace({
         </div>
       )}
       {findOpen && !protectedNotice && <FindReplaceBar editor={editor} onClose={() => setFindOpen(false)} />}
+      {/* @phase4:format-ruler (G-FORMAT): the ruler (Advanced mode; hidden on narrow screens, where the Paragraph dialog does the same). */}
+      {!protectedNotice && mode === 'advanced' && <Ruler editor={editor} page={page} onPageChange={setPage} />}
 
+      {/* @phase4:review — the comments panel sits beside the page (over it on narrow screens). */}
+      <div className="relative flex min-h-0 flex-1">
       <div
-        className="dcos-canvas min-h-0 flex-1 overflow-y-auto bg-canvas"
+        className="dcos-canvas min-h-0 min-w-0 flex-1 overflow-y-auto bg-canvas"
         onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
         onDrop={(e) => {
           const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith('image/'));
@@ -314,10 +361,13 @@ function DocumentWorkspace({
         }}
       >
         <div className="dcos-paper" style={paperStyle} onClick={(e) => e.target === e.currentTarget && editor.commands.focus('end')}>
-          {page.header && <div className="dcos-paper-header">{page.header}</div>}
+          {/* G-LAYOUT: header and footer previews (left, centre and right parts; the editor shows one continuous sheet, so "#" stands for the page number). */}
+          <PaperHeader page={page} />
           <EditorContent editor={editor} />
-          {footerPreview && <div className="dcos-paper-footer">{footerPreview}</div>}
+          <PaperFooter page={page} />
         </div>
+      </div>
+      <CommentsLayer editor={editor} controls={reviewControls} />
       </div>
 
       <div className="flex h-8 shrink-0 items-center gap-4 border-t border-border bg-surface px-4 text-xs text-muted">
@@ -341,9 +391,21 @@ function DocumentWorkspace({
           e.target.value = '';
         }}
       />
-      {pageSetupOpen && <PageSetupDialog page={page} onApply={setPage} onClose={() => setPageSetupOpen(false)} />}
+      {pageSetupOpen && <PageSetupDialog page={page} breaks={editor && !editor.isDestroyed ? sectionAt(editor.state).breaks.map((b) => ({ ...b.node.attrs })) : []} onApply={setPage} onClose={() => setPageSetupOpen(false)} />}
     </div>
   );
+}
+
+export const PRINT_WITHOUT_MARGIN_BOXES = "This browser's print dialog leaves out the header, footer and page numbers. They need a recent Chrome or Edge.";
+
+/**
+ * The stored form of what is on screen: the body, the page settings and mode, and any top-level fields later
+ * features keep, with the content schema it needs (1 while it uses only what v0.1.0 knew).
+ */
+function compose(doc: JSONContent, page: PageSettings, mode: EditorMode, extras: Record<string, unknown>): DocumentContent {
+  const content = { ...extras, doc, page, mode };
+  // @phase4:document-content — features with their own top-level state add it to `content` here.
+  return { ...content, schemaVersion: contentSchemaFor(content) };
 }
 
 function ProtectedBanner({ notice, title }: { notice: ProtectedView; title: string }) {

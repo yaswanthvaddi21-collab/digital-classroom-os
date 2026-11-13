@@ -9,6 +9,7 @@ export function FindReplaceBar({ editor, onClose }: { editor: Editor; onClose: (
   const [term, setTerm] = useState('');
   const [replacement, setReplacement] = useState('');
   const [caseSensitive, setCaseSensitive] = useState(false);
+  const [wholeWord, setWholeWord] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { count, index } = useEditorState({
     editor,
@@ -24,8 +25,8 @@ export function FindReplaceBar({ editor, onClose }: { editor: Editor; onClose: (
   }, [editor]);
 
   useEffect(() => {
-    setSearch(editor, { term, caseSensitive, index: 0 });
-  }, [editor, term, caseSensitive]);
+    setSearch(editor, { term, caseSensitive, wholeWord, index: 0 });
+  }, [editor, term, caseSensitive, wholeWord]);
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2" role="search">
@@ -58,6 +59,10 @@ export function FindReplaceBar({ editor, onClose }: { editor: Editor; onClose: (
       <label className="flex items-center gap-1.5 text-xs text-muted">
         <input type="checkbox" checked={caseSensitive} onChange={(e) => setCaseSensitive(e.target.checked)} className="accent-[var(--dc-accent)]" />
         Match case
+      </label>
+      <label className="flex items-center gap-1.5 text-xs text-muted">
+        <input type="checkbox" checked={wholeWord} onChange={(e) => setWholeWord(e.target.checked)} className="accent-[var(--dc-accent)]" />
+        Whole words
       </label>
       <div className="w-48">
         <Input value={replacement} onChange={(e) => setReplacement(e.target.value)} placeholder="Replace with" aria-label="Replace with" className="h-8" />

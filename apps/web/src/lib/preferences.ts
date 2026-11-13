@@ -4,15 +4,22 @@ import { useSyncExternalStore } from 'react';
 export interface Preferences {
   newDocumentMode: 'simple' | 'advanced';
   backupReminderDays: number;
+  // @phase4:review — the name comments are written under, and whether documents open with spell checking on.
+  authorName: string;
+  spellCheck: boolean;
 }
 
-const DEFAULTS: Preferences = { newDocumentMode: 'simple', backupReminderDays: 7 };
+const DEFAULTS: Preferences = { newDocumentMode: 'simple', backupReminderDays: 7, authorName: '', spellCheck: true };
 const KEY = 'dcos.preferences';
 const listeners = new Set<() => void>();
 
 function read(): Preferences {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') };
+    const prefs: Preferences = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') };
+    // @phase4:review — values the editor relies on are checked; anything else falls back to the default.
+    if (typeof prefs.authorName !== 'string') prefs.authorName = DEFAULTS.authorName;
+    if (typeof prefs.spellCheck !== 'boolean') prefs.spellCheck = DEFAULTS.spellCheck;
+    return prefs;
   } catch {
     return DEFAULTS;
   }

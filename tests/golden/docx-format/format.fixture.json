@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 2,
+  "mode": "advanced",
+  "page": { "size": "A4", "orientation": "portrait", "margins": { "top": 25.4, "right": 25.4, "bottom": 25.4, "left": 25.4 }, "header": "", "footer": "", "pageNumbers": false },
+  "doc": {
+    "type": "doc",
+    "content": [
+      { "type": "paragraph", "attrs": { "paragraphStyle": "title" }, "content": [{ "type": "text", "text": "Format fixture" }] },
+      { "type": "paragraph", "attrs": { "paragraphStyle": "subtitle" }, "content": [{ "type": "text", "text": "Every G-FORMAT feature" }] },
+      { "type": "heading", "attrs": { "level": 1, "spaceBefore": 18, "lineSpacing": 1 }, "content": [{ "type": "text", "text": "Spacing" }] },
+      { "type": "paragraph", "attrs": { "lineSpacing": 1.15, "spaceBefore": 6, "spaceAfter": 12 }, "content": [{ "type": "text", "text": "Line spacing 1.15, 6pt before, 12pt after." }] },
+      { "type": "paragraph", "attrs": { "lineSpacing": 2 }, "content": [{ "type": "text", "text": "Double spaced." }] },
+      { "type": "heading", "attrs": { "level": 2 }, "content": [{ "type": "text", "text": "Indents" }] },
+      { "type": "paragraph", "attrs": { "indentLeft": 36, "indentRight": 36 }, "content": [{ "type": "text", "text": "Indented 0.5in both sides." }] },
+      { "type": "paragraph", "attrs": { "indentFirstLine": 36 }, "content": [{ "type": "text", "text": "First-line indent." }] },
+      { "type": "paragraph", "attrs": { "indentLeft": 36, "indentFirstLine": -36 }, "content": [{ "type": "text", "text": "Hanging indent, as in a reference list." }] },
+      { "type": "heading", "attrs": { "level": 3 }, "content": [{ "type": "text", "text": "Heading 3" }] },
+      { "type": "heading", "attrs": { "level": 4 }, "content": [{ "type": "text", "text": "Heading 4" }] },
+      { "type": "blockquote", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "A quotation." }] }] },
+      { "type": "paragraph", "attrs": { "paragraphStyle": "caption", "textAlign": "center" }, "content": [{ "type": "text", "text": "Figure 1. A caption." }] },
+      { "type": "codeBlock", "attrs": { "language": null }, "content": [{ "type": "text", "text": "print('code')" }] },
+      { "type": "paragraph", "content": [
+        { "type": "text", "text": "Custom colour", "marks": [{ "type": "textStyle", "attrs": { "color": "#0e7490", "fontSize": "13.5pt" } }] },
+        { "type": "text", "text": " and custom highlight", "marks": [{ "type": "highlight", "attrs": { "color": "#ffff00" } }] }
+      ] },
+      { "type": "bulletList", "attrs": { "bulletStyle": "square" }, "content": [
+        { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Square bullet" }] },
+          { "type": "bulletList", "attrs": { "bulletStyle": "dash" }, "content": [{ "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Dash bullet" }] }] }] }] }
+      ] },
+      { "type": "bulletList", "attrs": { "bulletStyle": "arrow" }, "content": [{ "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Arrow bullet" }] }] }] },
+      { "type": "orderedList", "attrs": { "start": 3, "numberFormat": "lower-roman" }, "content": [
+        { "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Roman from iii" }] }] },
+        { "type": "listItem", "content": [{ "type": "paragraph", "attrs": { "indentLeft": 18 }, "content": [{ "type": "text", "text": "Indented item" }] }] }
+      ] },
+      { "type": "orderedList", "attrs": { "numberFormat": "upper-alpha" }, "content": [{ "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Letter A" }] }] }] },
+      { "type": "orderedList", "attrs": { "numberFormat": "upper-roman" }, "content": [{ "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Roman I" }] }] }] },
+      { "type": "orderedList", "attrs": { "numberFormat": "lower-alpha" }, "content": [{ "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Letter a" }] }] }] },
+      { "type": "orderedList", "attrs": { "numberFormat": "decimal" }, "content": [{ "type": "listItem", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Number 1" }] }] }] }
+    ]
+  }
+}

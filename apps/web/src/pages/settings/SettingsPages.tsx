@@ -1,5 +1,5 @@
 import type { StorageInfo } from '@dcos/local-storage';
-import { Badge, Button, Card, downloadBlob, Kbd, Select, useToast } from '@dcos/ui';
+import { Badge, Button, Card, downloadBlob, Input, Kbd, Select, useToast } from '@dcos/ui';
 import { Download, Eraser, HardDrive, ShieldCheck, ShieldAlert, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ThemeSwitcher } from '../../components/AppShell';
@@ -17,6 +17,23 @@ export function GeneralSettings() {
   const prefs = usePreferences();
   return (
     <>
+      {/* @phase4:review — the comment author name and the remembered spell check setting. */}
+      <Section title="Your name" description="Shown on comments you write in documents, and written as the comment author when you export to Word (.docx). Kept on this device only.">
+        <Input
+          value={prefs.authorName}
+          onChange={(e) => setPreference('authorName', e.target.value.slice(0, 200))}
+          placeholder="e.g. Ada Lovelace"
+          aria-label="Your name"
+          autoComplete="name"
+          className="h-9 md:w-64"
+        />
+      </Section>
+      <Section title="Spell check" description="Whether documents open with the browser's spell checker on. Turning it on or off in a document changes this too.">
+        <Select value={prefs.spellCheck ? 'on' : 'off'} onChange={(e) => setPreference('spellCheck', e.target.value === 'on')} aria-label="Spell check in documents" className="h-9">
+          <option value="on">On</option>
+          <option value="off">Off</option>
+        </Select>
+      </Section>
       <Section title="New blank documents" description="The editing mode a blank document starts in. Templates keep their own mode. You can switch at any time in the editor.">
         <Select value={prefs.newDocumentMode} onChange={(e) => setPreference('newDocumentMode', e.target.value as 'simple' | 'advanced')} aria-label="Mode for new blank documents" className="h-9">
           <option value="simple">Simple</option>
@@ -287,7 +304,16 @@ export function BackupSettings() {
 
 const mod = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
 const SHORTCUTS: Array<{ area: string; items: Array<[string, string]> }> = [
-  { area: 'Everywhere in an editor', items: [[`${mod} S`, 'Save a version now'], [`${mod} Z`, 'Undo'], [`${mod} Shift Z`, 'Redo']] },
+  {
+    area: 'Everywhere in an editor',
+    items: [
+      [`${mod} S`, 'Save a version now'],
+      [`${mod} Z`, 'Undo'],
+      [`${mod} Shift Z`, 'Redo'],
+      // G-FILES: the open-items tabs above the editor (Control+Option on a Mac, where ⌘+Option switches browser tabs).
+      [mod === '⌘' ? 'Control Option → / ←' : 'Ctrl Alt → / ←', 'Next / previous open document or diagram'],
+    ],
+  },
   {
     area: 'Documents',
     items: [
@@ -296,6 +322,9 @@ const SHORTCUTS: Array<{ area: string; items: Array<[string, string]> }> = [
       [`${mod} F`, 'Find and replace'],
       [`${mod} P`, 'Print or save as PDF'],
       [`${mod} Enter`, 'Page break'],
+      // @phase4:review
+      [`${mod} ${mod === '⌘' ? 'Option' : 'Alt'} M`, 'New comment on the selected text'],
+      [`${mod} Enter (in a comment box)`, 'Post the comment or reply'],
     ],
   },
   {

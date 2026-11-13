@@ -1,0 +1,397 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" office:version="1.3">
+<office:scripts/>
+<office:font-face-decls>
+<style:font-face style:name="Calibri" svg:font-family="Calibri" style:font-family-generic="swiss" style:font-pitch="variable"/>
+<style:font-face style:name="Courier New" svg:font-family="&apos;Courier New&apos;" style:font-family-generic="modern" style:font-pitch="fixed"/>
+</office:font-face-decls>
+<office:automatic-styles>
+<style:style style:name="P1" style:family="paragraph" style:parent-style-name="Title">
+<style:paragraph-properties fo:text-align="center"/>
+</style:style>
+<style:style style:name="P2" style:family="paragraph" style:parent-style-name="Subtitle">
+<style:paragraph-properties fo:text-align="center"/>
+</style:style>
+<style:style style:name="P3" style:family="paragraph" style:parent-style-name="Standard">
+<style:paragraph-properties fo:line-height="150%" fo:margin-bottom="6pt" fo:margin-top="12pt"/>
+</style:style>
+<style:style style:name="T1" style:family="text">
+<style:text-properties fo:color="#0e7490"/>
+</style:style>
+<style:style style:name="T2" style:family="text">
+<style:text-properties fo:background-color="#fde68a"/>
+</style:style>
+<style:style style:name="T3" style:family="text">
+<style:text-properties fo:font-size="13.5pt" style:font-size-asian="13.5pt" style:font-size-complex="13.5pt"/>
+</style:style>
+<style:style style:name="P4" style:family="paragraph" style:parent-style-name="Standard">
+<style:paragraph-properties fo:margin-left="36pt" fo:text-indent="-36pt"/>
+</style:style>
+<style:style style:name="P5" style:family="paragraph" style:parent-style-name="Standard">
+<style:paragraph-properties fo:margin-right="36pt" fo:text-align="justify" fo:text-indent="36pt"/>
+</style:style>
+<style:style style:name="P6" style:family="paragraph" style:parent-style-name="Heading_20_2">
+<style:paragraph-properties fo:line-height="115%"/>
+</style:style>
+<text:list-style style:name="L1">
+<text:list-level-style-bullet text:level="1" text:bullet-char="▪">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.27cm" fo:text-indent="-0.635cm" fo:margin-left="1.27cm"/>
+</style:list-level-properties>
+</text:list-level-style-bullet>
+<text:list-level-style-bullet text:level="2" text:bullet-char="–">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.905cm" fo:text-indent="-0.635cm" fo:margin-left="1.905cm"/>
+</style:list-level-properties>
+</text:list-level-style-bullet>
+<text:list-level-style-bullet text:level="3" text:bullet-char="▪">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="2.54cm" fo:text-indent="-0.635cm" fo:margin-left="2.54cm"/>
+</style:list-level-properties>
+</text:list-level-style-bullet>
+<text:list-level-style-bullet text:level="4" text:bullet-char="•">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="3.175cm" fo:text-indent="-0.635cm" fo:margin-left="3.175cm"/>
+</style:list-level-properties>
+</text:list-level-style-bullet>
+<text:list-level-style-bullet text:level="5" text:bullet-char="◦">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="3.81cm" fo:text-indent="-0.635cm" fo:margin-left="3.81cm"/>
+</style:list-level-properties>
+</text:list-level-style-bullet>
+<text:list-level-style-bullet text:level="6" text:bullet-char="▪">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="4.445cm" fo:text-indent="-0.635cm" fo:margin-left="4.445cm"/>
+</style:list-level-properties>
+</text:list-level-style-bullet>
+<text:list-level-style-bullet text:level="7" text:bullet-char="•">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="5.08cm" fo:text-indent="-0.635cm" fo:margin-left="5.08cm"/>
+</style:list-level-properties>
+</text:list-level-style-bullet>
+<text:list-level-style-bullet text:level="8" text:bullet-char="◦">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="5.715cm" fo:text-indent="-0.635cm" fo:margin-left="5.715cm"/>
+</style:list-level-properties>
+</text:list-level-style-bullet>
+<text:list-level-style-bullet text:level="9" text:bullet-char="▪">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="6.35cm" fo:text-indent="-0.635cm" fo:margin-left="6.35cm"/>
+</style:list-level-properties>
+</text:list-level-style-bullet>
+<text:list-level-style-bullet text:level="10" text:bullet-char="•">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="6.985cm" fo:text-indent="-0.635cm" fo:margin-left="6.985cm"/>
+</style:list-level-properties>
+</text:list-level-style-bullet>
+</text:list-style>
+<style:style style:name="P7" style:family="paragraph" style:parent-style-name="Standard">
+<style:paragraph-properties fo:margin-left="18pt"/>
+</style:style>
+<text:list-style style:name="L2">
+<text:list-level-style-number text:level="1" style:num-suffix="." style:num-format="I">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.27cm" fo:text-indent="-0.635cm" fo:margin-left="1.27cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="2" style:num-suffix="." style:num-format="a">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.905cm" fo:text-indent="-0.635cm" fo:margin-left="1.905cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="3" style:num-suffix="." style:num-format="i">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="2.54cm" fo:text-indent="-0.635cm" fo:margin-left="2.54cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="4" style:num-suffix="." style:num-format="1">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="3.175cm" fo:text-indent="-0.635cm" fo:margin-left="3.175cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="5" style:num-suffix="." style:num-format="a">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="3.81cm" fo:text-indent="-0.635cm" fo:margin-left="3.81cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="6" style:num-suffix="." style:num-format="i">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="4.445cm" fo:text-indent="-0.635cm" fo:margin-left="4.445cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="7" style:num-suffix="." style:num-format="1">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="5.08cm" fo:text-indent="-0.635cm" fo:margin-left="5.08cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="8" style:num-suffix="." style:num-format="a">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="5.715cm" fo:text-indent="-0.635cm" fo:margin-left="5.715cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="9" style:num-suffix="." style:num-format="i">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="6.35cm" fo:text-indent="-0.635cm" fo:margin-left="6.35cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="10" style:num-suffix="." style:num-format="1">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="6.985cm" fo:text-indent="-0.635cm" fo:margin-left="6.985cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+</text:list-style>
+<style:style style:name="P8" style:family="paragraph" style:parent-style-name="Standard">
+<style:text-properties fo:color="#555555"/>
+</style:style>
+<style:style style:name="T4" style:family="text">
+<style:text-properties fo:font-weight="bold" style:font-weight-asian="bold" style:font-weight-complex="bold"/>
+</style:style>
+<text:list-style style:name="L3">
+<text:list-level-style-number text:level="1" style:num-suffix="." style:num-format="i">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.27cm" fo:text-indent="-0.635cm" fo:margin-left="1.27cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="2" style:num-suffix="." style:num-format="a">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.905cm" fo:text-indent="-0.635cm" fo:margin-left="1.905cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="3" style:num-suffix="." style:num-format="i">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="2.54cm" fo:text-indent="-0.635cm" fo:margin-left="2.54cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="4" style:num-suffix="." style:num-format="1">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="3.175cm" fo:text-indent="-0.635cm" fo:margin-left="3.175cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="5" style:num-suffix="." style:num-format="a">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="3.81cm" fo:text-indent="-0.635cm" fo:margin-left="3.81cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="6" style:num-suffix="." style:num-format="i">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="4.445cm" fo:text-indent="-0.635cm" fo:margin-left="4.445cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="7" style:num-suffix="." style:num-format="1">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="5.08cm" fo:text-indent="-0.635cm" fo:margin-left="5.08cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="8" style:num-suffix="." style:num-format="a">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="5.715cm" fo:text-indent="-0.635cm" fo:margin-left="5.715cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="9" style:num-suffix="." style:num-format="i">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="6.35cm" fo:text-indent="-0.635cm" fo:margin-left="6.35cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+<text:list-level-style-number text:level="10" style:num-suffix="." style:num-format="1">
+<style:list-level-properties text:list-level-position-and-space-mode="label-alignment">
+<style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="6.985cm" fo:text-indent="-0.635cm" fo:margin-left="6.985cm"/>
+</style:list-level-properties>
+</text:list-level-style-number>
+</text:list-style>
+<style:style style:name="fr1" style:family="graphic" style:parent-style-name="Graphics">
+<style:graphic-properties style:vertical-pos="top" style:vertical-rel="baseline" fo:border="none"/>
+</style:style>
+<style:style style:name="P9" style:family="paragraph" style:parent-style-name="Standard">
+<style:paragraph-properties fo:text-align="center"/>
+</style:style>
+<style:style style:name="P10" style:family="paragraph" style:parent-style-name="Standard">
+<style:paragraph-properties fo:text-align="right"/>
+</style:style>
+<style:style style:name="P11" style:family="paragraph" style:parent-style-name="Caption">
+<style:paragraph-properties fo:text-align="right"/>
+</style:style>
+<style:style style:name="Tbl1" style:family="table">
+<style:table-properties style:width="15.9279cm" table:align="margins" fo:margin-top="0.2cm" fo:margin-bottom="0.2cm"/>
+</style:style>
+<style:style style:name="Col1" style:family="table-column">
+<style:table-column-properties style:column-width="7.964cm"/>
+</style:style>
+<style:style style:name="Cell1" style:family="table-cell">
+<style:table-cell-properties fo:padding-top="0.1cm" fo:padding-bottom="0.1cm" fo:padding-left="0.15cm" fo:padding-right="0.15cm" fo:border="0.5pt solid #c9c9d2" fo:background-color="#f1f1f4" style:vertical-align="top"/>
+</style:style>
+<style:style style:name="Cell2" style:family="table-cell">
+<style:table-cell-properties fo:padding-top="0.1cm" fo:padding-bottom="0.1cm" fo:padding-left="0.15cm" fo:padding-right="0.15cm" fo:border="0.5pt solid #c9c9d2" style:vertical-align="top"/>
+</style:style>
+<style:style style:name="P12" style:family="paragraph" style:parent-style-name="Table_20_Contents">
+<style:text-properties fo:color="#555555"/>
+</style:style>
+<style:style style:name="P13" style:family="paragraph" style:parent-style-name="Standard">
+<style:paragraph-properties fo:break-after="page"/>
+</style:style>
+</office:automatic-styles>
+<office:body>
+<office:text>
+<text:p text:style-name="P1">Kitchen sink v2</text:p>
+<text:p text:style-name="P2">Every Phase 4 feature in one document</text:p>
+<text:table-of-content text:name="Table of Contents1" text:protected="true">
+<text:table-of-content-source text:outline-level="4" text:use-index-marks="false">
+<text:index-title-template text:style-name="Contents_20_Heading">Table of Contents</text:index-title-template>
+<text:table-of-content-entry-template text:outline-level="1" text:style-name="Contents_20_1">
+<text:index-entry-text/>
+<text:index-entry-tab-stop style:type="right" style:leader-char="."/>
+<text:index-entry-page-number/>
+</text:table-of-content-entry-template>
+<text:table-of-content-entry-template text:outline-level="2" text:style-name="Contents_20_2">
+<text:index-entry-text/>
+<text:index-entry-tab-stop style:type="right" style:leader-char="."/>
+<text:index-entry-page-number/>
+</text:table-of-content-entry-template>
+<text:table-of-content-entry-template text:outline-level="3" text:style-name="Contents_20_3">
+<text:index-entry-text/>
+<text:index-entry-tab-stop style:type="right" style:leader-char="."/>
+<text:index-entry-page-number/>
+</text:table-of-content-entry-template>
+<text:table-of-content-entry-template text:outline-level="4" text:style-name="Contents_20_4">
+<text:index-entry-text/>
+<text:index-entry-tab-stop style:type="right" style:leader-char="."/>
+<text:index-entry-page-number/>
+</text:table-of-content-entry-template>
+</text:table-of-content-source>
+<text:index-body>
+<text:index-title text:name="Table of Contents1_Head">
+<text:p text:style-name="Contents_20_Heading">Table of Contents</text:p>
+</text:index-title>
+<text:p text:style-name="Contents_20_1">Formatting</text:p>
+<text:p text:style-name="Contents_20_2">Lists</text:p>
+<text:p text:style-name="Contents_20_3">Quote and code</text:p>
+<text:p text:style-name="Contents_20_1">Insert</text:p>
+<text:p text:style-name="Contents_20_1">Two columns</text:p>
+<text:p text:style-name="Contents_20_1">Review</text:p>
+</text:index-body>
+</text:table-of-content>
+<text:h text:style-name="Heading_20_1" text:outline-level="1">Formatting</text:h>
+<text:p text:style-name="P3">Line spacing 1.5 with space before and after, <text:span text:style-name="T1">a custom colour</text:span>, <text:span text:style-name="T2">a custom highlight</text:span> and <text:span text:style-name="T3">13.5 pt text</text:span>.</text:p>
+<text:p text:style-name="P4">A hanging indent: the first line starts at the margin and the rest is indented by half an inch.</text:p>
+<text:p text:style-name="P5">A first-line indent and a right indent.</text:p>
+<text:h text:style-name="P6" text:outline-level="2">Lists</text:h>
+<text:list text:style-name="L1">
+<text:list-item>
+<text:p text:style-name="Standard">Square bullet</text:p>
+<text:list>
+<text:list-item>
+<text:p text:style-name="Standard">Dash bullet, nested</text:p>
+</text:list-item>
+</text:list>
+</text:list-item>
+<text:list-item>
+<text:p text:style-name="Standard">Item with a second paragraph</text:p>
+<text:p text:style-name="P7">The continuation keeps its own indent.</text:p>
+</text:list-item>
+</text:list>
+<text:list text:style-name="L2">
+<text:list-item text:start-value="4">
+<text:p text:style-name="Standard">Item four, upper-roman from IV</text:p>
+</text:list-item>
+<text:list-item>
+<text:p text:style-name="Standard">Item five</text:p>
+<text:list>
+<text:list-item text:start-value="2">
+<text:p text:style-name="Standard">nested from b</text:p>
+</text:list-item>
+</text:list>
+</text:list-item>
+</text:list>
+<text:h text:style-name="Heading_20_3" text:outline-level="3">Quote and code</text:h>
+<text:section text:name="Quotation 1">
+<text:p text:style-name="Quotations">A quoted line in the Quote style.</text:p>
+</text:section>
+<text:section text:name="Code 1">
+<text:p text:style-name="Preformatted_20_Text">let x = 1;</text:p>
+</text:section>
+<text:p text:style-name="Caption">A caption-styled paragraph.</text:p>
+<text:h text:style-name="Heading_20_1" text:outline-level="1">Insert</text:h>
+<text:p text:style-name="Standard">Inline equations: $E = mc^2$ and a coloured one $\color{red}{x} + y$.</text:p>
+<text:p text:style-name="P8">$$\int_0^1 x^2\,dx = \frac{1}{3}$$</text:p>
+<text:p text:style-name="P8">$$\overgroup{AB}$$</text:p>
+<text:p text:style-name="P8">[Shape: Rounded rectangle: Start here]</text:p>
+<text:p text:style-name="P8">[Shape: Ellipse: Not drawn]</text:p>
+<text:p text:style-name="Standard">
+<text:span text:style-name="T4">Box heading</text:span>
+</text:p>
+<text:list text:style-name="L3">
+<text:list-item>
+<text:p text:style-name="Standard">boxed i</text:p>
+</text:list-item>
+<text:list-item>
+<text:p text:style-name="Standard">boxed ii</text:p>
+</text:list-item>
+</text:list>
+<text:p text:style-name="P9">
+<draw:frame draw:style-name="fr1" draw:name="Image 1" text:anchor-type="as-char" svg:width="1.0583cm" svg:height="0.5292cm" draw:z-index="0">
+<draw:image xlink:href="Pictures/0001.png" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad" draw:mime-type="image/png"/>
+<svg:title>boxed pixel</svg:title>
+</draw:frame>
+</text:p>
+<text:p text:style-name="Standard">Text beside the floating box.</text:p>
+<text:p text:style-name="P10">
+<draw:frame draw:style-name="fr1" draw:name="Image 2" text:anchor-type="as-char" svg:width="1.5875cm" svg:height="0.7938cm" draw:z-index="0">
+<draw:image xlink:href="Pictures/0002.png" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad" draw:mime-type="image/png"/>
+<svg:title>pixel</svg:title>
+</draw:frame>
+</text:p>
+<text:p text:style-name="P11">Figure 1: A right-aligned picture</text:p>
+<text:p text:style-name="Caption">Table 1: An equation in a table cell</text:p>
+<table:table table:name="Table1" table:style-name="Tbl1">
+<table:table-column table:style-name="Col1"/>
+<table:table-column table:style-name="Col1"/>
+<table:table-header-rows>
+<table:table-row>
+<table:table-cell table:style-name="Cell1" office:value-type="string">
+<text:p text:style-name="Table_20_Heading">Quantity</text:p>
+</table:table-cell>
+<table:table-cell table:style-name="Cell1" office:value-type="string">
+<text:p text:style-name="Table_20_Heading">Value</text:p>
+</table:table-cell>
+</table:table-row>
+</table:table-header-rows>
+<table:table-row>
+<table:table-cell table:style-name="Cell2" office:value-type="string">
+<text:p text:style-name="Table_20_Contents">Energy</text:p>
+</table:table-cell>
+<table:table-cell table:style-name="Cell2" office:value-type="string">
+<text:p text:style-name="Table_20_Contents">$E = mc^2$</text:p>
+</table:table-cell>
+</table:table-row>
+<table:table-row>
+<table:table-cell table:style-name="Cell2" office:value-type="string">
+<text:p text:style-name="Table_20_Contents">Area</text:p>
+</table:table-cell>
+<table:table-cell table:style-name="Cell2" office:value-type="string">
+<text:p text:style-name="P12">$$\pi r^2$$</text:p>
+</table:table-cell>
+</table:table-row>
+</table:table>
+<text:p text:style-name="P13"/>
+<text:h text:style-name="Heading_20_1" text:outline-level="1">Two columns</text:h>
+<text:p text:style-name="Standard">This landscape section has two columns, restarts page numbers at 1 and holds a picture and an equation.</text:p>
+<text:p text:style-name="P9">
+<draw:frame draw:style-name="fr1" draw:name="Image 3" text:anchor-type="as-char" svg:width="15.875cm" svg:height="7.9375cm" draw:z-index="0">
+<draw:image xlink:href="Pictures/0003.png" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad" draw:mime-type="image/png"/>
+<svg:title>column picture</svg:title>
+</draw:frame>
+</text:p>
+<text:p text:style-name="P8">$$a^2 + b^2 = c^2$$</text:p>
+<text:list text:style-name="L2">
+<text:list-item text:start-value="6">
+<text:p text:style-name="Standard">Styled list after the break, from VI</text:p>
+</text:list-item>
+</text:list>
+<text:p text:style-name="Standard">Three columns in a continuous section.</text:p>
+<text:p text:style-name="P13"/>
+<text:h text:style-name="Heading_20_1" text:outline-level="1">Review</text:h>
+<text:p text:style-name="Standard">A <text:a xlink:type="simple" xlink:href="https://example.com/" text:style-name="Internet_20_link" text:visited-style-name="Visited_20_Internet_20_Link">link</text:a> and resolved comment.</text:p>
+<text:p text:style-name="P13"/>
+<text:p text:style-name="Standard">Last page.</text:p>
+</office:text>
+</office:body>
+</office:document-content>

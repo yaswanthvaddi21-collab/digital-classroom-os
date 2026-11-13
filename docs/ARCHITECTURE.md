@@ -1,6 +1,6 @@
 # Architecture
 
-Companion to [PRD.md](PRD.md). Describes what exists today (Phase 0, Phase 1 foundations, Release 0.2 stabilisation and the diagram integration) and where later phases plug in.
+Companion to [PRD.md](PRD.md). Describes what exists today (Phase 0, Phase 1 foundations, Release 0.2 stabilisation, the diagram integration, and Phases 2–4) and where later phases plug in.
 
 ## Shape of the system
 
@@ -10,7 +10,7 @@ apps/desktop (Tauri) ──┼─► loads apps/web/dist in a native webview    
 apps/android (Capacitor)┘                                                (Phase 5)
         │
         ├── @dcos/ui               design tokens, components, theme, toasts
-        ├── @dcos/document-studio  Tiptap editor, templates, DOCX / PDF / TXT export
+        ├── @dcos/document-studio  Tiptap editor, templates, DOCX / ODT / PDF / TXT export, DOCX / ODT import
         ├── @dcos/diagram-studio   React Flow editor, shapes, layout, PNG / SVG / PDF export
         └── @dcos/local-storage    StorageAdapter interface + IndexedDB implementation
 
@@ -19,13 +19,13 @@ backend/ (FastAPI)  classroom host for LAN sharing — Phase 3. Never needed for
 
 Packages are consumed as TypeScript source through npm workspaces (no per-package build step). Vite bundles them; Tailwind scans them via `@source`.
 
-Design decisions are recorded in [docs/adr](adr/README.md): local-first storage, identity and privacy, concurrency, autosave and drafts, version history, migrations, backups, attachments, cross-tab coordination and deletion.
+Design decisions are recorded in [docs/adr](adr/README.md): local-first storage, identity and privacy, concurrency, autosave and drafts, version history, migrations, backups, attachments, cross-tab coordination, deletion, and the Phase 4 document format.
 
 ## Principles in code
 
 | PRD rule | How it is enforced |
 |---|---|
-| Create and save locally, offline | All editing goes through `StorageAdapter` → IndexedDB. No editor code path makes network requests. Fonts are bundled (`@fontsource`), not loaded from Google. |
+| Create and save locally, offline | All editing goes through `StorageAdapter` → IndexedDB. The only network request an editor makes is a one-time fetch of a picture the user pastes from a website, without cookies or referrer, to store it in the document. Fonts are bundled (`@fontsource`), not loaded from Google. |
 | Preserve versions | Every save increments `version`. Snapshots go to `*_versions` on create, on Ctrl/⌘+S, and at most every 10 minutes of editing. Restoring a version first snapshots the current state. Pruning keeps exactly 50 and protects the create, newest manual and newest pre-restore versions (fixed in 0.2). |
 | Never silently overwrite | `save(kind, id, patch, expectedVersion)` reads, checks and writes in one IndexedDB transaction. A stale `expectedVersion` throws `ConflictError`; the editor stops autosaving and asks the user to keep their edits as a copy or load the latest. Other tabs are told about saves over `BroadcastChannel` and adopt them when they have no unsaved edits. Backup import adds divergent items as copies. |
 | Interrupted saves don't corrupt | IndexedDB transactions are atomic; the record, its index row and its version snapshot are written together or not at all (tested). Saves run through one serialised queue with retry and backoff. If a save keeps failing, the unsaved content goes to the `drafts` store and is offered back on reopen. The app warns before closing with unsaved edits. |
@@ -34,17 +34,63 @@ Design decisions are recorded in [docs/adr](adr/README.md): local-first storage,
 
 ## Document Studio
 
-- **Engine:** Tiptap 3 (ProseMirror). Schema lives in `documentExtensions()`. Extensions may be added but never removed, or saved documents stop loading.
-- **Stored form:** `{ schemaVersion, doc: ProseMirror JSON, page: PageSettings, mode }`. `normalizeDocument()` fills defaults for older content.
-- **Modes:** Simple shows core formatting. Advanced adds fonts and sizes, sub/superscript, page breaks, live table of contents, find & replace, a spell-check toggle, page setup (size, orientation, margins, header, footer, page numbers) and table merge/split. Both modes edit the same document; switching never drops formatting.
-- **Custom extensions:** `PageBreak`, `TableOfContents` (React node view, live from headings), `SearchReplace` (ProseMirror plugin with decorations; finds matches across mark boundaries).
-- **Export:**
-  - DOCX: `buildDocx()` maps ProseMirror JSON → `docx` objects. Covers headings, alignment, marks, colours, sizes, fonts, links, lists (restart per list), tables (header shading, spans), images (scaled to text width), page breaks, a static TOC, header/footer and page numbers, page size/orientation/margins.
-  - PDF: the rendered editor DOM is cloned into a print iframe with `@page` size, margins and margin boxes (header, "Page X of Y"). Saving as PDF from the print dialog keeps real, selectable text. Margin boxes need Chromium 131+; other engines print without them.
-  - TXT: structure-aware plain text.
-- **Embedded diagrams:** a `diagram` atom node stores the editable Diagram Studio content in `source` and points to a PNG preview (rendered at 2×) in the `attachments` store through `previewId`, with natural and display sizes. Double-click opens the full diagram editor in a dialog; saving re-renders the preview. Resizing keeps the aspect ratio. The Diagram tab inserts new diagrams from templates, from My Diagrams or from a diagrams.net file, and offers edit, size, download (PNG or .drawio) and remove. DOCX export embeds the preview image; TXT writes `[Diagram: title]`. Document Studio never imports Diagram Studio: the app passes a `DiagramHost` that opens the editor and loads previews.
-- **Safety on open:** `prepareDocument()` migrates and validates content. Content from a newer app, or content that fails validation, opens read-only with an explanation instead of being rewritten.
-- **Images** are embedded as data URLs, downscaled to 1600 px, and WebP is converted (Word can't show WebP). Moving them to the `attachments` store is planned when sharing arrives (Phase 3).
+`packages/document-studio`. What each export writes and each import reads, feature by feature, is in [DOCUMENT_COMPATIBILITY.md](DOCUMENT_COMPATIBILITY.md); the format decisions are in [ADR 0011](adr/0011-document-format-phase4.md).
+
+### Schema and stored form
+
+- **Engine:** Tiptap 3 (ProseMirror). The schema is `documentExtensions()` (`extensions/index.ts`; `documentSchema()` in `schema.ts` builds it without a view). Extensions may be added but never removed, or saved documents stop loading.
+- **Stored form:** `{ schemaVersion, doc: ProseMirror JSON, page: PageSettings, mode, …content fields }`. `normalizeDocument()` fills defaults for older content. `normalizePage()` checks every stored page setting (`PAGE_FIELD_CHECKS` in `types.ts`, plus `LAYOUT_FIELD_CHECKS` in `pageLayout.ts`) and never throws.
+- **Content fields:** document-level data beyond the body and page lives in registered top-level fields (`CONTENT_FIELDS` in `types.ts`), each with a check and a default. Phase 4 has two: `comments` (comment threads) and `language` (a BCP 47 tag). A field at its default is not written.
+- **Schema 1 and 2:** `contentSchemaFor()` (`migrate.ts`) returns 1 when a document uses only the frozen v0.1.0 vocabulary in `compat.ts` (`V010_VOCABULARY`: node and mark types with attribute defaults, content fields, page fields, sizes, orientations, margin keys, modes), and 2 otherwise. The editor saves with it, so only documents that use something new become schema 2, and they go back to 1 when it is removed. v0.1.0 reads schema 1 only.
+- **Safety on open:** `prepareDocument()` (`safety.ts`) migrates and validates content. Content from a newer app, or content with anything this version cannot represent (unknown node, mark, attribute value, page setting, mode or content field), opens in a protected read-only view built from a display copy; the stored original is never rewritten.
+
+### Extensions
+
+| Extension | Kind | Stores | File |
+|---|---|---|---|
+| StarterKit, TextStyleKit, Highlight, TextAlign, TableKit, Subscript, Superscript | Tiptap's own (v0.1.0 vocabulary) | — | `extensions/index.ts` |
+| `PageBreak`, `TableOfContents`, `SearchReplace` | node, node (live React view), plugin (with match case and whole words) | — | `extensions/` |
+| `DiagramEmbed` | `diagram` atom node | Diagram Studio content in `source`, a preview attachment id | `extensions/diagramEmbed.tsx`, preview cache `extensions/previewCache.ts` |
+| `FigureImage` | replaces Tiptap's `image` (same name) | `align`, `caption` | `extensions/figureImage.ts` |
+| `RemoteImages` | plugin, no schema change | fetches a pasted web picture once and stores it as a data URL, or marks it "Not saved for offline use" | `extensions/remoteImages.ts` |
+| `ParagraphFormat` | attributes on paragraphs and headings | `lineSpacing`, `spaceBefore`, `spaceAfter`, `indentLeft`, `indentRight`, `indentFirstLine`, `paragraphStyle` (Title, Subtitle, Caption) | `extensions/paragraphFormat.ts`, looks in `paragraphStyles.ts` |
+| `ListStyles` | attributes on lists | `bulletStyle`, `numberFormat` (start uses `orderedList.start`) | `extensions/listStyles.ts` |
+| `Equations` | `inlineMath`, `blockMath` (from `@tiptap/extension-mathematics`, KaTeX with trust off) | `latex` | `extensions/equation.ts` |
+| `Shape` | atom block node with a React view | kind, size, fill, outline, label, alignment | `extensions/shape.tsx`, `shapeModel.ts` |
+| `TextBox` | block node with rich content | wrapping, width, fill, border | `extensions/textBox.ts` |
+| `SectionBreak` | atom block node at the top level | `breakType`, `orientation`, `columns`, `columnSpacing`, `numberFormat`, `numberStart` (null = same as before) | `extensions/sectionBreak.ts`, resolution in `sections.ts` |
+| `CommentMark` | `comment` mark | `commentId` only; threads are in the `comments` content field | `review/commentMark.ts`, `review/comments.ts` |
+
+Every attribute added to a v0.1.0 node or mark defaults to null and is rendered only when set, and every attribute round-trips through HTML (`data-*`) so copy and paste keeps it. Page layout settings (header and footer parts, a different first page, columns, page number format, start, position and wording) are optional page fields in `pageLayout.ts`.
+
+### Editor UI
+
+- **Ribbon:** `ui/ribbon/registry.ts` lists the tabs (`RIBBON_TABS`) and shows a tab only when it has content for the current mode: Home, Insert and (with a diagram host) Diagram in Simple mode; Layout and Review are added in Advanced. Each tab is a component receiving `RibbonContext` (`ui/ribbon/context.ts`): the editor, mode, page settings, callbacks and the review controls. Contextual bars sit under the tabs: `TableBar` for tables and `ObjectBar` for a selected picture, equation, shape or text box (both modes). Below the phone breakpoint the active tab takes the full width and the mode switch and Export move to a row below.
+- **Modes:** Simple shows a curated core (styles, B/I/U/S, colours, lists, quote, alignment, line spacing; link, picture, table, horizontal line, diagram). Advanced adds fonts and sizes, sub/superscript, indents, list styles, the Paragraph dialog and ruler, equations, shapes, text boxes, page breaks, the table of contents, and the Layout and Review tabs. Both modes edit the same document; switching never drops formatting.
+- **Around the page:** `ui/PaperChrome.tsx` previews header and footer parts; `ui/ribbon/format/Ruler.tsx` (Advanced, hidden on phones and in the protected view) drags margins and indents; `review/CommentsPanel.tsx` (`CommentsLayer`) is the comments side panel; `ui/ExportMenu.tsx` is the export menu. The page is one continuous sheet: there is no on-screen pagination.
+- **App props:** the app passes `authorName` (Settings → General → Your name), `spellcheck` and `onSpellcheckChange` (remembered preference) through `DocumentEditorProps`.
+
+### Export
+
+Each exporter is a set of registries that features add to. The DOCX, TXT and `PRINT_CSS` registries carry a `// @phase4:<area>` marker where entries are added; the ODT registries and `PRINT_DOM` have none.
+
+- **DOCX** (`export/docx/`, with `docx` 9.15): `buildDocx()` converts the body through `NODE_HANDLERS` (blocks), `INLINE_HANDLERS` (inline nodes), `MARK_HANDLERS` (marks) and `TEXT_RUN_WRAPPERS` (comment ranges), then applies `DOCUMENT_CONTRIBUTORS` in order: comments (`review/docx.ts`), language, named styles (`export/docx/format.ts`), and sections with header and footer parts (`export/docx/sections.ts`). `DOCX_PREPARERS` run first, asynchronously, to draw pictures in the browser (shapes, equations outside Word's subset; `export/insertPictures.ts`). Bookmarks come from a per-document allocator (`Ctx.bookmarkId`), so the same document always gives the same XML.
+- **ODT** (`export/odt/`): the app's own writer, zipped with fflate. `ODT_NODE_HANDLERS`, `ODT_INLINE_HANDLERS`, `ODT_MARK_HANDLERS`, `ODT_PARAGRAPH_CONTRIBUTORS` and `ODT_HANDLED_ATTRS`. Anything without a handler, and any attribute, page setting or content field it does not write, is reported, so a later feature is never dropped silently.
+- **Print/PDF** (`export/print.ts`, `export/printLayout.ts`): the rendered editor DOM is cleaned (`cleanClone`), changed by `PRINT_DOM` (section wrappers for columns and CSS named pages) and placed in a print iframe with `@page` rules plus `PRINT_CSS` entries (comments hidden; header and footer parts, page number formats, first page). User text in CSS goes through `cssString()`, which escapes `<` and `>`. Margin boxes need Chromium 131+; `export/printSupport.ts` detects that from the user agent so the menu and a toast can say so.
+- **TXT** (`export/text.ts`): `TEXT_HANDLERS` and `TEXT_INLINE_HANDLERS`. Nothing is dropped silently: pictures, diagrams, shapes, equations, section breaks and the table of contents get markers, also inside table cells. Comments are appended after the text.
+- **Export report:** each exporter records what it approximated in an `ExportReport` (`export/report.ts`; shared wording in `NOTES`, ODT wording in `export/odt/notes.ts`). `exportToast()` turns it into "Exported Word document. 1 shape was written as a picture." (information) or "Exported Word document" (success).
+
+### Import
+
+`import/index.ts` (`importDocumentFile`) recognises a Word or OpenDocument file by its contents and always creates a new document. `import/docx.ts` uses mammoth (with a style map and private-use markers for alignment and page breaks) plus its own reading of page size, margins, header, footer and language; `import/odt.ts` reads `content.xml` and `styles.xml` directly. Both refuse a package that would unpack to more than 512 MB, check the result against the editor schema, and return an `ImportReport` that the app shows as "Imported with notes" (`apps/web/src/components/ImportDocument.tsx`).
+
+### Other parts
+
+- **Embedded diagrams:** a `diagram` atom node stores the editable Diagram Studio content in `source` and points to a PNG preview (rendered at 2×) in the `attachments` store through `previewId`, with natural and display sizes. Double-click opens the full diagram editor in a dialog; saving re-renders the preview. Resizing keeps the aspect ratio. The Diagram tab (and the Insert tab's Diagram menu) inserts new diagrams from templates, from My Diagrams or from a diagrams.net file, and offers edit, size, download (PNG or .drawio) and remove. A diagram without its data offers Remove instead of opening the editor. Previews are cached with reference counts; failed loads are not cached, and unused object URLs are revoked. Document Studio never imports Diagram Studio: the app passes a `DiagramHost` that opens the editor and loads previews.
+- **Images** are embedded as data URLs, downscaled to 1600 px, and WebP is converted (Word can't show WebP). Pasted web pictures are fetched once (no cookies or referrer) and stored the same way, or kept and marked when the site refuses. Moving images out of document content (TD-2) was not done in Phase 4; version history stores large images once ([ADR 0005](adr/0005-version-history.md)).
+- **Links:** `links.ts` allows only the schemes Tiptap's link mark accepts; the link box adds `https://` to scheme-less addresses and `mailto:` to e-mail addresses, and refuses the rest with a message.
+- **Templates:** `templates.ts`, nine templates, all content schema 1.
+- **Open-items tabs (app):** `apps/web/src/lib/openTabs.ts` and `components/OpenTabs.tsx` keep up to 12 open documents and diagrams per device in localStorage and show them as tabs in the editor header (Ctrl+Alt+←/→).
 
 ## Diagram Studio
 
