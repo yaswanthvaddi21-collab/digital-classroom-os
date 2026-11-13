@@ -5,6 +5,8 @@ import {
   type ItemKind,
   type ItemSummary,
   type StorageAdapter,
+  type UpgradeRecovery,
+  type UpgradeStatus,
   type WorkspaceItem,
 } from '@dcos/local-storage';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -194,6 +196,27 @@ export async function protectExistingData() {
   } catch {
     // Storage unavailable: the UI reports that separately.
   }
+}
+
+// ── Upgrade recovery: the safety copy before a database upgrade could not be made (audit STOR-R5) ────
+
+/** The recovery actions of the storage adapter, when it has them (the IndexedDB adapter does). */
+export const upgradeRecovery: UpgradeRecovery | null = storage instanceof IndexedDbAdapter ? storage : null;
+
+// "Open in another tab" describes one attempt only: each new attempt, and success, starts without it.
+upgradeRecovery?.subscribeUpgradeStatus(() => {
+  const { state } = upgradeRecovery.upgradeStatus();
+  if (events.blocked && (state === 'checking' || state === 'ready')) setEvents({ blocked: false });
+});
+
+const NO_UPGRADE: UpgradeStatus = { state: 'ready' };
+
+/** Where opening the database stands; 'needs-backup' means the update is waiting for the user. */
+export function useUpgradeStatus(recovery: UpgradeRecovery | null = upgradeRecovery): UpgradeStatus {
+  return useSyncExternalStore(
+    useCallback((cb: () => void) => recovery?.subscribeUpgradeStatus(cb) ?? (() => undefined), [recovery]),
+    () => recovery?.upgradeStatus() ?? NO_UPGRADE,
+  );
 }
 
 // ── Online status ────────────────────────────────────────────────────────────────────────────────────

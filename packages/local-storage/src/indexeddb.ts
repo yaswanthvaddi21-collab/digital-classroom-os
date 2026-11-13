@@ -1,7 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase, type IDBPTransaction, type StoreNames } from 'idb';
 import { BACKUP_FORMAT_VERSION, contentSchemaOf, validateBackup } from './backup';
 import { toBase64 } from './base64';
-import { ConflictError, NotFoundError } from './errors';
+import { ConflictError, NotFoundError, SafetyCopyError, UpgradeError } from './errors';
 import { nowIso, uuid } from './ids';
 import type {
   Attachment,
@@ -16,6 +16,8 @@ import type {
   SavePatch,
   StorageAdapter,
   StorageInfo,
+  UpgradeRecovery,
+  UpgradeStatus,
   VersionReason,
   WorkspaceItem,
 } from './types';
@@ -149,16 +151,52 @@ async function existingVersion(name: string): Promise<number> {
   });
 }
 
+/** A safety copy counts only once its data and its `__copy` record were committed together. */
+async function isCompleteCopy(name: string): Promise<boolean> {
+  const version = await existingVersion(name);
+  if (version === 0) return false;
+  const db = await openDB(name, version);
+  try {
+    return db.objectStoreNames.contains('__copy') && (await db.get('__copy', 'info')) !== undefined;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * A name no database has yet, for a new safety copy. An attempt only ever deletes the copy it created itself, so an
+ * earlier copy (complete or not, from this tab or another) is never replaced or removed.
+ */
+async function unusedCopyName(base: string): Promise<string> {
+  for (let n = 1; ; n++) {
+    const name = n === 1 ? base : `${base}-${n}`;
+    if ((await existingVersion(name)) === 0) return name;
+  }
+}
+
+/**
+ * Runs `task` while holding a lock shared by every tab of this origin, so only one tab at a time copies and upgrades
+ * the database. Without the Web Locks API (very old browsers) the task runs unguarded, as before.
+ */
+async function withUpgradeLock<T>(dbName: string, task: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  return locks ? ((await locks.request(`dcos-upgrade:${dbName}`, task)) as T) : task();
+}
+
 /** Copies every store of `from` (at its current version) into a new database `to`, before an upgrade. */
 async function copyDatabase(from: string, to: string, fromVersion: number) {
   const src = await openDB(from, fromVersion);
   const data: Record<string, unknown[]> = {};
-  for (const name of Array.from(src.objectStoreNames)) data[name] = await src.getAll(name);
-  const layout = Array.from(src.objectStoreNames).map((name) => {
-    const s = src.transaction(name).objectStore(name);
-    return { name, keyPath: s.keyPath as string, indexes: Array.from(s.indexNames).map((i) => ({ name: i, keyPath: s.index(i).keyPath as string })) };
-  });
-  src.close();
+  let layout: Array<{ name: string; keyPath: string; indexes: Array<{ name: string; keyPath: string }> }>;
+  try {
+    for (const name of Array.from(src.objectStoreNames)) data[name] = await src.getAll(name);
+    layout = Array.from(src.objectStoreNames).map((name) => {
+      const s = src.transaction(name).objectStore(name);
+      return { name, keyPath: s.keyPath as string, indexes: Array.from(s.indexNames).map((i) => ({ name: i, keyPath: s.index(i).keyPath as string })) };
+    });
+  } finally {
+    src.close();
+  }
   await deleteDatabase(to);
   const dst = await openDB(to, 1, {
     upgrade(db) {
@@ -169,15 +207,54 @@ async function copyDatabase(from: string, to: string, fromVersion: number) {
       db.createObjectStore('__copy', { keyPath: 'key' });
     },
   });
-  const tx = dst.transaction([...layout.map((l) => l.name), '__copy'], 'readwrite');
-  for (const l of layout) for (const rec of data[l.name]) await tx.objectStore(l.name).put(rec);
-  await tx.objectStore('__copy').put({ key: 'info', copiedAt: nowIso(), fromVersion, source: from });
-  await tx.done;
-  // Verify before the original is upgraded.
-  for (const l of layout) {
-    if ((await dst.count(l.name)) !== data[l.name].length) throw new Error(`Safety copy of ${l.name} is incomplete; upgrade stopped`);
+  // Always close the copy, also when a write fails (storage full): an open connection would block removing it.
+  try {
+    const tx = dst.transaction([...layout.map((l) => l.name), '__copy'], 'readwrite');
+    await Promise.all([
+      ...layout.flatMap((l) => data[l.name].map((rec) => tx.objectStore(l.name).put(rec))),
+      tx.objectStore('__copy').put({ key: 'info', copiedAt: nowIso(), fromVersion, source: from }),
+      tx.done,
+    ]);
+    // Verify before the original is upgraded.
+    for (const l of layout) {
+      if ((await dst.count(l.name)) !== data[l.name].length) throw new Error(`Safety copy of ${l.name} is incomplete; upgrade stopped`);
+    }
+  } finally {
+    dst.close();
   }
-  dst.close();
+}
+
+/**
+ * Builds a backup file from database `name` at the version it already has. Opening at the existing version runs
+ * no upgrade, and only read-only transactions are used, so the database is left exactly as it was.
+ */
+async function readBackupAt(name: string, version: number): Promise<BackupFile> {
+  const db = await openDB(name, version);
+  try {
+    const wanted = ['documents', 'diagrams', 'document_versions', 'diagram_versions', 'meta', 'attachments'];
+    const present = wanted.filter((s) => db.objectStoreNames.contains(s));
+    const tx = db.transaction(present, 'readonly');
+    const read = (s: string) => (present.includes(s) ? tx.objectStore(s).getAll() : Promise.resolve([]));
+    const [documents, diagrams, dv, gv, meta, attachments] = await Promise.all(wanted.map(read));
+    await tx.done;
+    const items = [...documents, ...diagrams] as WorkspaceItem[];
+    const versions = [...dv, ...gv] as ItemVersion[];
+    let schemaVersion = 1;
+    for (const r of [...items, ...versions]) schemaVersion = Math.max(schemaVersion, contentSchemaOf(r.content));
+    return {
+      format: 'dcos-backup',
+      formatVersion: BACKUP_FORMAT_VERSION,
+      // Same rule as exportBackup: a v0.1.0 database holds only schema 1 content, so v0.1.0 can import this file.
+      schemaVersion,
+      exportedAt: nowIso(),
+      deviceId: (meta as Array<{ key: string; value: string }>).find((m) => m.key === 'deviceId')?.value ?? 'unknown-device',
+      items,
+      versions,
+      attachments: exportAttachments(attachments as StoredAttachment[]),
+    };
+  } finally {
+    db.close();
+  }
 }
 
 function deleteDatabase(name: string) {
@@ -194,35 +271,139 @@ export interface IndexedDbAdapterOptions {
   onVersionChange?: () => void | Promise<void>;
   /** This tab wants to upgrade but another tab still has the old version open. */
   onBlocked?: () => void;
+  /**
+   * Test seam: replaces the pre-upgrade safety copy, e.g. to simulate a full disk. Receives the built-in copy
+   * so a test can wrap it. Production code leaves this unset.
+   */
+  safetyCopy?: (from: string, to: string, fromVersion: number, builtIn: typeof copyDatabase) => Promise<void>;
 }
 
-export class IndexedDbAdapter implements StorageAdapter {
+export class IndexedDbAdapter implements StorageAdapter, UpgradeRecovery {
   private dbPromise: Promise<IDBPDatabase<DcosDB>>;
   private deviceIdPromise: Promise<string> | null = null;
   /** Set once another tab's upgrade made us close the connection; every later call fails clearly. */
   private closedForUpgrade = false;
   private readonly safetyPrefix: string;
+  private status: UpgradeStatus = { state: 'checking' };
+  private readonly statusListeners = new Set<() => void>();
+  /** When exportWithoutUpgrade() last produced a backup file in this session (the only way to skip the copy). */
+  private preUpgradeBackupAt: string | null = null;
+  /** The complete safety copy this adapter made, so a retry after a failed upgrade step doesn't copy again. */
+  private sessionCopy: { name: string; fromVersion: number } | null = null;
 
   constructor(
     private readonly dbName = 'digital-classroom-os',
     private readonly options: IndexedDbAdapterOptions = {},
   ) {
     this.safetyPrefix = `${dbName}-backup-v`;
-    this.dbPromise = this.open();
+    this.dbPromise = this.start();
   }
 
-  private async open() {
-    const current = await existingVersion(this.dbName);
-    if (current > 0 && current < SCHEMA_VERSION) {
-      await copyDatabase(this.dbName, `${this.safetyPrefix}${current}`, current);
+  /** Opens the database. Callers see a failure through db(); this only keeps it from being reported as unhandled. */
+  private start(backupFileAt?: string) {
+    const opening = this.open(backupFileAt);
+    opening.catch(() => undefined);
+    return opening;
+  }
+
+  private setStatus(status: UpgradeStatus) {
+    this.status = status;
+    this.statusListeners.forEach((l) => l());
+  }
+
+  /**
+   * Opens the database, upgrading it if needed. An upgrade runs only after a full copy of the old database was
+   * made on this device, or, when that copy could not be made, after the user downloaded a backup file
+   * (`backupFileAt`, see upgradeWithoutSafetyCopy). If the copy fails, nothing is upgraded: the old database
+   * stays as it was and the status becomes 'needs-backup' (audit STOR-R5).
+   */
+  private async open(backupFileAt?: string) {
+    this.setStatus({ state: 'checking' });
+    const current = await this.versionOnDisk();
+    if (!(current > 0 && current < SCHEMA_VERSION)) return this.finishOpen(false, current, backupFileAt);
+    // Only one tab copies and upgrades at a time. Another tab may have finished while this one waited, so look again.
+    return withUpgradeLock(this.dbName, async () => {
+      const now = await this.versionOnDisk();
+      const upgrading = now > 0 && now < SCHEMA_VERSION;
+      if (upgrading && !backupFileAt) await this.makeSafetyCopy(now);
+      return this.finishOpen(upgrading, now, backupFileAt);
+    });
+  }
+
+  private async versionOnDisk() {
+    try {
+      return await existingVersion(this.dbName);
+    } catch (err) {
+      this.setStatus({ state: 'failed', message: err instanceof Error ? err.message : String(err) });
+      throw err;
     }
+  }
+
+  /** Makes and verifies a full copy of the database before it is upgraded; stops the upgrade if that fails. */
+  private async makeSafetyCopy(fromVersion: number) {
+    this.setStatus({ state: 'copying', fromVersion });
+    const earlier = this.sessionCopy;
+    if (earlier?.fromVersion === fromVersion && (await isCompleteCopy(earlier.name).catch(() => false))) return;
+    let created: string | undefined;
+    try {
+      created = await unusedCopyName(`${this.safetyPrefix}${fromVersion}`);
+      await (this.options.safetyCopy ?? copyDatabase)(this.dbName, created, fromVersion, copyDatabase);
+      this.sessionCopy = { name: created, fromVersion };
+    } catch (err) {
+      // An incomplete copy is not a backup: remove it, so it frees its space and is never offered as one.
+      // Only the copy this attempt created is removed; nothing else is touched.
+      if (created) await deleteDatabase(created).catch(() => undefined);
+      throw this.upgradeStopped(new SafetyCopyError(fromVersion, err));
+    }
+  }
+
+  private async finishOpen(upgrading: boolean, current: number, backupFileAt?: string) {
+    this.setStatus({ state: 'opening' });
+    let db: IDBPDatabase<DcosDB>;
+    try {
+      db = await this.openCurrent();
+    } catch (err) {
+      // A failed upgrade (e.g. storage full while building the index) is rolled back by IndexedDB as a whole,
+      // so the old database is unchanged: offer the same ways out as a failed copy instead of locking the app.
+      if (upgrading) throw this.upgradeStopped(new UpgradeError('upgrade', current, err));
+      this.setStatus({ state: 'failed', message: err instanceof Error ? err.message : String(err) });
+      throw err;
+    }
+    if (upgrading) {
+      // Informational only: the upgrade has already happened, so a failure here must not stop the app.
+      await db.put('meta', { key: 'migratedFrom', value: `${current}@${nowIso()}` }).catch(() => undefined);
+      if (backupFileAt) await db.put('meta', { key: 'upgradeSafetyBackup', value: `file@${backupFileAt}` }).catch(() => undefined);
+    }
+    this.setStatus({ state: 'ready' });
+    return db;
+  }
+
+  private upgradeStopped(error: UpgradeError) {
+    this.setStatus({ state: 'needs-backup', step: error.step, fromVersion: error.fromVersion, reason: error.reason, message: error.message });
+    return error;
+  }
+
+  private async openCurrent() {
     const options = this.options;
     const markClosed = () => {
       this.closedForUpgrade = true;
     };
-    const db = await openDB<DcosDB>(this.dbName, SCHEMA_VERSION, {
+    let migrationError: unknown;
+    const opening = openDB<DcosDB>(this.dbName, SCHEMA_VERSION, {
       async upgrade(database, oldVersion, _newVersion, tx) {
-        for (let v = oldVersion; v < SCHEMA_VERSION; v++) await MIGRATIONS[v](database, tx);
+        try {
+          for (let v = oldVersion; v < SCHEMA_VERSION; v++) await MIGRATIONS[v](database, tx);
+        } catch (err) {
+          // A migration that throws must not leave a half-migrated database behind. IndexedDB only rolls the
+          // upgrade back when it is aborted; an error inside an async migration does not do that by itself.
+          migrationError = err;
+          tx.done.catch(() => undefined); // the open request reports the failure
+          try {
+            tx.abort();
+          } catch {
+            // Already finished or aborted.
+          }
+        }
       },
       blocked() {
         options.onBlocked?.();
@@ -237,10 +418,46 @@ export class IndexedDbAdapter implements StorageAdapter {
           });
       },
     });
-    if (current > 0 && current < SCHEMA_VERSION) {
-      await db.put('meta', { key: 'migratedFrom', value: `${current}@${nowIso()}` });
-    }
+    const db = await opening.catch((err: unknown) => {
+      throw migrationError ?? err;
+    });
     return db;
+  }
+
+  upgradeStatus(): UpgradeStatus {
+    return this.status;
+  }
+
+  subscribeUpgradeStatus(listener: () => void) {
+    this.statusListeners.add(listener);
+    return () => {
+      this.statusListeners.delete(listener);
+    };
+  }
+
+  async exportWithoutUpgrade(): Promise<BackupFile> {
+    const version = await existingVersion(this.dbName);
+    if (version === 0) throw new Error('There is no saved data on this device to back up.');
+    const backup = await readBackupAt(this.dbName, version);
+    this.preUpgradeBackupAt = backup.exportedAt;
+    return backup;
+  }
+
+  async retryUpgrade(): Promise<void> {
+    if (this.status.state === 'needs-backup') {
+      this.deviceIdPromise = null;
+      this.dbPromise = this.start();
+    }
+    await this.dbPromise;
+  }
+
+  async upgradeWithoutSafetyCopy(): Promise<void> {
+    if (this.status.state === 'needs-backup') {
+      if (!this.preUpgradeBackupAt) throw new Error('Download a backup first. The update needs either a copy on this device or a backup file.');
+      this.deviceIdPromise = null;
+      this.dbPromise = this.start(this.preUpgradeBackupAt);
+    }
+    await this.dbPromise;
   }
 
   private db() {
@@ -542,6 +759,7 @@ export class IndexedDbAdapter implements StorageAdapter {
         report.copied++;
       }
     }
+    const touched = new Map<string, { kind: ItemKind; id: string }>();
     for (const v of versions) {
       const targetId = idMap.get(v.itemId);
       if (!targetId) continue;
@@ -549,7 +767,16 @@ export class IndexedDbAdapter implements StorageAdapter {
       const id = targetId === v.itemId ? v.id : uuid();
       if (await store.get(id)) continue;
       await store.add({ ...v, id, itemId: targetId });
+      touched.set(`${v.kind}:${targetId}`, { kind: v.kind, id: targetId });
       report.versionsAdded++;
+    }
+    // A file can carry more history than this device keeps (an older app, or an edited file): apply the usual
+    // limit, with its protected versions, to every item this import wrote to (audit STOR-R6).
+    for (const { kind, id } of touched.values()) {
+      const byItem = tx.objectStore(STORES[kind].versions).index('by_item');
+      const before = await byItem.count(id);
+      await this.prune(tx, kind, id);
+      report.versionsAdded -= before - (await byItem.count(id));
     }
     await tx.done;
     return report;

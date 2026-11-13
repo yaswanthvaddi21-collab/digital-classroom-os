@@ -37,9 +37,9 @@ function DataSafetyCard({ itemCount }: { itemCount: number }) {
           <p className="text-muted">This browser may clear its saved data when the device runs low on space.</p>
         )}
         {backupDue && (
-          <p className="text-muted">{safety.lastBackupAt ? `Last backup ${relativeTime(safety.lastBackupAt)}.` : 'You have not made a backup yet.'} A backup file is the only copy that survives if this browser's data is cleared.</p>
+          <p className="text-muted">{safety.lastBackupAt ? `Last backup exported ${relativeTime(safety.lastBackupAt)}.` : 'You have not exported a backup yet.'} A backup file is the only copy that survives if this browser's data is cleared.</p>
         )}
-        {ok && <p className="text-muted">Persistent storage is on{safety.lastBackupAt ? ` and your last backup was ${relativeTime(safety.lastBackupAt)}` : ''}.</p>}
+        {ok && <p className="text-muted">Persistent storage is on{safety.lastBackupAt ? ` and your last backup was exported ${relativeTime(safety.lastBackupAt)}` : ''}.</p>}
         <div className="flex flex-wrap gap-2">
           {!persisted && safety.persist !== 'unsupported' && itemCount > 0 && (
             <Button size="sm" icon={<HardDrive size={14} />} onClick={async () => (await requestPersistentStorage(), safety.refresh())}>

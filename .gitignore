@@ -26,3 +26,36 @@ backups/
 test-results/
 playwright-report/
 blob-report/
+
+# Secrets and credentials (never commit; keep an .env.example instead)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.jks
+*.mobileprovision
+apps/android/**/google-services.json
+
+# Local databases (SQLite for the native shells, test databases)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Native build outputs and local SDK settings
+*.apk
+*.aab
+local.properties
+.gradle/
+
+# User data exported from the app into the project folder by mistake
+/classroom-os-*.json
+
+# Tooling caches
+*.tsbuildinfo
+.eslintcache
+.pytest_cache/

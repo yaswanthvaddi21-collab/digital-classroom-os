@@ -13,6 +13,23 @@ const isIso = (v: unknown): v is string => typeof v === 'string' && !Number.isNa
 const isVersion = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1;
 const isKnownKind = (k: unknown): k is ItemKind => ITEM_KINDS.includes(k as ItemKind);
 
+/** Plain words for what a broken `content` value is, so the error tells the user what is wrong. */
+function describeValue(v: unknown): string {
+  if (v === null) return 'nothing (null)';
+  if (Array.isArray(v)) return 'a list';
+  if (typeof v === 'string') return 'text';
+  return `a ${typeof v}`;
+}
+
+/**
+ * Documents and diagrams always store their content as an object (every v0.1.0 and current file does).
+ * Anything else would open as a blank item, so the whole file is refused instead (audit STOR-R7).
+ */
+function checkContent(where: string, kind: ItemKind, content: unknown) {
+  if (content === undefined) throw new InvalidBackupError(`${where} has no content`);
+  if (!isObj(content)) throw new InvalidBackupError(`${where} is damaged: its content should be a ${kind} but is ${describeValue(content)}`);
+}
+
 export function contentSchemaOf(content: unknown): number {
   return isObj(content) && typeof content.schemaVersion === 'number' ? content.schemaVersion : 1;
 }
@@ -53,7 +70,7 @@ export function validateBackup(raw: unknown): ValidatedBackup {
     }
     if (typeof i.id !== 'string' || !i.id) throw new InvalidBackupError(`${where} has no id`);
     if (!isVersion(i.version)) throw new InvalidBackupError(`${where} (${i.id}) has an invalid version`);
-    if (!('content' in i) || i.content === undefined) throw new InvalidBackupError(`${where} (${i.id}) has no content`);
+    checkContent(`${where} (${typeof i.title === 'string' && i.title ? `“${i.title}”, ` : ''}${i.id})`, i.kind, i.content);
     if (contentSchemaOf(i.content) > MAX_CONTENT_SCHEMA) throw new InvalidBackupError(`${where} (${i.id}) has content from a newer version of the app`);
     const createdAt = isIso(i.createdAt) ? i.createdAt : isIso(i.updatedAt) ? i.updatedAt : exportedAt;
     const item: WorkspaceItem = {
@@ -79,7 +96,7 @@ export function validateBackup(raw: unknown): ValidatedBackup {
       throw new InvalidBackupError(`${where} has no kind`);
     }
     if (typeof v.id !== 'string' || !v.id || typeof v.itemId !== 'string' || !v.itemId) throw new InvalidBackupError(`${where} has no id or item id`);
-    if (!('content' in v) || v.content === undefined) throw new InvalidBackupError(`${where} (${v.id}) has no content`);
+    checkContent(`${where} (${v.id}, of item ${v.itemId})`, v.kind, v.content);
     versions.push({
       ...(v as unknown as ItemVersion),
       version: isVersion(v.version) ? v.version : 1,

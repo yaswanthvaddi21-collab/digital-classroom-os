@@ -21,7 +21,8 @@
     "check": "npm run typecheck && npm run test && npm run build",
     "licenses": "node scripts/license-report.mjs",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:upgrade": "node scripts/upgrade-test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",

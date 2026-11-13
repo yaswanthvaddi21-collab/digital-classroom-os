@@ -81,3 +81,19 @@ None of these is exposed in the UI today, so none is a "fake feature". They are 
 5. **GitHub:** a private repository to connect in Phase 2. Nothing is pushed without your approval.
 6. **DOCX verification:** Microsoft Word access, or permission to install LibreOffice (free) for RG-12.
 7. **Native toolchains, only if the platforms stay in scope:** permission to install Rust and the Android SDK, and access to a Windows machine.
+
+## 6. Status after Phase 2 (Git, backup and data safety)
+
+Scope decision: **option B, the full brief** (owner, 2026-11-13).
+
+| Item | Status | Where |
+|---|---|---|
+| RG-3 failed safety copy locks the user out (STOR-R5) | ✅ Fixed: recovery screen; no upgrade without a backup | [DATA_SAFETY_REPORT.md](../DATA_SAFETY_REPORT.md) §5 |
+| RG-15 `.gitignore` misses secrets and databases | ✅ Fixed | DATA_SAFETY_REPORT §2 |
+| RG-11 overstated claims | 🟡 Restore wording and "last backup" wording fixed (STOR-R6, STOR-R9); the other claims remain for their phases | DATA_SAFETY_REPORT §4 |
+| RR-10 backup validation and import pruning (STOR-R7, STOR-R6) | ✅ Fixed | DATA_SAFETY_REPORT §4 |
+| New: half-upgraded database after a failing migration | ✅ Fixed | DATA_SAFETY_REPORT §5 |
+| New: two tabs upgrading at once could remove the safety copy | ✅ Fixed | DATA_SAFETY_REPORT §5 |
+| RG-13 CI has never run | ⬜ Needs a remote; prepared in [GIT_WORKFLOW.md](../GIT_WORKFLOW.md) §7, waiting for the owner | — |
+| RG-14 release metadata, licence | ⬜ Waiting for the owner's licence choice; versions are bumped in Phase 14 | — |
+| RG-1, RG-2 and the other storage items | ⬜ Phase 3 | — |

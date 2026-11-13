@@ -5,6 +5,7 @@
 ```bash
 npm test              # all TypeScript unit and integration tests (Vitest)
 npm run test:e2e      # Playwright browser tests (builds and serves the app on :4173)
+npm run test:upgrade  # real-browser upgrade from v0.1.0 (builds the v0.1.0 tag; see docs/BACKUP_AND_RECOVERY.md §2.4)
 npm run typecheck     # strict TypeScript across apps and packages
 npm run build         # production build (also checks the PWA precache)
 npm run check         # all three

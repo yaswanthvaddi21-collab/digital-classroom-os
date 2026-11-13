@@ -159,3 +159,31 @@ export interface StorageAdapter {
   exportSafetyCopy(name: string): Promise<BackupFile>;
   deleteSafetyCopy(name: string): Promise<void>;
 }
+
+/**
+ * Progress of opening the database. Before a schema upgrade a full copy of the old database is made; when that
+ * copy cannot be made the upgrade does not run and the state is 'needs-backup' until the user acts.
+ */
+export type UpgradeStatus =
+  | { state: 'checking' }
+  | { state: 'copying'; fromVersion: number }
+  | { state: 'opening' }
+  | { state: 'ready' }
+  | { state: 'failed'; message: string }
+  /** The upgrade did not happen; `step` says whether the copy or the upgrade itself failed. Nothing was changed. */
+  | { state: 'needs-backup'; step: 'copy' | 'upgrade'; fromVersion: number; reason: 'quota' | 'error'; message: string };
+
+/** Ways out of the 'needs-backup' state. None of them deletes or changes the old data. */
+export interface UpgradeRecovery {
+  upgradeStatus(): UpgradeStatus;
+  subscribeUpgradeStatus(listener: () => void): () => void;
+  /** Builds a backup file from the database at the version it has now, read-only: no upgrade runs. */
+  exportWithoutUpgrade(): Promise<BackupFile>;
+  /** Tries the safety copy and the upgrade again (for example after space was freed). */
+  retryUpgrade(): Promise<void>;
+  /**
+   * Upgrades without the copy on this device. Allowed only after exportWithoutUpgrade() produced a backup file
+   * in this session: that file is the safety backup.
+   */
+  upgradeWithoutSafetyCopy(): Promise<void>;
+}

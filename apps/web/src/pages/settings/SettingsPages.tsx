@@ -20,7 +20,7 @@ export function GeneralSettings() {
           <option value="advanced">Advanced</option>
         </Select>
       </Section>
-      <Section title="Backup reminder" description="How long after your last backup the Dashboard reminds you to make a new one.">
+      <Section title="Backup reminder" description="How long after your last backup export the Dashboard reminds you to make a new one.">
         <Select value={String(prefs.backupReminderDays)} onChange={(e) => setPreference('backupReminderDays', Number(e.target.value))} aria-label="Backup reminder interval" className="h-9">
           {[3, 7, 14, 30].map((d) => (
             <option key={d} value={d}>
@@ -158,16 +158,24 @@ export function BackupSettings() {
     try {
       const backup = await storage.exportBackup();
       downloadBlob(new Blob([JSON.stringify(backup)], { type: 'application/json' }), `classroom-os-backup-${stamp()}.json`);
+      // Browsers don't report whether the download was kept, so this records the export, not a saved file (STOR-R9).
       await recordBackup();
-      toast(`Backup exported: ${backup.items.length} items, ${backup.versions.length} versions`, 'success');
+      toast(`Backup exported: ${backup.items.length} items, ${backup.versions.length} versions. Check that your browser saved the file.`, 'success');
     } catch (err) {
       toast(`Backup failed — nothing was exported. ${err instanceof Error ? err.message : String(err)}`, 'error');
     }
   };
 
   const importBackup = async (file: File) => {
+    let parsed: unknown;
     try {
-      const report = await storage.importBackup(JSON.parse(await file.text()));
+      parsed = JSON.parse(await file.text());
+    } catch {
+      toast('Nothing was imported. This file could not be read as a backup: it may be damaged or incomplete.', 'error');
+      return;
+    }
+    try {
+      const report = await storage.importBackup(parsed);
       notifyStorageChanged();
       void requestPersistentStorage();
       const parts = [`${report.added} added`, `${report.skipped} already present`];
@@ -186,7 +194,7 @@ export function BackupSettings() {
         description={
           <>
             Saves every document, diagram and version on this device into one file. Keep it somewhere else, like a USB drive or cloud folder.
-            <div className="mt-2 text-xs">{safety.lastBackupAt ? `Last backup: ${relativeTime(safety.lastBackupAt)}` : 'No backup has been made on this device yet.'}</div>
+            <div className="mt-2 text-xs">{safety.lastBackupAt ? `Last backup exported ${relativeTime(safety.lastBackupAt)}.` : 'No backup has been exported on this device yet.'}</div>
           </>
         }
       >
@@ -194,7 +202,10 @@ export function BackupSettings() {
           Export backup
         </Button>
       </Section>
-      <Section title="Restore from a backup" description="Restoring never overwrites newer work on this device: items that differ come back as separate copies, and importing the same file twice adds nothing.">
+      <Section
+        title="Restore from a backup"
+        description="Restoring never overwrites work on this device. Items that are already here and unchanged are skipped. If you have changed an item since the backup was made, the backed-up version is added once, as a separate copy marked “(restored)”."
+      >
         <Button icon={<Upload size={15} />} onClick={() => fileInput.current?.click()}>
           Restore from file
         </Button>
