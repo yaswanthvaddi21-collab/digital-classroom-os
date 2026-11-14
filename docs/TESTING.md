@@ -66,7 +66,7 @@ IndexedDB tests run in Node against `fake-indexeddb`.
 
 [`tests/acceptance/CHECKLIST.md`](../tests/acceptance/CHECKLIST.md) tracks PRD §11. Before a release, also:
 
-1. Open an exported `.docx` in Microsoft Word (Windows and macOS), Apple Pages and LibreOffice, and an exported `.odt` in LibreOffice. Record results in [DOCUMENT_COMPATIBILITY.md](DOCUMENT_COMPATIBILITY.md) §8 (pending).
+1. Open an exported `.docx` in Microsoft Word (Windows and macOS), Apple Pages and LibreOffice, and an exported `.odt` in LibreOffice. Record results in [DOCUMENT_COMPATIBILITY.md](DOCUMENT_COMPATIBILITY.md) §8. Done on 2026-11-13/14 for Pages (16 samples) and Word for Mac (2 of 16); Word for Windows, LibreOffice, the other 14 files in Word and ODT are still to do.
 2. Save as PDF from Chrome, Safari and Firefox; check margins, header and footer parts, page numbers, columns and per-section orientation (only per-section orientation is verified automatically, in Chromium).
 3. Load the app once, switch the device to airplane mode, reload, and create/edit/reopen a document and a diagram.
 4. Export a backup, clear site data, restore, and confirm everything returns.
@@ -74,5 +74,5 @@ IndexedDB tests run in Node against `fake-indexeddb`.
 ## Next
 
 - Per-file coverage thresholds for storage and export code.
-- Opening exported DOCX and ODT files in Microsoft Word, Apple Pages and LibreOffice (manual; pending).
+- Opening exported DOCX and ODT files in other word processors: manual. Done for Apple Pages (16 DOCX samples) and Word for Mac (2 of 16); LibreOffice, Word for Windows and ODT still pending.
 - Validating exported DOCX and ODT against the OOXML and ODF schemas.

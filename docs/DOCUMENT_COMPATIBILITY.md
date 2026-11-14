@@ -2,7 +2,7 @@
 
 What Document Studio writes when it exports a document, what it reads when it imports one, and what older versions of the app can open. This describes the code at the end of Phase 4. Design decisions are in [ADR 0011](adr/0011-document-format-phase4.md); the module layout is in [ARCHITECTURE.md](ARCHITECTURE.md#document-studio).
 
-**Evidence.** Every statement below rests on the export and import code in `packages/document-studio/src` and on automated tests: XML assertions, golden snapshots of the exported XML, a re-read of every exported DOCX by an independent parser (mammoth), and round trips through the app's own importers (§7). **No exported file has yet been opened in Microsoft Word, Apple Pages or LibreOffice**, and no file has been validated against the OOXML or ODF schemas. Results from Word and Pages go in §8.
+**Evidence.** Every statement below rests on the export and import code in `packages/document-studio/src` and on automated tests: XML assertions, golden snapshots of the exported XML, a re-read of every exported DOCX by an independent parser (mammoth), and round trips through the app's own importers (§7). On 2026-11-13/14 the 16 sample DOCX files were opened in **Apple Pages (all 16)** and **Microsoft Word for Mac 16.115 (2 of 16, read-only)**; §8 has the results. No ODT file has been opened in another word processor, nothing has been tested in LibreOffice or Word for Windows, and no file has been validated against the OOXML or ODF schemas.
 
 ## 1. Terms
 
@@ -40,7 +40,7 @@ What makes a document schema 2:
 
 DOCX is built with the `docx` library (`export/docx/`). ODT is written by the app's own exporter (`export/odt/`). Print/PDF is the browser's print dialog on a copy of the editor page (`export/print.ts`, `export/printLayout.ts`). TXT is `export/text.ts`.
 
-In the DOCX column, "Not yet tested in Word or Pages; see §8" applies to **every** row: the DOCX output is checked only as XML.
+In the DOCX column, the automated checks are XML-level. What Word and Pages actually showed is in §8: Pages was checked with all 16 samples, Word with two (formatting and lists; sections, page numbering and headers and footers). A row is not "verified in Word" unless §8 says so.
 
 ### 3.1 Text and paragraphs
 
@@ -208,13 +208,42 @@ Snapshots change only by a reviewed update (`npx vitest run -u`).
 
 ## 8. Results in Microsoft Word and Apple Pages
 
-Pending: results are added after the check.
+Checked on 2026-11-13/14 with the 16 DOCX samples exported by commit `fe3275a`. Per-file results, Pages PDFs, Word screenshots and the expected structure of each file are in [compatibility/phase4-2026-11-14/](compatibility/phase4-2026-11-14/README.md). Only what is listed here was seen; anything else is untested.
+
+**Apple Pages (Pages Creator Studio, macOS 27.2.1): all 16 files opened**, with no error or repair prompt.
+
+| Area | Seen in Pages |
+|---|---|
+| Paragraph formatting, named styles, colours, highlight, font sizes | As exported (01, 06, 07) |
+| Lists: bullet glyphs, number formats, start numbers, nesting, continuation paragraphs | As exported (01, 05, 06, 07, templates) |
+| Tables: header rows, merged cells, column widths, equations in cells | As exported (05, 06, 07, 12, 15, 17) |
+| Pictures: left/centre/right alignment, captions | As exported (03, 06) |
+| Equations (OMML subset) | Render as equations (03, 05, 06). The equation outside the subset shows as its picture. Equation colour is lost, as the export toast says |
+| Shapes | Shown as pictures, as exported (03, 06) |
+| Text boxes | In-line ones as exported. **Floating ones sit above their paragraph instead of the text wrapping beside them** (03, 06) |
+| Comments | Anchored on the right text (04: 4 threads; the file holds 4 threads and 2 replies). Comment text, authors, replies and resolved state could not be viewed |
+| Headers and footers (left/centre/right parts, first page) | As exported (02, 06, 07, templates) |
+| Page-number formats and restarts | As exported (02: ii, 1, 2, C; 06: ii, 1, 2, C, D) |
+| Section orientation | **A landscape section after a portrait one is shown portrait** (02, 05, 06). A landscape document is shown landscape (07). On such pages the centre and right header parts sit too far right, because their tab stops were set for landscape width |
+| Continuous section breaks | **Start a new page in Pages** (02, 06) |
+| Columns | Two and three columns shown (05, 06) |
+| "Page x of y" | Correct without a restart (03, templates). **After a numbering restart, Pages' total counts per section ("Page 1 of 1" on both pages of 05)** |
+| Table of contents | Pages fills in the field with its own page numbers (06, 07, 14) |
+
+**Microsoft Word for Mac 16.115: 2 of 16 files checked.** No licence is active, so Word opens files read-only and refuses to save PDFs. After two files, Word's "Powering your experiences" privacy notice blocked further opening, and the owner chose to skip the rest.
+- **01-format** matches: styles by name, line spacing 1.15 and double, indents, quote, code, caption, colours, every list marker.
+- **02-layout-sections** matches: 4 pages; a portrait cover with only the first-page header; "Page ii" in lower-case Roman; a landscape section restarting at "Page 1"; a portrait appendix at "Page B"; headers in three parts.
+- **03-insert** was read through Word's object model only (2 tables, 10 pictures).
+- Comments, equations, text boxes, shapes, the table of contents and the templates **have not been seen in Word**.
+
+**Not tested:** Word for Windows, LibreOffice, Google Docs, and any ODT file in another word processor.
 
 ## 9. Known limitations
 
 **Not verified**
 
-- No exported DOCX or ODT file has been opened in Microsoft Word, Apple Pages or LibreOffice, and none has been validated against the OOXML or ODF schemas (§8).
+- Word has been checked with only 2 of the 16 DOCX samples, LibreOffice and Word for Windows not at all, no ODT file has been opened in another word processor, and nothing has been validated against the OOXML or ODF schemas (§8).
+- In Apple Pages: a landscape section after a portrait one is shown portrait, a continuous section break starts a new page, floating text boxes don't wrap their text, and after a numbering restart "Page x of y" counts per section (§8).
 - Print orientation per section is verified only in Chromium; restarted page numbers in print are not verified in any browser.
 - ODT uses ODF 1.3 `header-first`/`footer-first`, which older LibreOffice versions may not read (not checked).
 

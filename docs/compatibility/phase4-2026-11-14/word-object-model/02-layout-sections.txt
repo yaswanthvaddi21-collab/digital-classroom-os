@@ -1,0 +1,41 @@
+name=02-layout-sections.docx
+pages=4
+paragraphs=10
+tables=0
+inlinePictures=0
+shapes=0
+fields=0
+hyperlinks=0
+tocs=0
+comments=0
+sections=4
+  section 1: orient=missing value w=missing value h=missing value start=missing value cols=0 diffFirst=missing value restart=missing value startNo=missing value style=missing value
+    header=Physics ¶ Lab report ¶ Asha R. ¶ 
+    footer=Draft ¶  ¶ Page i ¶ 
+    firstHeader=COVER ¶ 
+    firstFooter= ¶ 
+  section 2: orient=missing value w=missing value h=missing value start=missing value cols=0 diffFirst=missing value restart=missing value startNo=missing value style=missing value
+    header=Physics ¶ Lab report ¶ Asha R. ¶ 
+    footer=Draft ¶  ¶ Page 1 ¶ 
+    firstHeader=COVER ¶ 
+    firstFooter= ¶ 
+  section 3: orient=missing value w=missing value h=missing value start=missing value cols=0 diffFirst=missing value restart=missing value startNo=missing value style=missing value
+    header=Physics ¶ Lab report ¶ Asha R. ¶ 
+    footer=Draft ¶  ¶ Page  ¶ 
+    firstHeader=COVER ¶ 
+    firstFooter= ¶ 
+  section 4: orient=missing value w=missing value h=missing value start=missing value cols=0 diffFirst=missing value restart=missing value startNo=missing value style=missing value
+    header=Physics ¶ Lab report ¶ Asha R. ¶ 
+    footer=Draft ¶  ¶ Page A ¶ 
+    firstHeader=COVER ¶ 
+    firstFooter= ¶ 
+  p1 [Heading 1] align=align paragraph center spacing=12.300000190735/line space multiple list= | Ohm's Law ¶ 
+  p2 [Normal] align=align paragraph left spacing=14.75/line space multiple list= | Title page ¶ 
+  p3 [Normal] align=align paragraph left spacing=14.75/line space multiple list= |  ¶  ¶ 
+  p4 [Normal] align=align paragraph left spacing=14.75/line space multiple list= | Preface, numbered ii ¶ 
+  p5 [Heading 2] align=align paragraph left spacing=12.300000190735/line space multiple list= | Results (landscape) ¶ 
+  p6 [Normal] align=align paragraph left spacing=14.75/line space multiple list= | Page 1 of the body. ¶ 
+  p7 [Normal] align=align paragraph left spacing=14.75/line space multiple list= | Two columns, on the same page. ¶ 
+  p8 [List Paragraph] align=align paragraph left spacing=14.75/line space multiple list=• | A point in a column ¶ 
+  p9 [Heading 2] align=align paragraph left spacing=12.300000190735/line space multiple list= | Appendix ¶ 
+  p10 [Normal] align=align paragraph left spacing=14.75/line space multiple list= | Portrait again, numbering continues as letters. ¶ 

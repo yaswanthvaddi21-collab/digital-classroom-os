@@ -6,7 +6,7 @@
 
 Phase 4 adds a large set of Document Studio features: paragraph formatting and named styles, list styles, sections with their own orientation, columns and page numbering, header and footer parts, equations, shapes, text boxes, picture alignment and captions, comments, a document language, DOCX and ODT import, and ODT export. Each one changes what a stored document can contain.
 
-Three constraints shape how. Saved documents must keep opening, and v0.1.0 must still open everything that does not use a new feature (schema 1, [ADR 0006](0006-migrations-and-safety-copies.md), [ADR 0007](0007-backup-format.md)). A version must never rewrite or drop content it does not understand. And the exports must not claim a fidelity that has not been checked: no exported file has been opened in Microsoft Word, Apple Pages or LibreOffice yet ([DOCUMENT_COMPATIBILITY.md](../DOCUMENT_COMPATIBILITY.md) §8).
+Three constraints shape how. Saved documents must keep opening, and v0.1.0 must still open everything that does not use a new feature (schema 1, [ADR 0006](0006-migrations-and-safety-copies.md), [ADR 0007](0007-backup-format.md)). A version must never rewrite or drop content it does not understand. And the exports must not claim a fidelity that has not been checked: when this was decided, no exported file had been opened in Microsoft Word, Apple Pages or LibreOffice. The check that followed (Pages: 16 samples; Word for Mac: 2) is in [DOCUMENT_COMPATIBILITY.md](../DOCUMENT_COMPATIBILITY.md) §8.
 
 ## Decision
 
@@ -36,7 +36,7 @@ Three constraints shape how. Saved documents must keep opening, and v0.1.0 must 
 - The default layout fields are filled into the page settings on load and written on the next save. v0.1.0 ignores unknown page fields, so this does not affect it.
 - Comment threads whose text is deleted stay in the document, so undo can restore them; they are listed in the panel and left out of exports (reported).
 - On screen, sections, columns and page boundaries are labelled but not laid out; the DOCX export writes them as Word sections and print lays them out (how Word and Pages show them is untested, DOCUMENT_COMPATIBILITY.md §8). The UI says so.
-- Users see what each export approximated, but the fidelity of the native constructs in Word, Pages and LibreOffice is unverified until the check in DOCUMENT_COMPATIBILITY.md §8 is done.
+- Users see what each export approximated. Apple Pages showed the native constructs for all 16 samples, with four layout differences; Word for Mac was checked with 2 samples; LibreOffice is untested (DOCUMENT_COMPATIBILITY.md §8).
 - The ODT exporter and importer are the app's own code, so their correctness rests on the app's tests and round trips until checked in another word processor.
 
 ## Verification

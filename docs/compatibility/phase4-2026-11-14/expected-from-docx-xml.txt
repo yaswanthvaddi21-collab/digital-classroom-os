@@ -1,0 +1,16 @@
+01-format.docx paras=24 tables=0 oMath=0 drawings=0 links=0 toc=False comments=0 headers=0 footers=0 sections=1 :: port
+02-layout-sections.docx paras=10 tables=0 oMath=0 drawings=0 links=0 toc=False comments=0 headers=5 footers=5 sections=4 :: port/pn:/lowerRoman/titlePg | land/nextPage/pn:start1 | land/cols2/continuous | port/nextPage/pn:/upperLetter
+03-insert.docx paras=24 tables=2 oMath=6 drawings=10 links=0 toc=False comments=0 headers=0 footers=1 sections=1 :: port
+04-review.docx paras=3 tables=0 oMath=0 drawings=0 links=0 toc=False comments=6 headers=0 footers=1 sections=1 :: port
+05-cross-feature.docx paras=13 tables=2 oMath=3 drawings=2 links=0 toc=False comments=2 headers=0 footers=2 sections=2 :: port | land/cols2/nextPage/pn:start1
+06-kitchen-sink-v2.docx paras=58 tables=2 oMath=6 drawings=6 links=7 toc=True comments=5 headers=5 footers=5 sections=4 :: port/pn:/lowerRoman/titlePg | land/cols2/nextPage/pn:start1 | land/cols3/continuous | port/nextPage/pn:/upperLetter
+07-kitchen-sink-v0.1.0.docx paras=28 tables=1 oMath=0 drawings=1 links=5 toc=True comments=0 headers=1 footers=1 sections=1 :: land
+10-template-blank.docx paras=0 tables=0 oMath=0 drawings=0 links=0 toc=False comments=0 headers=0 footers=1 sections=1 :: port
+11-template-assignment.docx paras=14 tables=0 oMath=0 drawings=0 links=0 toc=False comments=0 headers=0 footers=1 sections=1 :: port
+12-template-lab-report.docx paras=30 tables=1 oMath=0 drawings=0 links=0 toc=False comments=0 headers=0 footers=1 sections=1 :: port
+13-template-essay.docx paras=10 tables=0 oMath=0 drawings=0 links=0 toc=False comments=0 headers=0 footers=1 sections=1 :: port
+14-template-project-report.docx paras=32 tables=0 oMath=0 drawings=0 links=8 toc=True comments=0 headers=1 footers=1 sections=1 :: port
+15-template-research-paper.docx paras=42 tables=1 oMath=0 drawings=0 links=0 toc=False comments=0 headers=0 footers=1 sections=1 :: port
+16-template-mla-essay.docx paras=14 tables=0 oMath=0 drawings=0 links=0 toc=False comments=0 headers=1 footers=1 sections=1 :: port
+17-template-cover-page.docx paras=16 tables=1 oMath=0 drawings=0 links=0 toc=False comments=0 headers=0 footers=0 sections=1 :: port
+18-template-formal-letter.docx paras=18 tables=0 oMath=0 drawings=0 links=0 toc=False comments=0 headers=0 footers=0 sections=1 :: port
