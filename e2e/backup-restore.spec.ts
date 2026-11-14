@@ -111,7 +111,25 @@ test('a backup exported in one browser profile restores completely into an empty
     .poll(async () => (await readStore<Version>(page, 'document_versions')).filter((v) => v.itemId === docId && v.reason === 'manual').length, { timeout: 10_000 })
     .toBe(1);
   await editor.getByText('first-in, first-out', { exact: false }).click();
-  await page.keyboard.press('End');
+  // The new diagram is still selected after its insert. Chromium and WebKit hand a click's caret to the editor a few
+  // milliseconds later (selectionchange is async); a script typing at once would replace the selected diagram (the
+  // same wait as diagram-embed-safety.spec.ts toEndOfText; Phase 6 Round 3, traced).
+  await expect(editor.locator('.ProseMirror-selectednode')).toHaveCount(0);
+  // The caret goes right after "first-out." (End would only reach the end of the clicked line: since Phase 6 the
+  // diagram no longer splits this paragraph, so it wraps over several lines).
+  await editor.evaluate((root) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+      const at = t.textContent!.indexOf('first-in, first-out.');
+      if (at < 0) continue;
+      const r = document.createRange();
+      r.setStart(t, at + 'first-in, first-out.'.length);
+      r.collapse(true);
+      getSelection()!.removeAllRanges();
+      getSelection()!.addRange(r);
+      return;
+    }
+  });
   await page.keyboard.type(' Written after the version.');
   await waitSaved(page);
   await expect

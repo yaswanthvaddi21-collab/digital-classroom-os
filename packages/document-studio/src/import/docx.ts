@@ -11,12 +11,21 @@ import { strFromU8, strToU8, zipSync, type Zippable } from 'fflate';
 import { isAllowedHref } from '../links';
 import { documentSchema } from '../schema';
 import { paperSize } from '../types';
-import { attachCaptions, IMPORT_NOTES, ImportReport, importedContent, pageFromGeometry, unpack, type ImportResult } from './common';
+import { diagramNodes } from '../export/diagramAssets';
+import { attachCaptions, IMPORT_NOTES, ImportReport, importedContent, pageFromGeometry, unpack, type ImportedAttachment, type ImportResult } from './common';
+import { diagramFromPicture, previewIds } from './diagrams';
 import { imageSize } from './imageSize';
 
 /** Private-use characters that carry what mammoth's HTML cannot (alignment, page breaks) through the conversion. */
 const ALIGN_MARK = '\uE000';
 const BREAK_MARK = '\uE001';
+/**
+ * Phase 6: a picture's size in the file (wp:extent, in EMU) travels in its description (wp:docPr descr), the one
+ * picture property mammoth passes on, as EXTENT_MARK cx,cy EXTENT_END; it is taken off again in cleanHtml.
+ */
+const EXTENT_MARK = '\uE002';
+const EXTENT_END = '\uE003';
+const EMU_PER_PX = 9525;
 const ALIGN_CODES: Record<string, string> = { center: 'c', right: 'r', end: 'r', both: 'j', distribute: 'j' };
 const ALIGN_NAMES: Record<string, string> = { c: 'center', r: 'right', j: 'justify' };
 
@@ -54,6 +63,47 @@ interface Mammoth {
 
 const textRun = (value: string): MammothElement =>
   ({ type: 'run', children: [{ type: 'text', value }], styleId: null, styleName: null, isBold: false, isUnderline: false, isItalic: false, isStrikethrough: false, isAllCaps: false, isSmallCaps: false, verticalAlignment: 'baseline', font: null, fontSize: null, highlight: null }) as MammothElement;
+
+/**
+ * Puts each picture's size (wp:extent) at the start of its description (wp:docPr descr), so it reaches the HTML as
+ * the start of the picture's alt text. mammoth uses descr, or the title when descr is blank: the title then moves
+ * into descr after the size, so the alt text read back is the same.
+ */
+function markExtents(xml: string): string {
+  return xml.replace(/<wp:(inline|anchor)\b[\s\S]*?<\/wp:\1>/g, (drawing) => {
+    const extent = new RegExp(`<wp:extent\\b${ATTRS}\\/?>`).exec(drawing)?.[0] ?? '';
+    const cx = attrValue(extent, 'cx');
+    const cy = attrValue(extent, 'cy');
+    if (!cx || !/^\d+$/.test(cx) || !cy || !/^\d+$/.test(cy)) return drawing;
+    // Attribute values may be in single or double quotes and may hold a raw '>' (both valid XML): the tag is matched
+    // value by value, and the description written back in double quotes (Round 3: such files failed to import).
+    return drawing.replace(new RegExp(`<wp:docPr\\b${ATTRS}\\/?>`), (tag) => {
+      const descr = attrValue(tag, 'descr') ?? '';
+      const title = attrValue(tag, 'title') ?? '';
+      const text = `${EXTENT_MARK}${cx},${cy}${EXTENT_END}${descr.trim() ? descr : title}`.replace(/"/g, '&quot;');
+      const rest = tag.replace(new RegExp(`\\sdescr\\s*=\\s*(?:"[^"]*"|'[^']*')`), '');
+      return rest.replace(/^<wp:docPr\b/, `<wp:docPr descr="${text}"`);
+    });
+  });
+}
+
+/** The attributes of an XML start tag, matched value by value (a quoted value may hold '>'). */
+const ATTRS = `(?:[^>"']|"[^"]*"|'[^']*')*?`;
+/** An attribute's raw value (entities left as they are) from an XML start tag, in single or double quotes. */
+function attrValue(tag: string, name: string): string | null {
+  const m = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(tag);
+  return m ? (m[1] ?? m[2] ?? '') : null;
+}
+
+/** Takes the size markExtents put in front of an alt text: the size in CSS pixels and the alt text itself. */
+function takeExtent(alt: string | null): { size: { width: number; height: number } | null; alt: string | null } {
+  if (alt === null) return { size: null, alt };
+  const m = new RegExp(`^${EXTENT_MARK}(\\d+),(\\d+)${EXTENT_END}`).exec(alt);
+  if (!m) return { size: null, alt };
+  const width = Number(m[1]) / EMU_PER_PX;
+  const height = Number(m[2]) / EMU_PER_PX;
+  return { size: width > 0 && height > 0 ? { width, height } : null, alt: alt.slice(m[0].length) };
+}
 
 /** Marks aligned paragraphs and page breaks with private-use characters, read back from the HTML afterwards. */
 function transform(m: Mammoth) {
@@ -119,8 +169,11 @@ function applyMarkers(body: HTMLElement) {
   }
 }
 
-function cleanHtml(body: HTMLElement, textWidthPx: number, counts: Record<string, number>) {
+function cleanHtml(body: HTMLElement, textWidthPx: number, counts: Record<string, number>, attachments: ImportedAttachment[] = []) {
   const doc = body.ownerDocument;
+  const nextId = previewIds('docx');
+  /** Pictures carrying a Classroom OS diagram (Phase 6): turned into diagram nodes once pictures are blocks. */
+  const diagrams = new Map<HTMLImageElement, Record<string, unknown>>();
   const count = (k: string, n = 1) => (counts[k] = (counts[k] ?? 0) + n);
   applyMarkers(body);
 
@@ -182,8 +235,11 @@ function cleanHtml(body: HTMLElement, textWidthPx: number, counts: Record<string
     p.removeAttribute('class');
   }
 
-  // Pictures: sized for the page (Word's own size is not in mammoth's output, so the picture's own size, made to fit).
+  // Pictures: at the size Word shows them (wp:extent, see markExtents; else the picture's own size), made to fit.
   for (const img of Array.from(body.querySelectorAll('img'))) {
+    const marked = takeExtent(img.getAttribute('alt'));
+    if (marked.alt) img.setAttribute('alt', marked.alt);
+    else img.removeAttribute('alt');
     const src = img.getAttribute('src') ?? '';
     if (!SHOWN.test(src)) {
       const kind = /^data:image\/(?:x-)?([a-z0-9.+-]+)/i.exec(src)?.[1]?.toUpperCase() ?? 'unknown';
@@ -203,7 +259,21 @@ function cleanHtml(body: HTMLElement, textWidthPx: number, counts: Record<string
     else if (!align || align === 'left') img.setAttribute('data-align', 'left');
     try {
       const bytes = Uint8Array.from(atob(src.slice(src.indexOf(',') + 1)), (c) => c.charCodeAt(0));
-      const size = imageSize(bytes);
+      // Phase 6: a PNG carrying a Classroom OS diagram (export/diagramPng.ts) comes back as an editable diagram.
+      const diagram = /^data:image\/png;/i.test(src)
+        ? diagramFromPicture(bytes, { id: nextId(), widthPx: marked.size?.width ?? null, maxWidthPx: textWidthPx, alt: img.getAttribute('alt') })
+        : null;
+      if (diagram) {
+        const a = img.getAttribute('data-align');
+        diagrams.set(img, { ...diagram.attrs, align: a === 'left' || a === 'right' ? a : null });
+        attachments.push(diagram.attachment);
+        continue;
+      }
+      // The box Word draws the picture in, but with the picture's own proportions: a picture cropped (a:srcRect) or
+      // stretched in Word has a box of another shape, and the editor (and its exports) show the whole picture.
+      const own = imageSize(bytes);
+      const box = marked.size;
+      const size = box && own && Math.abs(box.height / box.width - own.height / own.width) > 0.01 ? { width: box.width, height: (box.width * own.height) / own.width } : (box ?? own);
       if (size) {
         const width = Math.min(size.width, textWidthPx);
         img.setAttribute('width', String(Math.round(width)));
@@ -220,6 +290,15 @@ function cleanHtml(body: HTMLElement, textWidthPx: number, counts: Record<string
     const imgs = Array.from(p.querySelectorAll('img'));
     if (!imgs.length || (p.textContent ?? '').trim() || Array.from(p.querySelectorAll('*')).some((e) => e.tagName !== 'IMG' && !e.querySelector('img'))) continue;
     p.replaceWith(...imgs);
+  }
+
+  // Pictures that carry a diagram become the editor's diagram blocks (their data travels as data-diagram JSON, as
+  // in a copy and paste of a diagram).
+  for (const [img, attrs] of diagrams) {
+    const figure = doc.createElement('figure');
+    figure.setAttribute('data-type', 'diagram');
+    figure.setAttribute('data-diagram', JSON.stringify(attrs));
+    img.replaceWith(figure);
   }
 
   // docx writers (this app included) end every table with an empty paragraph, as Word requires; it is not content.
@@ -401,10 +480,11 @@ export async function importDocx(bytes: Uint8Array, fileName = 'Imported documen
   const fixed = documentXml
     .replace(/<w:tblHeader w:val="(?:off|false|0)"\s*\/>/g, '')
     .replace(/(<w:hyperlink\b[^>]*?)\s+r:id="([^"]*)"/g, (all, start: string, id: string) => (relIds.has(id) ? all : start));
+  const marked = markExtents(fixed);
   // mammoth gets the parts unpacked above, packed again without compression: what it reads is what was size-checked
   // (it unpacks with its own zip reader, which would not stop at the stated sizes).
   const parts: Zippable = {};
-  for (const [path, data] of Object.entries({ ...files, 'word/document.xml': strToU8(fixed) })) parts[path] = [data, { level: 0 }];
+  for (const [path, data] of Object.entries({ ...files, 'word/document.xml': strToU8(marked) })) parts[path] = [data, { level: 0 }];
   const source = zipSync(parts);
   const buffer = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength) as ArrayBuffer;
   // Node's build of mammoth reads `buffer`, the browser's `arrayBuffer`.
@@ -422,7 +502,8 @@ export async function importDocx(bytes: Uint8Array, fileName = 'Imported documen
   const counts: Record<string, number> = {};
   const htmlDoc = new DOMParser().parseFromString(`<!doctype html><html><body>${html}</body></html>`, 'text/html');
   const paper = paperSize(page);
-  cleanHtml(htmlDoc.body, Math.round(((paper.width - page.margins.left - page.margins.right) / 25.4) * 96), counts);
+  const attachments: ImportedAttachment[] = [];
+  cleanHtml(htmlDoc.body, Math.round(((paper.width - page.margins.left - page.margins.right) / 25.4) * 96), counts, attachments);
   const parsed = PMDOMParser.fromSchema(documentSchema()).parse(htmlDoc.body, { preserveWhitespace: true });
   const doc = attachCaptions(parsed.toJSON() as JSONContent);
 
@@ -462,5 +543,9 @@ export async function importDocx(bytes: Uint8Array, fileName = 'Imported documen
   const core = files['docProps/core.xml'] ? new DOMParser().parseFromString(strFromU8(files['docProps/core.xml']), 'application/xml') : null;
   const metaTitle = (core?.getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', 'title')[0]?.textContent ?? '').trim();
   const title = metaTitle && metaTitle !== 'Document' ? metaTitle : fileName.replace(/\.(docx|dotx|docm)$/i, '') || 'Imported document';
-  return { content: importedContent(doc, page, documentLanguage(files)), title, report, format: 'docx' };
+  const content = importedContent(doc, page, documentLanguage(files));
+  // Only the previews of diagrams that made it into the document (all of them, unless the file is damaged).
+  const used = new Set(diagramNodes(content.doc).map((n) => n.attrs?.previewId));
+  const kept = attachments.filter((a) => used.has(a.id));
+  return { content, title, report, format: 'docx', ...(kept.length ? { attachments: kept } : {}) };
 }

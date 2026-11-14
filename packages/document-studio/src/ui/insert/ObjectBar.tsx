@@ -1,9 +1,10 @@
-import { Button, IconButton, Select, Separator, cn } from '@dcos/ui';
+import { Button, IconButton, Select, Separator, cn, useToast } from '@dcos/ui';
 import type { Editor } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { useEditorState } from '@tiptap/react';
 import { AlignCenter, AlignLeft, AlignRight, Pencil, Trash2 } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { diagramAlign, diagramCaption, openDiagramEditor, setDiagramTextWidth } from '../../extensions/diagramEmbed'; // Phase 6 (NODE)
 import { writeEquation } from '../../extensions/equation';
 import { imageAlign, imageCaption } from '../../extensions/figureImage';
 import { safeColor, type Alignment } from '../../extensions/objectAttrs';
@@ -14,26 +15,40 @@ import { readTextBox, TEXT_BOX_MAX, TEXT_BOX_MIN, TEXT_BOX_WRAP_LABELS, TEXT_BOX
 import type { RibbonContext } from '../ribbon/context';
 import { EquationDialog, type EquationTarget } from './EquationDialog';
 
-type Selected = { kind: 'inlineMath' | 'blockMath' | 'shape' | 'image' | 'textBox'; pos: number; attrs: Record<string, unknown> } | null;
+type Selected = { kind: 'inlineMath' | 'blockMath' | 'shape' | 'image' | 'textBox' | 'diagram'; pos: number; attrs: Record<string, unknown> } | null;
 
-/** The object the selection is on: a selected equation, shape or picture, or the text box the cursor is in. */
+/** The object the selection is on: a selected equation, shape, picture or diagram, or the text box the cursor is in. */
 export function selectedObject(editor: Editor): Selected {
   if (!editor || editor.isDestroyed) return null;
   const sel = editor.state.selection;
   if (sel instanceof NodeSelection) {
     const name = sel.node.type.name;
-    if (name === 'inlineMath' || name === 'blockMath' || name === 'shape' || name === 'image') return { kind: name, pos: sel.from, attrs: sel.node.attrs };
+    if (name === 'inlineMath' || name === 'blockMath' || name === 'shape' || name === 'image' || name === 'diagram') return { kind: name, pos: sel.from, attrs: sel.node.attrs };
   }
   const $from = sel.$from;
   for (let d = $from.depth; d > 0; d--) if ($from.node(d).type.name === 'textBox') return { kind: 'textBox', pos: $from.before(d), attrs: $from.node(d).attrs };
   return null;
 }
 
-/** A text field that changes the document when the user is done (Enter or leaving the field), not on every key. */
+/**
+ * A text field that changes the document when the user is done (Enter or leaving the field), not on every key.
+ * What it edits is taken when it gains focus: clicking another object of the same kind re-renders the bar for that
+ * object before this field loses focus, and the text typed here must still go to the object it was typed for, not
+ * be written to the new one or thrown away (Phase 6).
+ */
 function CommitInput({ value, onCommit, label, className, type = 'text', placeholder, min, max }: { value: string; onCommit: (v: string) => void; label: string; className?: string; type?: string; placeholder?: string; min?: number; max?: number }) {
   const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  const commit = () => draft !== value && onCommit(draft);
+  const target = useRef<{ value: string; onCommit: (v: string) => void } | null>(null);
+  // While the field is being edited, a new value (another object selected) must not replace what was typed.
+  useEffect(() => {
+    if (!target.current) setDraft(value);
+  }, [value]);
+  const commit = () => {
+    const t = target.current ?? { value, onCommit };
+    if (draft === t.value) return;
+    t.onCommit(draft);
+    if (target.current) target.current = { ...t, value: draft };
+  };
   return (
     <input
       aria-label={label}
@@ -43,14 +58,20 @@ function CommitInput({ value, onCommit, label, className, type = 'text', placeho
       max={max}
       value={draft}
       placeholder={placeholder}
+      onFocus={() => (target.current = { value, onCommit })}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
+      onBlur={() => {
+        commit();
+        target.current = null;
+        // Show the value of what is selected now (the same object, or the one the user clicked).
+        setDraft(value);
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
           commit();
         }
-        if (e.key === 'Escape') setDraft(value);
+        if (e.key === 'Escape') setDraft(target.current?.value ?? value);
       }}
       className={cn('h-7 rounded-md border border-border bg-surface px-2 text-xs text-fg placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40', className)}
     />
@@ -128,9 +149,12 @@ const OUTLINE_WIDTHS = [0, 1, 2, 3, 4, 6, 8];
  * (like the table tools). Also hosts the equation dialog, which the Insert tab, a double-click on an equation and
  * Enter on a selected one open.
  */
-export function ObjectBar({ editor }: RibbonContext) {
+export function ObjectBar({ editor, diagramHost, textWidthPx }: RibbonContext) {
   const selected = useEditorState({ editor, selector: ({ editor: e }) => selectedObject(e) });
   const [dialog, setDialog] = useState<EquationTarget | null>(null);
+  const toast = useToast();
+  // Phase 6 (NODE): every way of editing a diagram (double-click, Enter, the ribbon) clamps it to this width.
+  useEffect(() => setDiagramTextWidth(editor, textWidthPx), [editor, textWidthPx]);
 
   useEffect(
     () =>
@@ -209,6 +233,31 @@ export function ObjectBar({ editor }: RibbonContext) {
         <CommitInput label="Alternative text" value={String(attrs.alt ?? '')} placeholder="Describe the picture" onCommit={(alt) => set({ alt: alt.trim() || null })} className="w-44" />
         <Separator vertical />
         {remove('Delete picture')}
+      </Bar>
+    );
+  } else if (kind === 'diagram') {
+    // Phase 6 (NODE): a diagram's alignment, caption, alternative text and title, as for pictures. Centre is stored
+    // as no alignment, so a diagram that is only centred stays readable by older versions (content schema 2).
+    bar = (
+      <Bar label="Selected diagram">
+        {diagramHost && (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<Pencil size={14} />}
+            onClick={() => void openDiagramEditor(editor, pos, diagramHost, textWidthPx).catch((err: unknown) => toast(err instanceof Error ? err.message : String(err), 'error'))}
+          >
+            Edit diagram…
+          </Button>
+        )}
+        <Separator vertical />
+        <AlignButtons value={diagramAlign(attrs)} onChange={(align) => set({ align: align === 'center' ? null : align })} />
+        <Separator vertical />
+        <CommitInput label="Diagram title" value={String(attrs.title ?? '')} placeholder="Title" onCommit={(t) => set({ title: t.trim() || 'Diagram' })} className="w-36" />
+        <CommitInput label="Caption" value={diagramCaption(attrs)} placeholder="Caption (e.g. Figure 1. …)" onCommit={(c) => set({ caption: c.trim() || null })} className="w-56" />
+        <CommitInput label="Alternative text" value={String(attrs.alt ?? '')} placeholder="Describe the diagram (else its title)" onCommit={(alt) => set({ alt: alt.trim() || null })} className="w-48" />
+        <Separator vertical />
+        {remove('Delete diagram')}
       </Bar>
     );
   } else if (kind === 'textBox') {

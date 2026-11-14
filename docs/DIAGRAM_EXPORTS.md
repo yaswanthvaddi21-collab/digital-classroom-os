@@ -33,7 +33,9 @@ Every image export is drawn from the diagram's **content** (what is saved), not 
   - PDF page size, orientation and fit.
 
   The dialog shows the resulting pixel size or page count before you export.
-- The document embed (`DiagramEditorApi.renderPng/renderSvg/renderPdf`) uses the same renderer.
+- The document embed (`DiagramEditorApi.renderPng/renderSvg/renderPdf`) uses the same renderer. So does the off-screen
+  preview added in Phase 6 (`renderDiagramPreview` in `preview.ts`, tested in `preview.test.ts`), which Document Studio
+  uses to redraw a missing preview and for the SVG in DOCX, ODT and print ([ADR 0013](adr/0013-document-diagram-integration.md)).
 
 ## Left out, and said so in the toast
 

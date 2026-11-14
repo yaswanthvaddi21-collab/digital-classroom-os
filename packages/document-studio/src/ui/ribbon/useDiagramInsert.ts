@@ -1,7 +1,7 @@
 import { useToast } from '@dcos/ui';
 import type { Editor } from '@tiptap/core';
 import { useState } from 'react';
-import { RELOADED_NOT_INSERTED, type DiagramHost, type DiagramStart } from '../../extensions/diagramEmbed';
+import { DIAGRAM_NOT_PLACED, diagramRoomAt, RELOADED_NOT_INSERTED, type DiagramHost, type DiagramStart } from '../../extensions/diagramEmbed';
 
 /**
  * Creating and inserting diagrams, shared by the Insert tab and the Diagram tab. `run` guards against double
@@ -29,10 +29,18 @@ export function useDiagramInsert(editor: Editor, host: DiagramHost | undefined, 
     if (!host) return;
     if (editor.isDestroyed) throw new Error(RELOADED_NOT_INSERTED);
     const diagram = await host.edit(null, start);
-    if (diagram && editor.isDestroyed) throw new Error(RELOADED_NOT_INSERTED);
+    if (diagram && editor.isDestroyed) {
+      host.settle?.(diagram, false);
+      throw new Error(RELOADED_NOT_INSERTED);
+    }
     if (diagram) {
-      editor.chain().focus().insertDiagram(diagram, maxWidth).run();
-      toast('Diagram added. Double-click it to edit.', 'success');
+      // Inside a table cell, list item or text box: that container's share of the page's text width (Round 3).
+      const room = diagramRoomAt(editor.view, editor.state.selection.from, maxWidth);
+      const placed = editor.chain().focus().insertDiagram(diagram, room > 0 ? Math.min(room, maxWidth) : maxWidth).run();
+      // The host keeps the dialog's edits until it hears they are in the document (Phase 6 DIALOG).
+      host.settle?.(diagram, placed);
+      if (!placed) throw new Error(DIAGRAM_NOT_PLACED);
+      toast('Diagram added. Double-click or double-tap it, or select it and press Enter, to edit it.', 'success');
     }
   };
 

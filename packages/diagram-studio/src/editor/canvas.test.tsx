@@ -6,7 +6,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DiagramEditor, type DiagramEditorApi } from '../DiagramEditor';
 import type { DiagramContent } from '../types';
 import { CANVAS_SHORTCUTS } from './canvasShortcuts';
-import { CLIPBOARD_FORMAT, CLIPBOARD_MIME } from './canvasModel';
+import { CLIPBOARD_FORMAT, CLIPBOARD_MIME, NEWER_SHAPES_MESSAGE, readClipboardPayload } from './canvasModel';
+import { ToastProvider } from '@dcos/ui';
 import { SHORTCUTS } from './shortcuts';
 
 beforeAll(() => {
@@ -253,8 +254,11 @@ describe('the system clipboard', () => {
     const { e, store } = clipboardEvent('copy');
     document.dispatchEvent(e);
     expect(e.defaultPrevented).toBe(true);
-    expect(JSON.parse(store['text/plain'])).toMatchObject({ format: CLIPBOARD_FORMAT, nodes: [{ id: 'a' }] });
-    expect(store[CLIPBOARD_MIME]).toBe(store['text/plain']);
+    expect(JSON.parse(store[CLIPBOARD_MIME])).toMatchObject({ format: CLIPBOARD_FORMAT, nodes: [{ id: 'a' }] });
+    // Phase 6: other apps get the shape's label as text (not the JSON); the HTML carries the JSON for this app's pages.
+    expect(store['text/plain']).toBe('A');
+    expect(store['text/html']).toContain('<p>A</p>');
+    expect(readClipboardPayload((t) => (t === 'text/html' ? store['text/html'] : ''))!.diagram.nodes.map((n) => n.data.label)).toEqual(['A']);
   });
 
   it('pastes shapes copied in another diagram (or tab) from the paste event', () => {
@@ -269,6 +273,109 @@ describe('the system clipboard', () => {
     expect(pasted).toHaveLength(2);
     expect(pasted.map((n) => n.data.label)).toEqual(['X', 'Y']);
     expect(pasted.every((n) => !['x', 'y'].includes(n.id))).toBe(true);
+  });
+
+  // ── Phase 6 (CLIPBOARD) ──
+  const copyA = (nodeEl: (id: string) => HTMLElement, key: (init: Record<string, unknown>) => void) => {
+    fireEvent.click(nodeEl('a'));
+    nodeEl('a').focus();
+    key({ key: 'c', ctrlKey: true });
+    const { e } = clipboardEvent('copy');
+    document.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+  };
+  const labels = (c: DiagramContent) => c.nodes.map((n) => n.data.label);
+  const docFigure = (source: unknown) => `<p>before</p><figure data-type="diagram" data-diagram="${JSON.stringify({ source, previewId: 'p1', naturalWidth: 400, naturalHeight: 300, width: 400, height: 300, title: 'Flow' }).replace(/"/g, '&quot;')}"></figure>`;
+
+  it('Phase 6: a paste event with other data never pastes the older in-memory shapes (the window lost focus)', () => {
+    const { nodeEl, key, content } = mount();
+    copyA(nodeEl, key);
+    act(() => void window.dispatchEvent(new Event('blur'))); // the user copied something in another app
+    nodeEl('a').focus();
+    key({ key: 'v', ctrlKey: true });
+    const { e } = clipboardEvent('paste', { 'text/html': '<p>hello</p>', 'text/plain': 'hello' });
+    act(() => void document.dispatchEvent(e));
+    expect(labels(content())).toEqual(['A', 'B', 'C']);
+  });
+
+  it('Phase 6: a copy elsewhere on the page makes Ctrl+V read the system clipboard instead of the in-memory shapes', () => {
+    const { nodeEl, key, content } = mount();
+    copyA(nodeEl, key);
+    // The user copies text outside the editor (for example the document behind a dialog, or a text field).
+    const field = document.body.appendChild(document.createElement('input'));
+    field.focus();
+    act(() => void document.dispatchEvent(clipboardEvent('copy').e));
+    field.remove();
+    nodeEl('a').focus();
+    key({ key: 'v', ctrlKey: true });
+    expect(labels(content())).toEqual(['A', 'B', 'C']); // not pasted from memory at the key press
+    const { e } = clipboardEvent('paste', { 'text/plain': 'some text' });
+    act(() => void document.dispatchEvent(e));
+    expect(labels(content())).toEqual(['A', 'B', 'C']);
+  });
+
+  // Round 3 (verifier, CLIPBOARD): text selected inside the editor (the shortcut help, a panel) and copied is what the
+  // user copied last; Ctrl+V used to paste the older in-memory shapes without looking at the clipboard.
+  it('Phase 6: after copying text selected inside the editor, Ctrl+V does not paste the older in-memory shapes', () => {
+    const { nodeEl, key, content } = mount();
+    copyA(nodeEl, key);
+    nodeEl('a').focus();
+    const sel = vi.spyOn(window, 'getSelection').mockReturnValue({ toString: () => 'Undo' } as Selection);
+    act(() => void document.dispatchEvent(clipboardEvent('copy').e));
+    sel.mockRestore();
+    nodeEl('a').focus();
+    key({ key: 'v', ctrlKey: true });
+    expect(labels(content())).toEqual(['A', 'B', 'C']); // not pasted from memory at the key press
+    act(() => void document.dispatchEvent(clipboardEvent('paste', { 'text/plain': 'Undo' }).e));
+    expect(labels(content())).toEqual(['A', 'B', 'C']);
+  });
+
+  it('Phase 6: after pasting shapes copied elsewhere, the next Ctrl+V pastes those again, not an older copy of this diagram', () => {
+    const { nodeEl, key, content } = mount();
+    copyA(nodeEl, key);
+    const payload = JSON.stringify({ format: CLIPBOARD_FORMAT, version: 1, source: 'elsewhere', serial: 1, schemaVersion: 2, nodes: [node('x', 5000, 5000)], edges: [] });
+    const pasteX = () => {
+      nodeEl('a').focus();
+      key({ key: 'v', ctrlKey: true });
+      act(() => void document.dispatchEvent(clipboardEvent('paste', { [CLIPBOARD_MIME]: payload }).e));
+    };
+    act(() => void window.dispatchEvent(new Event('blur'))); // X was copied in another tab
+    pasteX();
+    // No blur in between: the in-memory copy (A) must still not win over the system clipboard (X).
+    pasteX();
+    expect(labels(content())).toEqual(['A', 'B', 'C', 'X', 'X']);
+  });
+
+  it('Phase 6: a diagram copied from a document pastes as its shapes and connectors', () => {
+    const { nodeEl, key, content } = mount();
+    nodeEl('a').focus();
+    key({ key: 'v', ctrlKey: true });
+    const source = { ...flat(), nodes: [node('p', 0, 0), node('q', 300, 0)], edges: [{ ...flat().edges[0], id: 'pq', source: 'p', target: 'q' }] };
+    const { e } = clipboardEvent('paste', { 'text/html': docFigure(source), 'text/plain': '[Diagram: Flow]' });
+    act(() => void document.dispatchEvent(e));
+    expect(e.defaultPrevented).toBe(true);
+    const c = content();
+    expect(labels(c)).toEqual(['A', 'B', 'C', 'P', 'Q']);
+    expect(c.edges).toHaveLength(2);
+    const [p, q] = c.nodes.slice(3).map((n) => n.id);
+    expect(c.edges[1]).toMatchObject({ source: p, target: q });
+  });
+
+  it('Phase 6: a document diagram from a newer version is refused with the existing message', async () => {
+    const api = createRef<DiagramEditorApi>();
+    const view = render(
+      <ToastProvider>
+        <DiagramEditor initialContent={flat()} title="Test" apiRef={api} onChange={() => {}} />
+      </ToastProvider>,
+    );
+    const a = view.container.querySelector('.react-flow__node[data-id="a"]') as HTMLElement;
+    a.focus();
+    fireEvent.keyDown(a, { key: 'v', ctrlKey: true });
+    const { e } = clipboardEvent('paste', { 'text/html': docFigure({ ...flat(), schemaVersion: 99 }) });
+    act(() => void document.dispatchEvent(e));
+    expect(e.defaultPrevented).toBe(true);
+    expect(await screen.findByText(NEWER_SHAPES_MESSAGE)).toBeTruthy();
+    expect(api.current!.getContent().nodes).toHaveLength(3);
   });
 
   it('Ctrl+X removes the shapes it copied, but not locked ones', async () => {

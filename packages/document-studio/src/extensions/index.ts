@@ -8,6 +8,7 @@ import { TextStyleKit } from '@tiptap/extension-text-style';
 import { CharacterCount, Placeholder } from '@tiptap/extensions';
 import StarterKit from '@tiptap/starter-kit';
 import { DiagramEmbed, type DiagramHost } from './diagramEmbed';
+import { DiagramClipboard } from './diagramClipboard'; // Phase 6 CLIPBOARD
 import { PageBreak } from './pageBreak';
 import { RemoteImages } from './remoteImages';
 import { SearchReplace } from './searchReplace';
@@ -65,12 +66,17 @@ export function documentExtensions(
     TextBox,
     // G-LAYOUT: section breaks (a new node type, so schema 2).
     SectionBreak,
+    // @phase6:CLIPBOARD — DiagramClipboard (extensions/diagramClipboard.ts): paste of Diagram Studio shapes, copy as
+    // '[Diagram: title]' plus the preview <img> for other apps. Anything stored beyond V020_VOCABULARY makes schemaFor()
+    // return 3 (compat.ts, ADR 0013). It adds no node, mark or attribute, so the content schema is unchanged.
+    DiagramClipboard.configure({ host: opts.diagramHost ?? null }),
   ];
 }
 
 export { DiagramEmbed, PageBreak, RemoteImages, SearchReplace, TableOfContents };
 export { countRemoteImages, isRemoteImageSrc, REMOTE_IMAGE_LABEL } from './remoteImages';
 export * from './diagramEmbed';
+export { DiagramClipboard, diagramClipboardText, holdsShapes, SHAPES_CLIPBOARD_FORMAT, SHAPES_CLIPBOARD_HTML_ATTR, SHAPES_CLIPBOARD_MIME } from './diagramClipboard'; // Phase 6 CLIPBOARD
 export * from './searchReplace';
 export { collectHeadings } from './tableOfContents';
 export * from './paragraphFormat'; // G-FORMAT

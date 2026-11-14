@@ -2,10 +2,21 @@ import type { DiagramEditorApi } from '@dcos/diagram-studio';
 import type { DiagramHost, DiagramStart, EmbeddedDiagram } from '@dcos/document-studio';
 import type { ItemSummary } from '@dcos/local-storage';
 import { Button, Dialog, Input, useToast } from '@dcos/ui';
-import { GitFork, Info, Loader2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { AlertTriangle, GitFork, Info, LifeBuoy, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { relativeTime } from '../lib/format';
-import { storage } from '../lib/storage';
+import { diagramFromShapes } from './diagramClipboardHost'; // Phase 6 CLIPBOARD
+import {
+  deleteDiagramDialogDraft,
+  holdDiagramDialogSession,
+  keepDiagramDialogDraftLocally,
+  listDiagramDialogDrafts,
+  newDiagramDialogSession,
+  saveDiagramDialogDraft,
+  storage,
+  type DiagramDialogBase,
+  type DiagramDialogDraft,
+} from '../lib/storage';
 import { MODULES } from '../modules';
 
 const loadDiagramStudio = () => import('@dcos/diagram-studio');
@@ -28,17 +39,41 @@ export function chooseDrawioFile(): Promise<{ text: string; name: string } | nul
 interface EditRequest {
   current: EmbeddedDiagram | null;
   start?: DiagramStart;
+  /** Phase 6: reopening edits kept from an earlier dialog (see listDiagramDialogDrafts). */
+  recovered?: DiagramDialogDraft;
   resolve: (result: EmbeddedDiagram | null) => void;
 }
+
+/** How long the dialog waits after the last change before keeping its edits as a draft. */
+export const DIALOG_DRAFT_DELAY_MS = 1000;
+
+const baseOf = (d: EmbeddedDiagram): DiagramDialogBase => ({
+  source: d.source,
+  previewId: d.previewId ?? null,
+  naturalWidth: d.naturalWidth,
+  naturalHeight: d.naturalHeight,
+  title: d.title,
+});
 
 /**
  * The app's side of embedded diagrams: owns the diagram editor dialog, the library picker and storage, and
  * gives Document Studio a small interface to them. Render `dialogs` once inside the page.
+ *
+ * With `docId` (the document being edited), unsaved edits in the dialog are kept as drafts of that document, and
+ * `recover` reopens such a draft; it resolves with the saved diagram, which the caller puts into the document.
  */
-export function useDiagramHost(): { host: DiagramHost; dialogs: React.ReactNode; active: boolean } {
+export function useDiagramHost(options: { docId?: string } = {}): {
+  host: DiagramHost;
+  dialogs: React.ReactNode;
+  active: boolean;
+  recover: (draft: DiagramDialogDraft) => Promise<EmbeddedDiagram | null>;
+} {
+  const { docId } = options;
   const toast = useToast();
   const [editing, setEditing] = useState<EditRequest | null>(null);
   const [picking, setPicking] = useState<((r: DiagramStart | null) => void) | null>(null);
+  // Saved dialogs whose edits are kept as a draft until Document Studio says they are in the document (settle).
+  const unsettled = useRef(new WeakMap<EmbeddedDiagram, (applied: boolean) => void>());
 
   const host = useMemo<DiagramHost>(
     () => ({
@@ -71,8 +106,38 @@ export function useDiagramHost(): { host: DiagramHost; dialogs: React.ReactNode;
         if (notes.length) toast(`Exported for diagrams.net. ${notes.join(' ')}`, 'info');
         return xml;
       },
+      // Phase 6 (ADR 0013): the diagram drawn off screen by Diagram Studio's vector renderer, with no editor shown.
+      // Stores nothing and never changes `source` (a newer diagram is drawn read-only).
+      renderPreview: async (source, title) => {
+        const { renderDiagramPreview } = await loadDiagramStudio();
+        const r = await renderDiagramPreview(source, { title });
+        return r && { png: r.png, svg: r.svg, width: r.width, height: r.height };
+      },
+      // Phase 6 (NODE): a preview redrawn from the diagram's data (a missing one) is stored like any other preview.
+      storePreview: async (image) => (await storage.putAttachment(image, image.type || 'image/png')).id,
+      // Phase 6 (CLIPBOARD): shapes copied in Diagram Studio pasted into the document become an embedded diagram.
+      diagramFromShapes: (get) => diagramFromShapes(get, { loadStudio: loadDiagramStudio, putAttachment: async (png) => (await storage.putAttachment(png, 'image/png')).id, toast }),
+      // Round 3: the saved dialog's draft is removed only once its diagram is in the document. When it could not be
+      // put there (the document was reloaded, or the diagram removed, while the dialog was open), it stays offered.
+      settle: (diagram, applied) => {
+        const done = unsettled.current.get(diagram);
+        unsettled.current.delete(diagram);
+        done?.(applied);
+      },
     }),
     [toast],
+  );
+
+  const recover = useCallback(
+    (draft: DiagramDialogDraft) =>
+      new Promise<EmbeddedDiagram | null>((resolve) =>
+        setEditing({
+          current: draft.base && { ...draft.base, previewId: draft.base.previewId ?? '' },
+          recovered: draft,
+          resolve,
+        }),
+      ),
+    [],
   );
 
   const dialogs = (
@@ -80,7 +145,9 @@ export function useDiagramHost(): { host: DiagramHost; dialogs: React.ReactNode;
       {editing && (
         <DiagramEditDialog
           request={editing}
-          onDone={(result) => {
+          docId={docId}
+          onDone={(result, settle) => {
+            if (result && settle) unsettled.current.set(result, settle);
             editing.resolve(result);
             setEditing(null);
           }}
@@ -97,29 +164,166 @@ export function useDiagramHost(): { host: DiagramHost; dialogs: React.ReactNode;
     </>
   );
   // While a dialog is open, the page must keep the editor it will write into (see EditorPage).
-  return { host, dialogs, active: !!editing || !!picking };
+  return { host, dialogs, active: !!editing || !!picking, recover };
 }
 
 type Studio = Awaited<ReturnType<typeof loadDiagramStudio>>;
 
-function DiagramEditDialog({ request, onDone }: { request: EditRequest; onDone: (r: EmbeddedDiagram | null) => void }) {
+/** Told to every recovery offer on the page when kept dialog edits were added or removed in this tab. */
+const DRAFTS_CHANGED = 'dcos-diagram-dialog-drafts-changed';
+const announceDiagramDraftsChanged = () => window.dispatchEvent(new Event(DRAFTS_CHANGED));
+
+/**
+ * Puts focus back in the document once it is on the page (it may be remounting), unless the user has put it somewhere
+ * else meanwhile. For when the element a dialog was opened from no longer exists.
+ */
+function focusDocumentSoon(tries = 30) {
+  const step = (left: number) => {
+    const active = document.activeElement;
+    // Somewhere the user put it (not the page itself, nor inside the dialog that is closing).
+    if (active && active !== document.body && active.isConnected && !active.closest('dialog:not([open])')) return;
+    const doc = document.querySelector<HTMLElement>('.ProseMirror[contenteditable="true"]');
+    if (doc) doc.focus({ preventScroll: true });
+    else if (left > 0) setTimeout(() => step(left - 1), 50);
+  };
+  setTimeout(() => step(tries), 0);
+}
+
+/** Whether the main pointer is a finger: focusing a text field then brings up the soft keyboard. */
+const coarsePointer = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+const isTextField = (el: Element | null) => !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable);
+const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+function DiagramEditDialog({
+  request,
+  docId,
+  onDone,
+}: {
+  request: EditRequest;
+  docId?: string;
+  /** `settle`, when given, is told whether the saved diagram got into the document (see DiagramHost.settle). */
+  onDone: (r: EmbeddedDiagram | null, settle?: (applied: boolean) => void) => void;
+}) {
   const toast = useToast();
   const ref = useRef<HTMLDialogElement>(null);
+  const body = useRef<HTMLDivElement>(null);
   const api = useRef<DiagramEditorApi>(null);
   const [studio, setStudio] = useState<Studio | null>(null);
-  const [title, setTitle] = useState(request.current?.title ?? request.start?.title ?? 'Diagram');
+  const recovered = request.recovered;
+  const [title, setTitle] = useState(recovered?.title ?? request.current?.title ?? request.start?.title ?? 'Diagram');
   // Changed from what the dialog opened with: a new diagram fresh from its template or import is not yet a change.
-  const [dirty, setDirty] = useState(false);
+  // Recovered edits are changes until they are saved.
+  const [dirty, setDirty] = useState(!!recovered);
   const [saving, setSaving] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
+  // Shown inside the dialog: toasts outside a modal dialog can be hidden behind it (RG-8).
+  const [error, setError] = useState<string | null>(null);
   const isNew = !request.current;
   const finished = useRef(false);
-  const finish = useCallback(
-    (r: EmbeddedDiagram | null) => {
-      finished.current = true;
-      onDone(r);
+  // A finger as the main pointer: the dialog's body, not the title field, takes focus on open (see below).
+  const [touch] = useState(coarsePointer);
+  // Where focus goes back to when the dialog closes: the document, the diagram or the button that opened it.
+  const [opener] = useState(() => (typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null));
+
+  // ── Drafts of unsaved edits (Phase 6): kept while dirty, offered again by the document if the page goes away. ──
+  const [session] = useState(() => recovered?.session ?? newDiagramDialogSession());
+  const base = useMemo(() => recovered?.base ?? (request.current ? baseOf(request.current) : null), [recovered, request]);
+  const latest = useRef({ title, dirty });
+  latest.current = { title, dirty };
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftWrite = useRef<Promise<void>>(Promise.resolve());
+  const snapshot = useCallback((): Omit<DiagramDialogDraft, 'savedAt'> | null => {
+    const editor = api.current;
+    if (!docId || !editor || editor.isReadOnly()) return null;
+    return { docId, session, base, source: editor.getContent(), title: latest.current.title };
+  }, [docId, session, base]);
+  const writeDraft = useCallback(() => {
+    if (draftTimer.current) clearTimeout(draftTimer.current);
+    draftTimer.current = null;
+    if (finished.current || !latest.current.dirty) return;
+    const d = snapshot();
+    if (!d) return;
+    draftWrite.current = draftWrite.current.then(() => saveDiagramDialogDraft(d)).catch(() => undefined);
+  }, [snapshot]);
+  const keepLocally = useCallback(() => {
+    if (finished.current || !latest.current.dirty) return;
+    const d = snapshot();
+    if (d) keepDiagramDialogDraftLocally(d);
+  }, [snapshot]);
+  const changed = useCallback(() => {
+    setDirty(true);
+    latest.current.dirty = true;
+    setError(null);
+    if (!docId) return;
+    if (draftTimer.current) clearTimeout(draftTimer.current);
+    draftTimer.current = setTimeout(writeDraft, DIALOG_DRAFT_DELAY_MS);
+  }, [docId, writeDraft]);
+  const dropDraft = useCallback(async () => {
+    if (draftTimer.current) clearTimeout(draftTimer.current);
+    draftTimer.current = null;
+    if (!docId) return;
+    // After a write still in flight, so it cannot bring the draft back.
+    await draftWrite.current;
+    await deleteDiagramDialogDraft(docId, session).catch(() => undefined);
+  }, [docId, session]);
+
+  // Other tabs do not offer this draft while the dialog is open.
+  useEffect(() => (docId ? holdDiagramDialogSession(session) : undefined), [docId, session]);
+
+  // Leaving the page while dirty: warn, and keep the edits synchronously (the database write may not finish).
+  useEffect(() => {
+    if (!docId) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (finished.current || !latest.current.dirty) return;
+      keepLocally();
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    const onPageHide = () => {
+      keepLocally();
+      writeDraft();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') onPageHide();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('pagehide', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [docId, keepLocally, writeDraft]);
+
+  // Unmounted without Save or Cancel (the page or the document editor went away): keep the edits now. A layout
+  // cleanup runs before the diagram editor below lets go of its API, so the latest content is still readable.
+  useLayoutEffect(
+    () => () => {
+      if (finished.current || !latest.current.dirty) return;
+      keepLocally();
+      writeDraft();
     },
-    [onDone],
+    [keepLocally, writeDraft],
+  );
+
+  const finish = useCallback(
+    (r: EmbeddedDiagram | null, settle?: (applied: boolean) => void) => {
+      finished.current = true;
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+      // Closing (not only removing) the dialog lets the browser hand focus back; do it ourselves where it does not.
+      if (ref.current?.open) ref.current.close();
+      onDone(r, settle);
+      const active = document.activeElement;
+      const lost = !active || active === document.body || !!ref.current?.contains(active);
+      // (Safari does not focus a clicked button, so the page itself may have been the "opener".)
+      const back = opener && opener !== document.body && opener.isConnected ? opener : null;
+      if (back && back !== active && lost) back.focus({ preventScroll: true });
+      // Recovered edits: the offer's button is gone and the editor is remounted with them, so focus goes to the
+      // document once it is back. (Document Studio puts focus back itself after its own edits and inserts.)
+      else if (!back && lost && recovered) focusDocumentSoon();
+    },
+    [onDone, opener, recovered],
   );
   const apiRef = useCallback((a: DiagramEditorApi | null) => {
     api.current = a;
@@ -128,26 +332,31 @@ function DiagramEditDialog({ request, onDone }: { request: EditRequest; onDone: 
 
   const initial = useMemo(() => {
     if (!studio) return null;
+    if (recovered) return recovered.source;
     if (request.current) return request.current.source;
     if (request.start?.source) return request.start.source;
     const t = studio.diagramTemplates.find((x) => x.id === request.start?.templateId);
     return t ? t.build() : studio.createEmptyDiagram();
-  }, [studio, request]);
+  }, [studio, request, recovered]);
 
   useEffect(() => {
     loadDiagramStudio().then(setStudio, (err) => {
-      toast(`The diagram editor could not be loaded: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      toast(`The diagram editor could not be loaded: ${messageOf(err)}`, 'error');
       finish(null);
     });
+    // On phones, focusing the title field would bring up the soft keyboard over the canvas: focus the dialog's body.
+    if (touch) body.current?.setAttribute('autofocus', '');
     ref.current?.showModal();
+    if (touch && isTextField(document.activeElement)) body.current?.focus({ preventScroll: true });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cancel = useCallback(() => {
     const question = isNew ? 'Discard this new diagram? It has not been added to your document.' : 'Discard your changes to this diagram?';
     if (dirty && !confirm(question)) return false;
+    void dropDraft();
     finish(null);
     return true;
-  }, [dirty, isNew, finish]);
+  }, [dirty, isNew, finish, dropDraft]);
 
   const save = async () => {
     const editor = api.current;
@@ -155,17 +364,41 @@ function DiagramEditDialog({ request, onDone }: { request: EditRequest; onDone: 
     if (!editor || editor.isReadOnly()) return;
     const content = editor.getContent();
     if (!content.nodes.length) {
-      toast('Add at least one shape before saving the diagram.', 'error');
+      setError('Add at least one shape before saving the diagram.');
       return;
     }
     setSaving(true);
+    setError(null);
     try {
       // The diagram data and its rendered preview are stored separately: data in the document, PNG as an attachment.
       const png = await editor.renderPng(2);
       const attachment = await storage.putAttachment(png.blob, 'image/png');
-      finish({ source: content, previewId: attachment.id, naturalWidth: png.width, naturalHeight: png.height, title: title.trim() || 'Diagram' });
+      const result = { source: content, previewId: attachment.id, naturalWidth: png.width, naturalHeight: png.height, title: title.trim() || 'Diagram' };
+      let settle: ((applied: boolean) => void) | undefined;
+      if (docId && (recovered || latest.current.dirty)) {
+        // The draft holds exactly what was saved here until the diagram is in the document. Recovered edits: the
+        // page puts them there and removes the draft once that worked. Other edits: Document Studio says whether it
+        // could put them there (host.settle); if not (the document was reloaded, or the diagram removed, while the
+        // dialog was open), they stay offered by "Recover diagram edits" instead of being lost (Round 3).
+        if (draftTimer.current) clearTimeout(draftTimer.current);
+        await draftWrite.current;
+        await saveDiagramDialogDraft({ docId, session, base, source: content, title: result.title }).catch(() => undefined);
+        if (!recovered) {
+          settle = (applied) => {
+            if (applied) {
+              void deleteDiagramDialogDraft(docId, session).catch(() => undefined);
+              return;
+            }
+            announceDiagramDraftsChanged();
+            toast('Your diagram changes were kept. Choose “Recover diagram edits” to put them into the document.', 'info');
+          };
+        }
+      } else {
+        await dropDraft();
+      }
+      finish(result, settle);
     } catch (err) {
-      toast(`The diagram could not be saved: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      setError(`The diagram could not be saved: ${messageOf(err)}`);
       setSaving(false);
     }
   };
@@ -191,10 +424,10 @@ function DiagramEditDialog({ request, onDone }: { request: EditRequest; onDone: 
         if (!finished.current && ref.current?.isConnected && !ref.current.open) ref.current.showModal();
       }}
     >
-      <div className="flex h-full flex-col">
+      <div ref={body} tabIndex={touch ? -1 : undefined} className="flex h-full flex-col outline-none">
         <header className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
           <GitFork size={16} className="text-accent" />
-          <Input aria-label="Diagram title" value={title} disabled={readOnly} onChange={(e) => (setTitle(e.target.value), setDirty(true))} className="h-8 max-w-xs" />
+          <Input aria-label="Diagram title" value={title} disabled={readOnly} onChange={(e) => (setTitle(e.target.value), changed())} className="h-8 max-w-xs" />
           <span role={readOnly ? 'status' : undefined} className={readOnly ? 'text-xs text-warning' : 'hidden text-xs text-muted md:inline'}>
             {hint}
           </span>
@@ -207,6 +440,21 @@ function DiagramEditDialog({ request, onDone }: { request: EditRequest; onDone: 
             </Button>
           </div>
         </header>
+        {error && (
+          <div role="alert" className="flex items-center gap-2 border-b border-danger/30 bg-danger/10 px-4 py-2 text-sm text-danger">
+            <AlertTriangle size={14} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+        {recovered && (
+          <div role="status" className="flex items-center gap-2 border-b border-accent/20 bg-accent-soft px-4 py-2 text-xs">
+            <LifeBuoy size={14} className="shrink-0 text-accent" />
+            <span>
+              Recovered unsaved changes{recovered.savedAt ? ` from ${relativeTime(recovered.savedAt)}` : ''}. {isNew ? 'Insert the diagram' : 'Save them'} to put them in your
+              document.
+            </span>
+          </div>
+        )}
         {!!request.start?.notes?.length && (
           <div role="status" className="flex gap-2 border-b border-warning/30 bg-warning/10 px-4 py-2 text-xs">
             <Info size={14} className="mt-0.5 shrink-0 text-warning" />
@@ -222,7 +470,7 @@ function DiagramEditDialog({ request, onDone }: { request: EditRequest; onDone: 
         )}
         <div className="min-h-0 flex-1">
           {Editor && initial ? (
-            <Editor initialContent={initial} title={title} onChange={() => setDirty(true)} apiRef={apiRef} />
+            <Editor initialContent={initial} title={title} onChange={changed} apiRef={apiRef} />
           ) : (
             <div className="p-6 text-sm text-muted">Opening the diagram editor…</div>
           )}
@@ -264,5 +512,114 @@ function LibraryPicker({ onDone }: { onDone: (r: DiagramStart | null) => void })
         </ul>
       )}
     </Dialog>
+  );
+}
+
+/**
+ * Offers diagram-dialog edits that were kept but never saved (the page was reloaded or closed, or the document
+ * editor went away while the dialog was open). "Recover diagram edits" reopens the dialog with them; once saved,
+ * they replace the diagram the dialog was opened on, or are added at the end when that diagram is gone. Nothing is
+ * removed until it is in the document or the user discards it. Hidden while `busy` (a diagram dialog is open).
+ */
+export function RecoverDiagramEdits({
+  docId,
+  busy,
+  recover,
+  apply,
+}: {
+  docId: string;
+  busy: boolean;
+  recover: (draft: DiagramDialogDraft) => Promise<EmbeddedDiagram | null>;
+  /** Changes the stored document and shows the result (useEditableItem's applyChange). */
+  apply: (change: (content: unknown) => unknown) => Promise<unknown>;
+}) {
+  const toast = useToast();
+  const [drafts, setDrafts] = useState<DiagramDialogDraft[]>([]);
+  const [working, setWorking] = useState(false);
+  // "Later": hidden until the document is opened again (or more edits are kept in this tab).
+  const [later, setLater] = useState(false);
+  const refresh = useCallback(() => listDiagramDialogDrafts(docId).then(setDrafts, () => setDrafts([])), [docId]);
+  useEffect(() => {
+    void refresh();
+    // Edits kept just now in this tab (a saved dialog whose diagram could not be put into the document).
+    const onChanged = () => {
+      setLater(false);
+      void refresh();
+    };
+    window.addEventListener(DRAFTS_CHANGED, onChanged);
+    return () => window.removeEventListener(DRAFTS_CHANGED, onChanged);
+  }, [refresh]);
+
+  const listed = drafts[0];
+  if (!listed || busy || later) return null;
+
+  const onRecover = async () => {
+    setWorking(true);
+    try {
+      // Read it again: another tab may have recovered or discarded it (or kept newer edits) since it was listed.
+      const draft = (await listDiagramDialogDrafts(docId).catch(() => [] as DiagramDialogDraft[])).find((d) => d.session === listed.session);
+      if (!draft) {
+        toast('These diagram edits were already recovered or discarded, in another tab or window.', 'info');
+        return;
+      }
+      const result = await recover(draft);
+      // Cancelled: the dialog removed the draft if the user agreed to discard it, else it is still offered.
+      if (!result) return;
+      const { applyRecoveredDiagram } = await import('../lib/diagramRecovery');
+      let placed: 'replaced' | 'appended' = 'replaced';
+      await apply((content) => {
+        const r = applyRecoveredDiagram(content, draft.base, result);
+        placed = r.placed;
+        return r.content;
+      });
+      await deleteDiagramDialogDraft(docId, draft.session).catch(() => undefined);
+      toast(
+        placed === 'replaced'
+          ? 'Recovered diagram edits saved in the document.'
+          : draft.base
+            ? 'The diagram you were editing is no longer in the document, so the recovered diagram was added at the end.'
+            : 'The recovered diagram was added at the end of the document.',
+        'success',
+      );
+    } catch (err) {
+      toast(`The recovered diagram could not be put into the document. ${messageOf(err)} Your diagram edits are still kept.`, 'error');
+    } finally {
+      setWorking(false);
+      await refresh();
+    }
+  };
+
+  const onDiscard = async () => {
+    if (!confirm('Discard these unsaved diagram changes? This cannot be undone.')) return;
+    await deleteDiagramDialogDraft(docId, listed.session).catch((err) => toast(`Could not discard them. ${messageOf(err)}`, 'error'));
+    await refresh();
+  };
+
+  return (
+    <div
+      role="status"
+      aria-label="Unsaved diagram edits"
+      // On a phone the text takes the full width and the buttons go below it (not a narrow column beside them).
+      className="fixed inset-x-3 bottom-3 z-50 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-accent/30 bg-surface px-3 py-2.5 text-sm shadow-lg sm:inset-x-auto sm:left-4 sm:max-w-md sm:px-4 sm:py-3"
+    >
+      <span className="flex min-w-[min(100%,16rem)] flex-1 items-start gap-2">
+        <LifeBuoy size={16} className="mt-0.5 shrink-0 text-accent" />
+        <span>
+          Unsaved changes to the diagram “{listed.title || 'Diagram'}”{listed.savedAt ? ` from ${relativeTime(listed.savedAt)}` : ''} were kept.
+          {drafts.length > 1 ? ` ${drafts.length - 1} more after this one.` : ''}
+        </span>
+      </span>
+      <div className="ml-auto flex gap-2">
+        <Button size="sm" variant="primary" disabled={working} onClick={() => void onRecover()}>
+          Recover diagram edits
+        </Button>
+        <Button size="sm" disabled={working} onClick={() => void onDiscard()}>
+          Discard
+        </Button>
+        <Button size="sm" variant="ghost" disabled={working} onClick={() => setLater(true)} title="Hide this until the document is opened again; the edits stay kept">
+          Later
+        </Button>
+      </div>
+    </div>
   );
 }

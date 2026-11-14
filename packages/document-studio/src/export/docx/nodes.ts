@@ -61,7 +61,7 @@ export const NODE_HANDLERS: Record<string, NodeHandler> = {
   },
   horizontalRule: () => [new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'BBBBBB', space: 1 } }, children: [] })],
   image: (node, ctx) => [imageParagraph(node, ctx), ...captionBlocks(node)], // G-INSERT: caption under the picture
-  diagram: (node, ctx) => [diagramParagraph(node, ctx)],
+  diagram: (node, ctx) => [diagramParagraph(node, ctx), ...captionBlocks(node)], // Phase 6: caption under the diagram
   table: (node, ctx, api) => [tableBlock(node, ctx, api), new Paragraph({})],
   pageBreak: () => [new Paragraph({ children: [new PageBreak()] })],
   // A real Word table of contents (a TOC field over Heading 1–4), written with an entry per heading as its cached

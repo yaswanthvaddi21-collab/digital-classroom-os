@@ -1,12 +1,13 @@
 import { Button, downloadBlob, safeFileName, useToast } from '@dcos/ui';
 import type { JSONContent } from '@tiptap/core';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
-import { FileJson, FileText, FileType, Printer, ShieldAlert } from 'lucide-react';
+import { FileArchive, FileJson, FileText, FileType, Printer, ShieldAlert } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { documentContentCss } from './contentCss';
 import { exportDocx } from './export/docx';
 import { exportOdt } from './export/odt'; // G-FILES
-import { printDocument } from './export/print';
+import { DCOSDOC_EXTENSION, exportDcosdoc } from './export/dcosdoc'; // Phase 6
+import { collectPrintDiagrams, PRINT_ONE_PLACEHOLDER, PRINT_PLACEHOLDERS, printDocument } from './export/print';
 import { marginBoxSupport } from './export/printSupport';
 import { ExportReport, exportToast } from './export/report';
 import { documentToText } from './export/text';
@@ -224,8 +225,15 @@ function DocumentWorkspace({
   const usesMarginBoxes = usesHeaderFooter(page); // G-LAYOUT: left/right and first-page parts count too
   printNow.current = () => {
     if (usesMarginBoxes && marginBoxes === 'no') toast(PRINT_WITHOUT_MARGIN_BOXES, 'info');
-    void printDocument(editor.view.dom, page, title);
+    // Phase 6: diagrams print as their SVG drawing; one with no picture at all prints as neutral text, and is reported.
+    void (async () => {
+      const diagrams = await collectPrintDiagrams(editor.view, diagramHost);
+      const { placeholders } = await printDocument(editor.view.dom, page, title, diagrams);
+      if (placeholders) toast(placeholders === 1 ? PRINT_ONE_PLACEHOLDER : PRINT_PLACEHOLDERS.replace('{n}', String(placeholders)), 'info');
+    })();
   };
+  // Phase 6 (ADR 0013): the exporters draw missing previews and SVG drawings with the host's off-screen renderer.
+  const diagramExport = { renderPreview: diagramHost?.renderPreview ? (source: unknown, name?: string) => diagramHost.renderPreview!(source, name) : undefined };
 
   const exportMenu = (
     <ExportMenu
@@ -245,7 +253,7 @@ function DocumentWorkspace({
           onSelect: async () => {
             try {
               const report = new ExportReport();
-              downloadBlob(await exportDocx(content(), title, diagramHost?.loadPreview, report), `${base}.docx`);
+              downloadBlob(await exportDocx(content(), title, diagramHost?.loadPreview, report, diagramExport), `${base}.docx`);
               const { message, kind } = exportToast('Word document', report);
               toast(message, kind);
             } catch (err) {
@@ -270,7 +278,7 @@ function DocumentWorkspace({
           onSelect: async () => {
             try {
               const report = new ExportReport();
-              downloadBlob(await exportOdt(content(), title, diagramHost?.loadPreview, report), `${base}.odt`);
+              downloadBlob(await exportOdt(content(), title, diagramHost?.loadPreview, report, diagramExport), `${base}.odt`);
               const { message, kind } = exportToast('OpenDocument text', report);
               toast(message, kind);
             } catch (err) {
@@ -279,6 +287,22 @@ function DocumentWorkspace({
           },
         },
         // @phase4:export-menu — further export formats (e.g. ODT) go here; report approximations with exportToast.
+        // Phase 6 (ADR 0013): the document with everything it needs (diagram data and previews), to move it without loss.
+        {
+          label: `Classroom OS document (${DCOSDOC_EXTENSION})`,
+          icon: <FileArchive size={14} />,
+          description: 'Everything in this document, with editable diagrams, for importing into Classroom OS on another device.',
+          onSelect: async () => {
+            try {
+              const report = new ExportReport();
+              downloadBlob(await exportDcosdoc(content(), title, diagramHost?.loadPreview, report, diagramExport), `${base}${DCOSDOC_EXTENSION}`);
+              const { message, kind } = exportToast('Classroom OS document', report);
+              toast(message, kind);
+            } catch (err) {
+              toast(`Export failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
+            }
+          },
+        },
       ]}
     />
   );

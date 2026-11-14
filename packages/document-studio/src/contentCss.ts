@@ -55,14 +55,26 @@ export const documentContentCss = `
 .dcos-doc .dcos-toc button:hover { color: #3b49df; text-decoration: underline; }
 .dcos-doc .dcos-toc-empty { color: #8a8a96; font-style: italic; }
 .dcos-doc .dcos-toc.is-selected, .dcos-doc .ProseMirror-selectednode { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 4px; }
-.dcos-doc .dcos-diagram { margin: 0.8em 0; display: flex; justify-content: center; }
-.dcos-doc .dcos-diagram-box { position: relative; max-width: 100%; }
-.dcos-doc .dcos-diagram-box img { display: block; width: 100%; height: 100%; margin: 0; object-fit: contain; }
+/* Phase 6 (NODE): a diagram is a figure sized by its width and the diagram's aspect ratio (no fixed height), so the
+   picture keeps its proportions wherever the width is capped: narrow pages, columns, table cells, phones, print. */
+.dcos-doc .dcos-diagram { margin: 0.8em 0; display: flex; flex-direction: column; align-items: center; }
+.dcos-doc .dcos-diagram[data-align="left"] { align-items: flex-start; }
+.dcos-doc .dcos-diagram[data-align="right"] { align-items: flex-end; }
+.dcos-doc .dcos-diagram[data-align="left"] .dcos-figcaption { text-align: left; }
+.dcos-doc .dcos-diagram[data-align="right"] .dcos-figcaption { text-align: right; }
+.dcos-doc .dcos-diagram-box { position: relative; box-sizing: border-box; max-width: 100%; height: auto; }
+.dcos-doc .dcos-diagram-box > img, .dcos-doc .dcos-diagram-box > svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; max-width: none; margin: 0; object-fit: contain; }
 .dcos-doc .dcos-diagram.is-selected .dcos-diagram-box { outline: 2px solid #6366f1; outline-offset: 3px; border-radius: 2px; }
-.dcos-doc .dcos-diagram-missing { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; min-height: 80px; padding: 1em; text-align: center; color: #6b6b76; background: #f6f6f8; border: 1px dashed #c9c9d2; border-radius: 6px; font-size: 10pt; }
-.dcos-doc .dcos-diagram-handle { position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; background: #fff; border: 2px solid #6366f1; border-radius: 3px; cursor: nwse-resize; }
+.dcos-doc .dcos-diagram-missing { position: absolute; inset: 0; box-sizing: border-box; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 0.5em 1em; text-align: center; color: #6b6b76; background: #f6f6f8; border: 1px dashed #c9c9d2; border-radius: 6px; font-size: 10pt; }
+/* The resize handle: no browser panning while dragging it by touch, and a larger hit area than it looks (about 30px;
+   44px on touch screens), reaching further over the diagram than outside it, where the page may clip it. */
+.dcos-doc .dcos-diagram-handle { position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; background: #fff; border: 2px solid #6366f1; border-radius: 3px; cursor: nwse-resize; touch-action: none; z-index: 2; }
+.dcos-doc .dcos-diagram-handle::before { content: ''; position: absolute; inset: -10px -8px -8px -10px; }
+@media (pointer: coarse) { .dcos-doc .dcos-diagram-handle::before { inset: -20px -12px -12px -20px; } }
 .dcos-doc .dcos-diagram-busy { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.7); font-size: 10pt; color: #4f46e5; }
-.dcos-doc .dcos-diagram-alert { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6em; padding: 1em; text-align: center; background: rgba(255,255,255,.95); border: 1px solid #f0c36d; border-radius: 6px; color: #3b3b44; font-size: 10pt; z-index: 1; }
+/* Read by screen readers only (the "press Enter to edit" hint); never shown or printed. */
+.dcos-doc .dcos-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.dcos-doc .dcos-diagram-alert { position: absolute; inset: 0 0 auto 0; min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6em; padding: 1em; text-align: center; background: rgba(255,255,255,.95); border: 1px solid #f0c36d; border-radius: 6px; color: #3b3b44; font-size: 10pt; z-index: 1; }
 .dcos-doc .dcos-diagram-alert p { margin: 0; max-width: 28em; }
 .dcos-doc .dcos-diagram-alert div { display: flex; gap: 0.5em; }
 .dcos-doc .dcos-diagram-alert button { font: inherit; padding: 0.3em 0.9em; border-radius: 6px; border: 1px solid #c9c9d2; background: #fff; color: #1a1a1f; cursor: pointer; }
@@ -96,7 +108,7 @@ ${INSERT_CONTENT_CSS}
   .dcos-doc .dcos-page-break::after { display: none; }
   .dcos-doc .dcos-toc { border: none; padding: 0; }
   .dcos-doc .dcos-image-remote::after, .dcos-doc .dcos-diagram-alert { display: none; }
-  .dcos-doc table, .dcos-doc img, .dcos-doc pre { break-inside: avoid; }
+  .dcos-doc table, .dcos-doc img, .dcos-doc pre, .dcos-doc .dcos-diagram { break-inside: avoid; }
   .dcos-doc h1, .dcos-doc h2, .dcos-doc h3, .dcos-doc h4 { break-after: avoid; }
   .dcos-doc .dcos-comment, .dcos-doc .dcos-comment-pending { background: none !important; border: none !important; }
   ${INSERT_PRINT_CSS}

@@ -8,6 +8,7 @@ import {
   useState,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type SelectHTMLAttributes,
 } from 'react';
@@ -234,6 +235,11 @@ export function useAnchoredDropdown(open: boolean, setOpen: (open: boolean) => v
 export function Menu({ trigger, items, align = 'start' }: { trigger: (props: { onClick: () => void; 'aria-expanded': boolean }) => ReactNode; items: MenuItem[]; align?: 'start' | 'end' }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  // TD-25 (Phase 6 Round 3): the keyboard menu pattern. Opening focuses the first item; the arrow keys, Home and End
+  // move between items; Escape closes the menu and puts focus back on the button that opened it.
+  const enabled = () => Array.from(list.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []);
+  const triggerEl = () => ref.current?.querySelector<HTMLElement>('[aria-expanded]') ?? null;
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
@@ -241,33 +247,51 @@ export function Menu({ trigger, items, align = 'start' }: { trigger: (props: { o
       if (e.key !== 'Escape') return;
       // Closing the menu consumes Escape, so an enclosing modal <dialog> stays open.
       e.preventDefault();
+      const back = list.current?.contains(document.activeElement) ? triggerEl() : null;
       setOpen(false);
+      back?.focus({ preventScroll: true });
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
+    enabled()[0]?.focus({ preventScroll: true });
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+  const onMenuKey = (e: ReactKeyboardEvent) => {
+    const all = enabled();
+    if (!all.length) return;
+    const at = all.indexOf(document.activeElement as HTMLButtonElement);
+    const go = (i: number) => {
+      e.preventDefault();
+      all[(i + all.length) % all.length].focus({ preventScroll: true });
+    };
+    if (e.key === 'ArrowDown') go(at + 1);
+    else if (e.key === 'ArrowUp') go(at < 0 ? all.length - 1 : at - 1);
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(all.length - 1);
+    else if (e.key === 'Tab') setOpen(false);
+  };
   const position = useAnchoredDropdown(open, setOpen, ref, align);
   return (
     <div ref={ref} className="relative inline-block">
       {trigger({ onClick: () => setOpen((o) => !o), 'aria-expanded': open })}
       {open && (
-        <div role="menu" style={position} className="z-50 min-w-48 rounded-xl border border-border bg-surface p-1 shadow-lg">
+        <div ref={list} role="menu" style={position} onKeyDown={onMenuKey} className="z-50 min-w-48 rounded-xl border border-border bg-surface p-1 shadow-lg">
           {items.map((item) => (
             <button
               key={item.label}
               role="menuitem"
               type="button"
+              tabIndex={-1}
               disabled={item.disabled}
               onClick={() => {
                 setOpen(false);
                 item.onSelect();
               }}
               className={cn(
-                'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-surface-2 disabled:opacity-40',
+                'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none disabled:opacity-40',
                 item.danger ? 'text-danger' : 'text-fg',
               )}
             >

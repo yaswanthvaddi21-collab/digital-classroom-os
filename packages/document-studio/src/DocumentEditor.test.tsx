@@ -74,6 +74,31 @@ describe('embedded diagrams', () => {
     expect(saved.doc.content[0].attrs).toMatchObject({ previewId: 'p2', title: 'Cycle v2', width: 300, height: 75 });
   });
 
+  it('Phase 6: an edit keeps alignment, caption and alt text, and drops the SVG preview of the old drawing (ADR 0013)', async () => {
+    const onChange = vi.fn();
+    const phase6 = { align: 'right', caption: 'Figure 1', alt: 'The cycle', svgPreviewId: 'svg-old' };
+    const doc3 = { ...createEmptyDocument(), schemaVersion: 3, doc: { type: 'doc', content: [{ ...diagram, attrs: { ...diagram.attrs, ...phase6 } }] } };
+    const host = {
+      templates: [],
+      edit: vi.fn(async () => ({ source: { nodes: [1] }, previewId: 'p2', naturalWidth: 800, naturalHeight: 200, title: 'Cycle v2' })),
+      pickFromLibrary: vi.fn(),
+      importFile: vi.fn(),
+      loadPreview: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
+      toDrawio: vi.fn(),
+    };
+    URL.createObjectURL = vi.fn(() => 'blob:preview');
+    withProviders(<DocumentEditor initialContent={doc3} title="T" onChange={onChange} diagramHost={host} />);
+    const box = await waitFor(() => document.querySelector('.dcos-diagram-box')!);
+    await act(async () => {
+      box.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    });
+    expect(host.edit).toHaveBeenCalledWith(expect.objectContaining({ previewId: 'p1', title: 'Cycle' }));
+    const saved = onChange.mock.calls.at(-1)![0];
+    expect(saved.doc.content[0].attrs).toMatchObject({ previewId: 'p2', align: 'right', caption: 'Figure 1', alt: 'The cycle', svgPreviewId: null });
+    // The caption, alignment and alt text are Phase 6 vocabulary, so the document stays schema 3.
+    expect(saved.schemaVersion).toBe(3);
+  });
+
   // DOC-4: another tab's save can remount the editor while the diagram dialog is open.
   describe('when the document is reloaded while the diagram dialog is open', () => {
     const later = <T,>() => {

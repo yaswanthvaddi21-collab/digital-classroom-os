@@ -7,9 +7,9 @@ export const BACKUP_FORMAT_VERSION = 2;
 /**
  * Newest content schema this build reads, per kind. Kept in step with document-studio's DOCUMENT_SCHEMA and
  * diagram-studio's DIAGRAM_SCHEMA (tests/integration/diagram-schema.test.ts checks this; local-storage does
- * not depend on the studios). Diagrams reached schema 3 in Phase 5 (ADR 0012), documents are still 2.
+ * not depend on the studios). Diagrams reached schema 3 in Phase 5 (ADR 0012), documents in Phase 6 (ADR 0013).
  */
-export const MAX_CONTENT_SCHEMA_BY_KIND: Readonly<Record<ItemKind, number>> = { document: 2, diagram: 3 };
+export const MAX_CONTENT_SCHEMA_BY_KIND: Readonly<Record<ItemKind, number>> = { document: 3, diagram: 3 };
 /** Newest content schema of any kind this build reads: the highest a backup's `schemaVersion` may be. */
 export const MAX_CONTENT_SCHEMA = Math.max(...Object.values(MAX_CONTENT_SCHEMA_BY_KIND));
 

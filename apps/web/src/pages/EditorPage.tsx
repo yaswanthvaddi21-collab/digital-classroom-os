@@ -1,7 +1,7 @@
 import { useToast } from '@dcos/ui';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useDiagramHost } from '../components/DiagramDialogs';
+import { RecoverDiagramEdits, useDiagramHost } from '../components/DiagramDialogs';
 import { useOpenDiagramFile } from '../components/DiagramFiles';
 import { EditorFrame, MissingItem } from '../components/EditorFrame';
 import { ErrorBoundary } from '../components/ErrorBoundary';
@@ -19,7 +19,8 @@ export function EditorPage({ module }: { module: ModuleDef }) {
 
 function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string; reload: () => void }) {
   const editable = useEditableItem<unknown>(module.kind, id);
-  const { host: diagramHost, dialogs, active: diagramDialogOpen } = useDiagramHost();
+  // Phase 6: a document's diagram dialog keeps unsaved edits as drafts of that document.
+  const { host: diagramHost, dialogs, active: diagramDialogOpen, recover: recoverDiagramDraft } = useDiagramHost({ docId: module.kind === 'document' ? id : undefined });
   const { item, status, saveNow, holdExternalUpdates } = editable;
   const toast = useToast();
   // @phase4:review — the comment author name and the remembered spell check setting, for documents.
@@ -31,6 +32,7 @@ function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string
   // A diagram dialog writes into the editor it was opened from. Remounting that editor for another tab's save would
   // drop the diagram, so while one is open external versions wait and later edits go through the conflict flow.
   useEffect(() => (diagramDialogOpen ? holdExternalUpdates() : undefined), [diagramDialogOpen, holdExternalUpdates]);
+  // @phase6:DIALOG — a document's kept diagram-dialog edits are offered below (RecoverDiagramEdits).
 
   // Ctrl/⌘+S saves a version; held keys do not repeat it (audit CODE-1).
   useEffect(() => {
@@ -85,6 +87,9 @@ function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string
         />
       </ErrorBoundary>
       {dialogs}
+      {module.kind === 'document' && (
+        <RecoverDiagramEdits docId={id} busy={diagramDialogOpen} recover={recoverDiagramDraft} apply={editable.applyChange} />
+      )}
     </EditorFrame>
   );
 }

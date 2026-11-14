@@ -2,7 +2,7 @@ import { Button, downloadBlob, Menu, safeFileName, Separator } from '@dcos/ui';
 import { NodeSelection } from '@tiptap/pm/state';
 import { useEditorState } from '@tiptap/react';
 import { ChevronDown, Download, FileInput, FolderOpen, Maximize2, Pencil, Plus, Trash2, Workflow } from 'lucide-react';
-import { DIAGRAM_DATA_MISSING, fitSize, hasDiagramSource, RELOADED_NOT_APPLIED, type DiagramAttrs } from '../extensions/diagramEmbed';
+import { fitSize, hasDiagramSource, openDiagramEditor, type DiagramAttrs } from '../extensions/diagramEmbed';
 import type { RibbonContext } from './ribbon/context';
 import { useDiagramInsert } from './ribbon/useDiagramInsert';
 
@@ -50,18 +50,19 @@ export function DiagramRibbon({ editor, diagramHost: host, textWidthPx: maxWidth
             variant="ghost"
             icon={<Pencil size={15} />}
             disabled={d.busy}
+            // The shared helper (also behind double-click, double-tap, Enter and F2): a diagram without its data shows
+            // the "data is missing" alert on it instead of an empty editor; a late result is never written into a
+            // reloaded document; the diagram stays selected afterwards.
             onClick={() =>
               void d.run(async () => {
-                // A diagram without its data (e.g. a malformed paste) cannot be opened; say so instead of a stuck dialog.
-                if (!hasDiagramSource(selected)) throw new Error(DIAGRAM_DATA_MISSING);
-                const next = await host.edit(selected);
-                if (next && editor.isDestroyed) throw new Error(RELOADED_NOT_APPLIED);
-                if (next) editor.chain().focus().updateAttributes('diagram', { ...next, ...fitSize(next.naturalWidth, next.naturalHeight, selected.width, maxWidth) }).run();
+                const sel = editor.state.selection;
+                if (sel instanceof NodeSelection && sel.node.type.name === 'diagram') await openDiagramEditor(editor, sel.from, host, maxWidth);
               })
             }
           >
             Edit
           </Button>
+          {/* Alignment, caption, alternative text and the title are in the Diagram object bar ("Selected diagram", the diagram branch of ui/insert/ObjectBar.tsx). */}
           <Menu
             trigger={(p) => (
               <Button size="sm" variant="ghost" icon={<Maximize2 size={15} />} {...p}>

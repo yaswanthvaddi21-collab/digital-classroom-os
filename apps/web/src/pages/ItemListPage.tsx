@@ -106,8 +106,8 @@ export function ItemListPage({ view }: { view: ListView }) {
           </Button>
         )}
         {view.type === 'kind' && view.kind === 'document' && (
-          <Button icon={<FileInput size={16} />} disabled={importer.busy} title="Word (.docx) or OpenDocument (.odt) files" onClick={() => void importer.start()}>
-            {importer.busy ? 'Importing…' : 'Import Word document'}
+          <Button icon={<FileInput size={16} />} disabled={importer.busy} title="Word (.docx), OpenDocument (.odt) or Classroom OS document (.dcosdoc) files" onClick={() => void importer.start()}>
+            {importer.busy ? 'Importing…' : 'Import document'}
           </Button>
         )}
         {view.type === 'kind' && (

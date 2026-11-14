@@ -94,6 +94,9 @@ describe('page break', () => {
 
 describe('embedded diagram', () => {
   const attrs = { source: { nodes: [{ id: 'n1', label: 'Start "here" <b>' }], edges: [] }, previewId: 'p1', naturalWidth: 800, naturalHeight: 600, width: 500, height: 375, title: 'My diagram' };
+  // Phase 6 (ADR 0013) attributes: null unless set, so a diagram without them is stored as before plus four nulls.
+  const phase6 = { align: null, caption: null, alt: null, svgPreviewId: null };
+  const stored = { ...attrs, ...phase6 };
   const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
   const withDiagram = () => make({ type: 'doc', content: [para('a'), { type: 'diagram', attrs }, para('b')] });
   const selectDiagram = (e: Editor) => e.view.dispatch(e.state.tr.setSelection(NodeSelection.create(e.state.doc, e.state.doc.child(0).nodeSize)));
@@ -105,7 +108,7 @@ describe('embedded diagram', () => {
     selectDiagram(e);
     const dom = copySelection(e);
     const slice = PMDOMParser.fromSchema(e.schema).parseSlice(dom, { preserveWhitespace: true });
-    expect(slice.content.toJSON()).toEqual([{ type: 'diagram', attrs }]);
+    expect(slice.content.toJSON()).toEqual([{ type: 'diagram', attrs: stored }]);
   });
 
   it('survives cut and paste through the clipboard HTML (DOC-2)', () => {
@@ -116,21 +119,60 @@ describe('embedded diagram', () => {
     expect(diagrams(e)).toEqual([]);
     e.commands.setTextSelection(e.state.doc.content.size - 1);
     e.view.pasteHTML(html, new Event('paste') as ClipboardEvent); // jsdom has no ClipboardEvent
-    expect(diagrams(e)).toEqual([attrs]);
+    expect(diagrams(e)).toEqual([stored]);
   });
 
   it('pastes malformed clipboard data as an empty diagram instead of failing (DOC-2)', () => {
     const e = make('<p>x</p>');
     e.commands.setContent('<figure data-type="diagram" data-diagram="{not json"></figure><figure data-type="diagram" data-diagram=\'{"width":"wide","title":7,"previewId":""}\'></figure>');
     expect(diagrams(e)).toEqual([
-      { source: null, previewId: null, naturalWidth: 400, naturalHeight: 300, width: 400, height: 300, title: '' },
-      { source: null, previewId: null, naturalWidth: 400, naturalHeight: 300, width: 400, height: 300, title: '' },
+      { source: null, previewId: null, naturalWidth: 400, naturalHeight: 300, width: 400, height: 300, title: '', ...phase6 },
+      { source: null, previewId: null, naturalWidth: 400, naturalHeight: 300, width: 400, height: 300, title: '', ...phase6 },
     ]);
   });
 
   it('stores the same JSON as before: clipboard data never leaks into the document attributes', () => {
     const e = withDiagram();
-    expect(Object.keys(diagrams(e)[0]!).sort()).toEqual(Object.keys(attrs).sort());
+    expect(Object.keys(diagrams(e)[0]!).sort()).toEqual(Object.keys(stored).sort());
+    expect(diagrams(e)[0]).toEqual(stored);
+  });
+
+  it('Phase 6: alignment, caption, alt text and the SVG preview id survive copy, cut and paste (ADR 0013)', () => {
+    const extra = { align: 'right', caption: 'Figure 1: login', alt: 'Login flow', svgPreviewId: 's1' };
+    const e = make({ type: 'doc', content: [para('a'), { type: 'diagram', attrs: { ...attrs, ...extra } }, para('b')] });
+    selectDiagram(e);
+    const dom = copySelection(e);
+    const fig = dom.querySelector('figure')!;
+    expect([fig.getAttribute('data-align'), fig.getAttribute('data-caption'), fig.getAttribute('data-alt'), fig.getAttribute('data-svg-preview-id')]).toEqual(['right', 'Figure 1: login', 'Login flow', 's1']);
+    expect(fig.getAttribute('aria-label')).toBe('Login flow');
+    const slice = PMDOMParser.fromSchema(e.schema).parseSlice(dom, { preserveWhitespace: true });
+    expect(slice.content.toJSON()).toEqual([{ type: 'diagram', attrs: { ...attrs, ...extra } }]);
+    const html = dom.innerHTML;
+    e.commands.deleteSelection();
+    e.commands.setTextSelection(e.state.doc.content.size - 1);
+    e.view.pasteHTML(html, new Event('paste') as ClipboardEvent);
+    expect(diagrams(e)).toEqual([{ ...attrs, ...extra }]);
+  });
+
+  it('Phase 6: the clipboard form of a diagram without the new attributes is exactly as before', () => {
+    const e = withDiagram();
+    selectDiagram(e);
+    const fig = copySelection(e).querySelector('figure')!;
+    const data = JSON.parse(fig.getAttribute('data-diagram')!);
+    expect(Object.keys(data)).toEqual(['source', 'previewId', 'naturalWidth', 'naturalHeight', 'width', 'height', 'title']);
+    expect(data).toEqual(attrs);
+    for (const a of ['data-align', 'data-caption', 'data-alt', 'data-svg-preview-id']) expect(fig.hasAttribute(a), a).toBe(false);
+    expect(fig.getAttribute('aria-label')).toBe('My diagram');
+  });
+
+  it('Phase 6: reads the new attributes from data-* when the copied JSON has none, and ignores unusable values', () => {
+    const e = make('<p>x</p>');
+    e.commands.setContent(
+      `<figure data-type="diagram" data-diagram='{"previewId":"p1"}' data-align="left" data-caption="Cap" data-alt="Alt" data-svg-preview-id="s9"></figure>` +
+        `<figure data-type="diagram" data-diagram='{"align":"diagonal","caption":7,"alt":"","svgPreviewId":["x"]}' data-align="up"></figure>`,
+    );
+    expect(diagrams(e)[0]).toMatchObject({ previewId: 'p1', align: 'left', caption: 'Cap', alt: 'Alt', svgPreviewId: 's9' });
+    expect(diagrams(e)[1]).toMatchObject(phase6);
   });
 
   it('inserts a new diagram after a selected one instead of replacing it (DOC-3)', () => {

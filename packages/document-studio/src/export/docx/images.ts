@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
-import { AlignmentType, ImageRun, Paragraph, TextRun } from 'docx';
+import { ImageRun, Paragraph, TextRun } from 'docx';
 import { isRemoteImageSrc } from '../../extensions/remoteImages';
+import { diagramAltText, diagramPicture, noteDiagram } from '../diagramAssets';
 import { NOTES } from '../report';
 import type { Ctx } from './context';
 import { pictureLook } from './insert'; // G-INSERT
@@ -49,23 +50,28 @@ export function imageParagraph(node: JSONContent, ctx: Ctx): Paragraph {
   });
 }
 
-/** Embedded diagram: its rendered preview, at the size shown in the document (aspect ratio preserved). */
+/**
+ * Embedded diagram: its picture at the size shown in the document (aspect ratio preserved), aligned like a picture
+ * (its caption follows, see nodes.ts). Phase 6 (ADR 0013): the vector drawing (SVG) with the PNG as the fallback for
+ * applications without SVG (asvg:svgBlip), the PNG carrying the diagram's editable data, a missing preview redrawn
+ * from the data (diagramAssets.ts), the alt text as the description, and an honest note in the export report.
+ */
 export function diagramParagraph(node: JSONContent, ctx: Ctx): Paragraph {
   const a = node.attrs ?? {};
   const title = String(a.title || 'Diagram');
-  const bytes = a.previewId ? ctx.assets.get(String(a.previewId)) : undefined;
-  if (!bytes) {
-    NOTES.missingDiagramPreview(ctx.report);
-    return placeholder(`[Diagram: ${title} — preview not available]`);
-  }
+  const picture = diagramPicture(a, ctx.assets, ctx.diagramRenders, (ctx.diagramPictures ??= new Map()));
+  noteDiagram(ctx.report, picture);
+  if (!picture) return new Paragraph({ ...pictureLook(node), children: [new TextRun({ text: `[Diagram: ${title} — preview not available]`, italics: true, color: '888888' })] });
   const naturalW = Number(a.naturalWidth) || 400;
   const naturalH = Number(a.naturalHeight) || 300;
   const width = Math.min(Number(a.width) || naturalW, ctx.contentWidthPx);
   const height = Math.round((width * naturalH) / naturalW);
-  return new Paragraph({
-    alignment: AlignmentType.CENTER,
-    children: [new ImageRun({ type: 'png', data: bytes, transformation: { width, height }, altText: { name: 'diagram', description: title, title } })],
-  });
+  const altText = { name: 'diagram', description: diagramAltText(a), title };
+  const transformation = { width, height };
+  const run = picture.svg
+    ? new ImageRun({ type: 'svg', data: picture.svg, fallback: { type: 'png', data: picture.png }, transformation, altText })
+    : new ImageRun({ type: 'png', data: picture.png, transformation, altText });
+  return new Paragraph({ ...pictureLook(node), children: [run] });
 }
 
 /** Collects the attachment ids of all embedded diagram previews in a document. */

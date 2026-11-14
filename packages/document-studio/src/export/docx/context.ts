@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import type { IRunOptions, Paragraph, ParagraphChild, Table, TableOfContents } from 'docx';
 import type { DocumentContent } from '../../types';
+import type { DiagramPicture, DiagramRenders } from '../diagramAssets';
 import type { ExportReport } from '../report';
 
 /** A block-level piece of the Word body. (A table cell takes only paragraphs and tables: see ctx.inCell.) */
@@ -18,6 +19,10 @@ export interface Ctx {
   headings: Array<{ level: number; text: string }>;
   /** Preview images of embedded diagrams, by attachment id. */
   assets: Map<string, Uint8Array>;
+  /** Phase 6: diagram drawings made at export time (missing previews, SVG), by diagramKey. */
+  diagramRenders?: DiagramRenders;
+  /** Phase 6: what was written for each diagram (diagramPicture), so copies are written with the same bytes. */
+  diagramPictures?: Map<string, DiagramPicture | null>;
   /** Start numbers of numbered lists that do not start at 1. */
   orderedStarts: Set<number>;
   /** Approximations and placeholders, shown to the user after the export. */

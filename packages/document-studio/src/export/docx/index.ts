@@ -10,10 +10,10 @@
 import type { JSONContent } from '@tiptap/core';
 import { AlignmentType, Document, Footer, Header, PageNumber, PageOrientation, Packer, Paragraph, TextRun, type ParagraphChild } from 'docx';
 import { paperSize, type DocumentContent } from '../../types';
+import { prepareDiagramExport, type DiagramExportOptions, type DiagramRenders } from '../diagramAssets';
 import { ExportReport } from '../report';
 import type { Ctx } from './context';
 import { DOCUMENT_CONTRIBUTORS, type DocumentOptions } from './document';
-import { diagramPreviewIds } from './images';
 import { numberingConfig } from './lists';
 import { api } from './nodes';
 import { firstColumnWidthPx } from './sections'; // G-LAYOUT
@@ -41,7 +41,13 @@ function collectHeadingText(doc: JSONContent) {
   return out;
 }
 
-export function buildDocx(content: DocumentContent, title = 'Document', assets: Map<string, Uint8Array> = new Map(), report = new ExportReport()): Document {
+export function buildDocx(
+  content: DocumentContent,
+  title = 'Document',
+  assets: Map<string, Uint8Array> = new Map(),
+  report = new ExportReport(),
+  diagramRenders?: DiagramRenders,
+): Document {
   const page = content.page;
   const paper = paperSize(page);
   const contentWidthMm = paper.width - page.margins.left - page.margins.right;
@@ -52,6 +58,7 @@ export function buildDocx(content: DocumentContent, title = 'Document', assets: 
     listInstance: 0,
     headings: collectHeadingText(content.doc),
     assets,
+    diagramRenders,
     orderedStarts: new Set(),
     report,
     bookmarkId: (() => {
@@ -118,22 +125,23 @@ function numberHeadingBookmarks(document: Document, ctx: Ctx) {
   body.headingBookmarkIds = { get: (index) => (ids[index] ??= ctx.bookmarkId()) };
 }
 
-/** Loads embedded diagram previews (via the app's storage) and writes the .docx. */
+/**
+ * Loads embedded diagram previews (via the app's storage) and writes the .docx. Phase 6 (ADR 0013, diagramAssets.ts):
+ * a preview that fails to load is treated as missing (never a failed export); with `options.renderPreview` a missing
+ * preview is redrawn from the diagram's data and each diagram gets its vector drawing (SVG) beside the PNG; every PNG
+ * carries the diagram's editable data.
+ */
 export async function exportDocx(
   content: DocumentContent,
   title: string,
   loadAsset?: (id: string) => Promise<Blob | undefined>,
   report = new ExportReport(),
+  options: DiagramExportOptions = {},
 ): Promise<Blob> {
   const assets = new Map<string, Uint8Array>();
-  if (loadAsset) {
-    for (const id of diagramPreviewIds(content.doc)) {
-      const blob = await loadAsset(id);
-      if (blob) assets.set(id, new Uint8Array(await blob.arrayBuffer()));
-    }
-  }
+  const renders = await prepareDiagramExport(content.doc, assets, loadAsset, options);
   for (const prepare of DOCX_PREPARERS) await prepare(content, assets);
-  return Packer.toBlob(buildDocx(content, title, assets, report));
+  return Packer.toBlob(buildDocx(content, title, assets, report, renders));
 }
 
 /**

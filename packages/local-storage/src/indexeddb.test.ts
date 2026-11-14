@@ -256,13 +256,15 @@ describe('backup and restore', () => {
     const file = (items: unknown[], versions: unknown[] = []) => ({
       format: 'dcos-backup', formatVersion: 2, schemaVersion: 3, exportedAt: '2026-01-01T00:00:00Z', deviceId: 'd', items, versions,
     });
-    // Documents are still schema 2: a schema-3 document comes from a newer app even though diagrams may be 3.
-    expect(() => validateBackup(file([{ id: 'd', kind: 'document', title: 'D', version: 1, content: { schemaVersion: 3 } }]))).toThrow(/newer/);
+    // Documents reached schema 3 in Phase 6 (ADR 0013), diagrams in Phase 5: a schema-4 item of either kind comes
+    // from a newer app.
+    expect(() => validateBackup(file([{ id: 'd', kind: 'document', title: 'D', version: 1, content: { schemaVersion: 4 } }]))).toThrow(/newer/);
     expect(() => validateBackup(file([{ id: 'a', kind: 'diagram', title: 'A', version: 1, content: { schemaVersion: 4 } }]))).toThrow(/newer/);
     expect(() => validateBackup(file([], [{ id: 'v', itemId: 'a', kind: 'diagram', content: { schemaVersion: 4 } }]))).toThrow(/newer/);
-    expect(() => validateBackup(file([], [{ id: 'v', itemId: 'd', kind: 'document', content: { schemaVersion: 3 } }]))).toThrow(/newer/);
+    expect(() => validateBackup(file([], [{ id: 'v', itemId: 'd', kind: 'document', content: { schemaVersion: 4 } }]))).toThrow(/newer/);
     expect(validateBackup(file([{ id: 'a', kind: 'diagram', title: 'A', version: 1, content: { schemaVersion: 3 } }], [{ id: 'v', itemId: 'a', kind: 'diagram', content: { schemaVersion: 3 } }])).items).toHaveLength(1);
-    await expect(store.importBackup(file([{ id: 'd', kind: 'document', title: 'D', version: 1, content: { schemaVersion: 3 } }]))).rejects.toThrow(/newer/);
+    expect(validateBackup(file([{ id: 'd3', kind: 'document', title: 'D', version: 1, content: { schemaVersion: 3, doc: { type: 'doc' } } }], [{ id: 'v3', itemId: 'd3', kind: 'document', content: { schemaVersion: 3 } }])).items).toHaveLength(1);
+    await expect(store.importBackup(file([{ id: 'd', kind: 'document', title: 'D', version: 1, content: { schemaVersion: 4 } }]))).rejects.toThrow(/newer/);
     expect(await store.get('document', 'd')).toBeUndefined();
   });
 

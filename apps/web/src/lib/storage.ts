@@ -158,8 +158,8 @@ export const storage: StorageAdapter = createStorage({
     setEvents({ versionChange: true, work: worst(Array.from(editors, (e) => e.freeze())) });
   },
   onBlocked: () => setEvents({ blocked: true }),
-  // Emergency drafts live in localStorage; images they use must not be cleaned up.
-  extraReferences: emergencyDraftTexts,
+  // Emergency drafts (and diagram-dialog drafts) live in localStorage; images they use must not be cleaned up.
+  extraReferences: () => [...emergencyDraftTexts(), ...diagramDialogDraftTexts()],
 });
 
 // ── Change notifications, within this tab and across tabs ────────────────────────────────────────────
@@ -363,11 +363,219 @@ export interface UnsavedDraft {
   item: { title: string; content: unknown; deletedAt: string | null } | null;
 }
 
+// ── Unsaved edits in the diagram dialog (Phase 6, @phase6:DIALOG) ────────────────────────────────────
+
+/**
+ * While the diagram dialog is open, its edits are kept as a draft of the document it belongs to, in a session of its
+ * own (`diagram-dialog:<id>`), so a reload, a crash, a closed tab or an editor that went away loses nothing: the
+ * document offers them again the next time it is opened. They are not document content, so the document's own
+ * draft recovery and the Settings list leave them out. Deleting the document permanently deletes them with its other
+ * drafts. When IndexedDB cannot take them, a copy is kept in localStorage.
+ *
+ * Stored form (ADR 0013): a valid content-schema-2 document holding a note, the diagram as it was when the dialog
+ * opened (when it was opened on one) and the diagram with the unsaved edits. Builds before Phase 6 do not know these
+ * sessions and offer every draft of a document as unsaved document changes; there, recovering one makes a
+ * "(recovered)" copy that shows the diagram before and after the edits and can be edited, instead of an empty
+ * document, so the edits are never lost.
+ */
+export const DIAGRAM_DIALOG_SESSION = 'diagram-dialog:';
+const DIAGRAM_DIALOG_LOCAL_PREFIX = 'dcos-diagram-dialog-draft:';
+/** Web Locks name held while a dialog is open, so other tabs do not offer a draft that is still being edited. */
+const DIAGRAM_DIALOG_LOCK_PREFIX = 'dcos-diagram-dialog-open:';
+export const isDiagramDialogSession = (session: string | null | undefined): boolean =>
+  typeof session === 'string' && session.startsWith(DIAGRAM_DIALOG_SESSION);
+export const newDiagramDialogSession = () => `${DIAGRAM_DIALOG_SESSION}${uuid()}`;
+
+/** The embedded diagram as it was when the dialog opened, used to find it in the document again. */
+export interface DiagramDialogBase {
+  source: unknown;
+  previewId: string | null;
+  naturalWidth: number;
+  naturalHeight: number;
+  title: string;
+}
+
+export interface DiagramDialogDraft {
+  docId: string;
+  session: string;
+  /** The embedded diagram the dialog was opened on; null for a new diagram. */
+  base: DiagramDialogBase | null;
+  /** The diagram as last edited (Diagram Studio content), and its title. */
+  source: unknown;
+  title: string;
+  savedAt: string;
+}
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const dialogLocalKey = (docId: string, session: string) => `${DIAGRAM_DIALOG_LOCAL_PREFIX}${docId}:${session}`;
+
+/** The note at the top of a stored dialog draft (what a build before Phase 6 shows when it recovers one as a copy). */
+export const DIAGRAM_DIALOG_DRAFT_NOTE = 'Unsaved changes to a diagram, kept from the diagram editor.';
+const DRAFT_BEFORE = 'The diagram before the changes:';
+const DRAFT_AFTER = 'The diagram with the unsaved changes:';
+const MAX_DRAFT_WIDTH = 600;
+const paragraph = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
+function draftDiagram(source: unknown, previewId: string | null, naturalWidth: number, naturalHeight: number, title: string) {
+  const w = Number.isFinite(naturalWidth) && naturalWidth > 0 ? naturalWidth : 400;
+  const h = Number.isFinite(naturalHeight) && naturalHeight > 0 ? naturalHeight : 300;
+  const width = Math.min(w, MAX_DRAFT_WIDTH);
+  return { type: 'diagram', attrs: { source, previewId, naturalWidth: w, naturalHeight: h, width, height: Math.max(1, Math.round((h * width) / w)), title } };
+}
+
+/** A dialog draft as stored: a schema-2 document (see the comment above DIAGRAM_DIALOG_SESSION). */
+function dialogBody(d: Omit<DiagramDialogDraft, 'savedAt'>) {
+  const b = d.base;
+  const blocks: unknown[] = [paragraph(DIAGRAM_DIALOG_DRAFT_NOTE)];
+  if (b) blocks.push(paragraph(DRAFT_BEFORE), draftDiagram(b.source, b.previewId, b.naturalWidth, b.naturalHeight, b.title));
+  // The edited diagram has no preview yet (it is drawn when the edits are applied), so it carries none.
+  blocks.push(paragraph(DRAFT_AFTER), draftDiagram(d.source, null, b?.naturalWidth ?? 400, b?.naturalHeight ?? 300, d.title));
+  return {
+    schemaVersion: 2,
+    doc: { type: 'doc', content: blocks },
+    page: { size: 'A4', orientation: 'portrait', margins: { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 } },
+    mode: 'simple',
+  };
+}
+
+/** A stored dialog draft, or null when it is not one this version can use. */
+function readDialogDraft(docId: string, session: string, body: unknown, savedAt: unknown): DiagramDialogDraft | null {
+  if (!isDiagramDialogSession(session) || !isRecord(body) || !isRecord(body.doc) || !Array.isArray(body.doc.content)) return null;
+  const blocks = body.doc.content as unknown[];
+  const first = blocks[0];
+  const note = isRecord(first) && Array.isArray(first.content) && isRecord(first.content[0]) ? first.content[0].text : undefined;
+  if (note !== DIAGRAM_DIALOG_DRAFT_NOTE) return null;
+  const diagrams = blocks.filter((n): n is { attrs: Record<string, unknown> } => isRecord(n) && n.type === 'diagram' && isRecord(n.attrs));
+  if (diagrams.length < 1 || diagrams.length > 2) return null;
+  const edited = diagrams[diagrams.length - 1].attrs;
+  if (!isRecord(edited.source) || typeof edited.title !== 'string') return null;
+  let base: DiagramDialogBase | null = null;
+  if (diagrams.length === 2) {
+    const a = diagrams[0].attrs;
+    if (!isRecord(a.source)) return null;
+    base = {
+      source: a.source,
+      previewId: typeof a.previewId === 'string' ? a.previewId : null,
+      naturalWidth: typeof a.naturalWidth === 'number' ? a.naturalWidth : 400,
+      naturalHeight: typeof a.naturalHeight === 'number' ? a.naturalHeight : 300,
+      title: typeof a.title === 'string' ? a.title : '',
+    };
+  }
+  return { docId, session, base, source: edited.source, title: edited.title, savedAt: typeof savedAt === 'string' ? savedAt : '' };
+}
+
+/** Every localStorage copy of a dialog draft: of one document, or of all (`docId` omitted). */
+function localDialogEntries(docId?: string, strict = false): Array<{ key: string; docId: string; session: string; raw: string }> {
+  const found: Array<{ key: string; docId: string; session: string; raw: string }> = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith(DIAGRAM_DIALOG_LOCAL_PREFIX)) continue;
+      const rest = key.slice(DIAGRAM_DIALOG_LOCAL_PREFIX.length);
+      const at = rest.indexOf(`:${DIAGRAM_DIALOG_SESSION}`);
+      if (at < 1) continue;
+      const owner = rest.slice(0, at);
+      if (docId !== undefined && owner !== docId) continue;
+      const raw = localStorage.getItem(key);
+      if (raw !== null) found.push({ key, docId: owner, session: rest.slice(at + 1), raw });
+    }
+  } catch (err) {
+    if (strict) throw err;
+  }
+  return found;
+}
+
+/** Attachment references held in localStorage copies of dialog drafts (used by attachment clean-up). */
+export function diagramDialogDraftTexts(): string[] {
+  return localDialogEntries(undefined, true).map((e) => e.raw);
+}
+
+/** Keeps a dialog draft in localStorage, synchronously (page hiding or closing). False when it could not be kept. */
+export function keepDiagramDialogDraftLocally(d: Omit<DiagramDialogDraft, 'savedAt'>): boolean {
+  try {
+    const raw = JSON.stringify({ ...dialogBody(d), savedAt: new Date().toISOString() });
+    if (raw.length > EMERGENCY_DRAFT_MAX_CHARS) return false;
+    localStorage.setItem(dialogLocalKey(d.docId, d.session), raw);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Keeps (or replaces) a dialog's draft in the database, or in localStorage when the database cannot take it. */
+export async function saveDiagramDialogDraft(d: Omit<DiagramDialogDraft, 'savedAt'>): Promise<void> {
+  if (!isDiagramDialogSession(d.session)) throw new Error(`Not a diagram dialog session: ${d.session}`);
+  try {
+    if (databaseClosed) throw new Error('The database was closed by another tab.');
+    await storage.saveDraft({ kind: 'document', itemId: d.docId, session: d.session, baseVersion: 0, content: dialogBody(d) });
+  } catch (err) {
+    if (!keepDiagramDialogDraftLocally(d)) throw err;
+  }
+}
+
+/** Removes a dialog's draft wherever it is kept. */
+export async function deleteDiagramDialogDraft(docId: string, session: string): Promise<void> {
+  try {
+    localStorage.removeItem(dialogLocalKey(docId, session));
+  } catch {
+    // Nothing kept there.
+  }
+  if (!databaseClosed) await storage.deleteDraft('document', docId, session);
+}
+
+/** Marks a dialog session as open in this tab until the returned function is called (Web Locks, when available). */
+export function holdDiagramDialogSession(session: string): () => void {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  if (!locks?.request) return () => undefined;
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  locks.request(`${DIAGRAM_DIALOG_LOCK_PREFIX}${session}`, () => held).catch(() => undefined);
+  return () => release();
+}
+
+async function openDialogSessions(): Promise<Set<string>> {
+  try {
+    const state = await navigator.locks?.query();
+    const names = (state?.held ?? []).map((l) => l.name ?? '');
+    return new Set(names.filter((n) => n.startsWith(DIAGRAM_DIALOG_LOCK_PREFIX)).map((n) => n.slice(DIAGRAM_DIALOG_LOCK_PREFIX.length)));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * The dialog drafts of a document that are waiting to be recovered, newest first: from the database and from
+ * localStorage (the newer copy of each), leaving out dialogs still open in this or another tab.
+ */
+export async function listDiagramDialogDrafts(docId: string): Promise<DiagramDialogDraft[]> {
+  const found = new Map<string, DiagramDialogDraft>();
+  const keep = (d: DiagramDialogDraft | null) => {
+    if (!d) return;
+    const known = found.get(d.session);
+    if (!known || known.savedAt < d.savedAt) found.set(d.session, d);
+  };
+  if (!databaseClosed) {
+    for (const d of await storage.listDrafts({ kind: 'document', itemId: docId }).catch(() => [])) keep(readDialogDraft(docId, d.session, d.content, d.savedAt));
+  }
+  for (const e of localDialogEntries(docId)) {
+    try {
+      const parsed: unknown = JSON.parse(e.raw);
+      keep(readDialogDraft(docId, e.session, parsed, isRecord(parsed) ? parsed.savedAt : ''));
+    } catch {
+      // Unreadable copy: left in place, never offered.
+    }
+  }
+  const open = await openDialogSessions();
+  return Array.from(found.values())
+    .filter((d) => !open.has(d.session))
+    .sort((a, b) => b.savedAt.localeCompare(a.savedAt) || a.session.localeCompare(b.session));
+}
+
 /** Every unsaved draft on this device, newest first, including drafts of items that no longer exist. */
 export async function listUnsavedDrafts(): Promise<UnsavedDraft[]> {
   const rows: Array<Omit<UnsavedDraft, 'item'>> = [];
   if (!databaseClosed) {
     for (const d of await storage.listDrafts()) {
+      // Diagram-dialog drafts are offered by their document (see listDiagramDialogDrafts), not as document content.
+      if (isDiagramDialogSession(d.session)) continue;
       rows.push({ key: `db:${d.key}`, kind: d.kind, itemId: d.itemId, session: d.session ?? '', title: d.title, content: d.content, savedAt: d.savedAt });
     }
   }
@@ -517,7 +725,9 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
       const same = (d: Pending<C>) =>
         (d.content === undefined || JSON.stringify(d.content) === lastSavedContent.current) && (d.title === undefined || d.title === stored.title);
       // Drafts that cannot be read now stay stored (Settings → Storage lists them); the item still opens.
-      let offered: OfferedDraft<C>[] = await storage.listDrafts<C>({ kind, itemId: id }).catch(() => []);
+      // Diagram-dialog drafts are not edits of this item's content: the editor page offers them (Phase 6).
+      const itemDrafts = () => storage.listDrafts<C>({ kind, itemId: id }).then((all) => all.filter((d) => !isDiagramDialogSession(d.session)));
+      let offered: OfferedDraft<C>[] = await itemDrafts().catch(() => []);
       // Edits kept in localStorage (database closed, or failing) join the normal draft flow.
       const emergency = readEmergencyDraft<C>(kind, id);
       if (emergency) {
@@ -528,7 +738,7 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
           try {
             await storage.saveDraft<C>({ ...rest, kind, itemId: id, session: from });
             removeEmergencyDraft(kind, id);
-            offered = await storage.listDrafts<C>({ kind, itemId: id }).catch(() => offered);
+            offered = await itemDrafts().catch(() => offered);
           } catch {
             const fallback: OfferedDraft<C> = { ...emergency, key: emergencyDraftKey(kind, id), kind, itemId: id, session: from, fromEmergency: true };
             offered = [fallback, ...offered.filter((d) => d.session !== from)].sort((a, b) => b.savedAt.localeCompare(a.savedAt));
@@ -879,6 +1089,36 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
     await dropOffered(draft);
   }, [draft, dropOffered]);
 
+  /**
+   * Changes the stored content from outside the editor (Phase 6: recovered diagram-dialog edits) and remounts the
+   * editor with the result. Runs in the save queue after anything already typed; the state it replaces is kept as a
+   * version first. Throws, changing nothing, while edits cannot be saved (conflict, saving stopped, another tab's
+   * upgrade). `change` returns null to leave the content as it is.
+   */
+  const applyChange = useCallback(
+    async (change: (content: C) => C | null): Promise<WorkspaceItem<C> | null> => {
+      if (databaseClosed) throw new Error('The app was updated in another tab. Reload this page first.');
+      await flush();
+      return enqueue(async () => {
+        if (blocked.current || pending.current || statusRef.current === 'conflict') throw new Error('Your latest changes to this document are not saved yet.');
+        const current = await storage.get<C>(kind, id);
+        if (!current) throw new Error('This document no longer exists.');
+        const next = change(current.content);
+        if (next === null) return null;
+        await storage.snapshot(kind, id);
+        const saved = await storage.save<C>(kind, id, { content: next }, current.version);
+        version.current = saved.version;
+        lastSavedContent.current = JSON.stringify(saved.content);
+        setItem(saved);
+        setTitle(saved.title);
+        setExternalRevision((r) => r + 1);
+        notifyStorageChanged({ kind, id });
+        return saved;
+      });
+    },
+    [kind, id, flush, enqueue],
+  );
+
   /** Adopts a newer stored version when this editor has nothing unsaved and nothing holds external updates. */
   const adoptExternal = useCallback(() => {
     const idle = () => holds.current === 0 && !pending.current && !blocked.current && statusRef.current === 'saved';
@@ -1027,6 +1267,7 @@ export function useEditableItem<C>(kind: ItemKind, id: string) {
     saveAsNew,
     recoverDraft,
     discardDraft,
+    applyChange,
     holdExternalUpdates,
   };
 }

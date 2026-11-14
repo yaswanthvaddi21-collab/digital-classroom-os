@@ -91,7 +91,7 @@ export function NewItemDialog({ kind, open, onClose }: { kind: ItemKind; open: b
               <FileInput size={18} />
             </span>
             <span className="text-sm font-semibold">{importer.busy ? 'Importing…' : 'Import a file'}</span>
-            <span className="text-xs leading-relaxed text-muted">A Word (.docx) or OpenDocument (.odt) file, as a new document. The file itself is not changed.</span>
+            <span className="text-xs leading-relaxed text-muted">A Word (.docx), OpenDocument (.odt) or Classroom OS document (.dcosdoc) file, as a new document. The file itself is not changed.</span>
           </button>
         )}
       </div>

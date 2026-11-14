@@ -6,7 +6,7 @@
  */
 import type { NodeChange, NodeDimensionChange, NodePositionChange, NodeSelectionChange } from '@xyflow/react';
 import { canvasPosition, inCanvasFrame, toFrame, type DiagramLayer, type Point } from '../model';
-import { deserializeDiagram, DIAGRAM_SCHEMA, serializeDiagram, shapeDefaults, type Connector, type DiagramSettings, type ShapeNode } from '../types';
+import { DEFAULT_SETTINGS, deserializeDiagram, DIAGRAM_SCHEMA, diagramSchemaOf, serializeDiagram, shapeDefaults, type Connector, type DiagramSettings, type ShapeNode } from '../types';
 
 type ById = ReadonlyMap<string, ShapeNode>;
 export const byIdOf = (nodes: readonly ShapeNode[]): Map<string, ShapeNode> => new Map(nodes.map((n) => [n.id, n]));
@@ -618,6 +618,9 @@ export function removeEmptyGroups(changes: NodeChange<ShapeNode>[], nodes: reado
 
 // ── System clipboard ─────────────────────────────────────────────────────
 
+// Phase 6 (CLIPBOARD): the JSON travels in CLIPBOARD_MIME and, for browsers whose async clipboard cannot write custom
+// types, inside text/html (CLIPBOARD_HTML_ATTR); other apps get readable text/plain (the shape labels). See
+// clipboardForms and readClipboardPayload.
 export const CLIPBOARD_FORMAT = 'dcos-diagram-clipboard';
 /** The custom clipboard type (pages of this app read it; other apps see the text/plain copy of the same JSON). */
 export const CLIPBOARD_MIME = 'application/x-dcos-diagram';
@@ -661,6 +664,9 @@ export function toClipboardPayload(nodes: readonly ShapeNode[], edges: readonly 
   return { format: CLIPBOARD_FORMAT, version: 1, source, serial, schemaVersion: content.schemaVersion, nodes: content.nodes, edges: content.edges };
 }
 
+/** Shown when copied shapes (or a copied document diagram) come from a newer version of the app. */
+export const NEWER_SHAPES_MESSAGE = 'These shapes were copied from a newer version of Classroom OS. Update the app on this device to paste them.';
+
 /** Reads clipboard text; null when it is not this app's diagram data. Throws a readable error for newer data. */
 export function parseClipboardPayload(text: string | null | undefined): (ClipboardPayload & { diagram: { nodes: ShapeNode[]; edges: Connector[] } }) | null {
   if (!text || !text.includes(CLIPBOARD_FORMAT)) return null;
@@ -673,7 +679,7 @@ export function parseClipboardPayload(text: string | null | undefined): (Clipboa
   const p = raw as Partial<ClipboardPayload>;
   if (!p || typeof p !== 'object' || p.format !== CLIPBOARD_FORMAT || !Array.isArray(p.nodes) || !Array.isArray(p.edges)) return null;
   if (p.version !== 1 || (typeof p.schemaVersion === 'number' && p.schemaVersion > DIAGRAM_SCHEMA)) {
-    throw new Error('These shapes were copied from a newer version of Classroom OS. Update the app on this device to paste them.');
+    throw new Error(NEWER_SHAPES_MESSAGE);
   }
   const d = deserializeDiagram({ nodes: p.nodes, edges: p.edges });
   return { ...(p as ClipboardPayload), diagram: { nodes: d.nodes, edges: d.edges } };
@@ -694,4 +700,166 @@ export function centredOn(nodes: ShapeNode[], edges: Connector[], center: Point)
     nodes: nodes.map((n) => (tops.includes(n) ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n)),
     edges: edges.map((e) => (e.data?.waypoints ? { ...e, data: { ...e.data, waypoints: e.data.waypoints.map((p) => ({ x: p.x + dx, y: p.y + dy })) } } : e)),
   };
+}
+
+// ── Phase 6 (CLIPBOARD): readable text for other apps, the HTML carrier, and document diagrams pasted as shapes ──
+
+/** Attribute of the text/html carrier element that holds the clipboard JSON (see clipboardForms). */
+export const CLIPBOARD_HTML_ATTR = 'data-dcos-diagram-clipboard';
+/** Upper bound for clipboard data this editor reads (the same as a .dcosdiagram file). */
+export const CLIPBOARD_MAX_CHARS = 64 * 1024 * 1024;
+
+const oneLine = (s: unknown) => (typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : '');
+const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * Plain text for other apps: each shape's label on its own line (top to bottom, then left to right), then each labelled
+ * connector as "From → To: label". Shapes without any text give "[Diagram: n shapes]".
+ */
+export function clipboardText(payload: Pick<ClipboardPayload, 'nodes' | 'edges'>): string {
+  type N = { id?: unknown; parentId?: unknown; position?: { x?: unknown; y?: unknown }; data?: { label?: unknown } };
+  type E = { source?: unknown; target?: unknown; label?: unknown };
+  const nodes = (payload.nodes as N[]).filter((n) => n && typeof n === 'object');
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  // Canvas position: positions inside a copied group are relative to it.
+  const at = (n: N, depth = 0): { x: number; y: number } => {
+    const p = { x: num(n.position?.x), y: num(n.position?.y) };
+    const parent = depth < 50 && typeof n.parentId === 'string' ? byId.get(n.parentId) : undefined;
+    if (!parent) return p;
+    const q = at(parent, depth + 1);
+    return { x: p.x + q.x, y: p.y + q.y };
+  };
+  const label = (n: N | undefined) => oneLine(n?.data?.label);
+  const lines = nodes
+    .map((n) => ({ text: label(n), ...at(n) }))
+    .filter((l) => l.text)
+    .sort((a, b) => a.y - b.y || a.x - b.x)
+    .map((l) => l.text);
+  for (const e of payload.edges as E[]) {
+    const text = oneLine(e?.label);
+    if (!text) continue;
+    const from = label(byId.get(e.source)) || 'shape';
+    const to = label(byId.get(e.target)) || 'shape';
+    lines.push(`${from} → ${to}: ${text}`);
+  }
+  if (lines.length) return lines.join('\n');
+  const count = nodes.length;
+  return `[Diagram: ${count} ${count === 1 ? 'shape' : 'shapes'}]`;
+}
+
+/**
+ * What a copy puts on the clipboard: the JSON (for CLIPBOARD_MIME), readable text (text/plain) and HTML that shows the
+ * same text in other apps and carries the JSON in CLIPBOARD_HTML_ATTR for pages of this app whose browser cannot
+ * write a custom clipboard type (Safari's async clipboard).
+ */
+export function clipboardForms(payload: ClipboardPayload): { json: string; text: string; html: string } {
+  const json = JSON.stringify(payload);
+  const text = clipboardText(payload);
+  const paragraphs = text
+    .split('\n')
+    .map((l) => `<p>${escapeHtml(l)}</p>`)
+    .join('');
+  return { json, text, html: `<div ${CLIPBOARD_HTML_ATTR}="${escapeHtml(json)}">${paragraphs}</div>` };
+}
+
+/** Clipboard data by type; a type that cannot be read gives ''. */
+export type ClipboardGetter = (type: string) => string;
+
+const parseHtml = (html: string): Document | null => {
+  if (!html || html.length > CLIPBOARD_MAX_CHARS || typeof DOMParser === 'undefined') return null;
+  try {
+    return new DOMParser().parseFromString(html, 'text/html');
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Copied shapes from any clipboard form: CLIPBOARD_MIME, the text/html carrier, or text/plain JSON (what earlier
+ * versions wrote). Null when the clipboard holds no shapes; throws NEWER_SHAPES_MESSAGE for data from a newer version.
+ */
+export function readClipboardPayload(get: ClipboardGetter): ReturnType<typeof parseClipboardPayload> {
+  const capped = (t: string) => (t && t.length <= CLIPBOARD_MAX_CHARS ? t : '');
+  const direct = parseClipboardPayload(capped(get(CLIPBOARD_MIME)));
+  if (direct) return direct;
+  const html = get('text/html');
+  if (html && html.includes(CLIPBOARD_HTML_ATTR)) {
+    const carried = parseHtml(html)?.querySelector(`[${CLIPBOARD_HTML_ATTR}]`)?.getAttribute(CLIPBOARD_HTML_ATTR);
+    const p = parseClipboardPayload(carried);
+    if (p) return p;
+  }
+  return parseClipboardPayload(capped(get('text/plain')));
+}
+
+/** Shown when a copied document diagram has lost its editable data (a picture alone cannot become shapes). */
+export const DOCUMENT_DIAGRAM_NO_DATA = "The copied diagram's data is missing, so it can't be pasted as shapes.";
+
+/**
+ * Diagrams copied from a document (text/html `figure[data-type=diagram]` with its data in `data-diagram`), as shapes
+ * to paste. Several diagrams are placed side by side. Null when the HTML holds no document diagram. Throws
+ * NEWER_SHAPES_MESSAGE for a diagram from a newer version and DOCUMENT_DIAGRAM_NO_DATA when none has usable data.
+ * The copied data is only read: it is never changed.
+ */
+export function documentDiagramsFromHtml(html: string | null | undefined): { nodes: ShapeNode[]; edges: Connector[]; count: number } | null {
+  if (!html || !html.includes('data-diagram')) return null;
+  const figures = [...(parseHtml(html)?.querySelectorAll('figure[data-type="diagram"]') ?? [])];
+  if (!figures.length) return null;
+  const sources: unknown[] = [];
+  for (const f of figures) {
+    try {
+      const data: unknown = JSON.parse(f.getAttribute('data-diagram') ?? '');
+      const source = data && typeof data === 'object' ? (data as { source?: unknown }).source : null;
+      if (source && typeof source === 'object' && !Array.isArray(source)) sources.push(source);
+    } catch {
+      // unusable: counted as missing below
+    }
+  }
+  if (sources.some((s) => diagramSchemaOf(s) > DIAGRAM_SCHEMA)) throw new Error(NEWER_SHAPES_MESSAGE);
+  const nodes: ShapeNode[] = [];
+  const edges: Connector[] = [];
+  let count = 0;
+  let right: number | null = null;
+  let top = 0;
+  sources.forEach((source, i) => {
+    const d = deserializeDiagram(source);
+    if (!d.nodes.length) return;
+    count++;
+    // Ids are made unique per diagram (the paste gives every shape a new id anyway).
+    const id = (x: string) => `d${i}-${x}`;
+    const ids = new Set(d.nodes.map((n) => n.id));
+    let ns = d.nodes.map((n) => ({ ...n, id: id(n.id), selected: false, ...(n.parentId && ids.has(n.parentId) ? { parentId: id(n.parentId) } : {}) }));
+    let es = d.edges.filter((e) => ids.has(e.source) && ids.has(e.target)).map((e) => ({ ...e, id: id(e.id), source: id(e.source), target: id(e.target), selected: false }));
+    const tops = ns.filter((n) => !n.parentId);
+    const minX = Math.min(...tops.map((n) => n.position.x));
+    const minY = Math.min(...tops.map((n) => n.position.y));
+    const maxX = Math.max(...tops.map((n) => n.position.x + sizeOf(n).w));
+    if (right === null) {
+      right = maxX;
+      top = minY;
+    } else {
+      // Next to the previous diagram, top-aligned with the first.
+      const dx = right + 60 - minX;
+      const dy = top - minY;
+      ns = ns.map((n) => (n.parentId ? n : { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } }));
+      es = es.map((e) => (e.data?.waypoints ? { ...e, data: { ...e.data, waypoints: e.data.waypoints.map((p) => ({ x: p.x + dx, y: p.y + dy })) } } : e));
+      right = maxX + dx;
+    }
+    nodes.push(...ns);
+    edges.push(...es);
+  });
+  if (!count) throw new Error(DOCUMENT_DIAGRAM_NO_DATA);
+  return { nodes, edges, count };
+}
+
+/**
+ * Copied shapes as a new diagram to embed in a document (the document's paste of Diagram Studio shapes). Shapes keep
+ * their places; layer names are dropped because the new diagram has no layers. Null when the text holds no shapes;
+ * throws NEWER_SHAPES_MESSAGE for newer data.
+ */
+export function diagramFromClipboard(get: ClipboardGetter) {
+  const p = readClipboardPayload(get);
+  if (!p || !p.diagram.nodes.length) return null;
+  const nodes = p.diagram.nodes.map(({ layer: _l, selected: _s, ...n }) => n as ShapeNode);
+  return serializeDiagram(nodes, p.diagram.edges.map(({ selected: _s, ...e }) => e as Connector), null, { ...DEFAULT_SETTINGS });
 }

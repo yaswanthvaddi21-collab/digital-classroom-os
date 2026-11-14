@@ -36,7 +36,8 @@ export function findInserted(tr: Transaction, firstStep: number, typeName: strin
 
 /**
  * Changes attributes of the `typeName` node at `pos`. Atoms (equations, shapes, pictures) stay selected, so their
- * tools stay open; the change is one undo step.
+ * tools stay open; the change is one undo step. When another object has been selected meanwhile (a field of the old
+ * object's bar commits as focus leaves it for the new one), that selection is kept (Phase 6).
  */
 export function updateNodeAt(editor: Editor, pos: number, typeName: string, patch: Record<string, unknown>): boolean {
   return editor
@@ -44,8 +45,9 @@ export function updateNodeAt(editor: Editor, pos: number, typeName: string, patc
     .command(({ tr }) => {
       const node = tr.doc.nodeAt(pos);
       if (!node || node.type.name !== typeName) return false;
+      const other = tr.selection instanceof NodeSelection && tr.selection.from !== pos;
       tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...patch });
-      if (node.isAtom) tr.setSelection(NodeSelection.create(tr.doc, pos));
+      if (node.isAtom && !other) tr.setSelection(NodeSelection.create(tr.doc, pos));
       return true;
     })
     .run();

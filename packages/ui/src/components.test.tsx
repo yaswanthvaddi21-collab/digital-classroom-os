@@ -32,4 +32,42 @@ describe('Menu', () => {
     expect(fireEvent.keyDown(document.body, { key: 'Enter' })).toBe(true);
     expect(screen.getByRole('menu')).toBeTruthy();
   });
+
+  // TD-25 (Phase 6 Round 3): the keyboard menu pattern.
+  it('focuses the first item on open, moves with the arrow keys, Home and End, and gives focus back on Escape', () => {
+    render(
+      <Menu
+        trigger={(p) => (
+          <button type="button" {...p}>
+            Diagram
+          </button>
+        )}
+        items={[
+          { label: 'Edit', onSelect: vi.fn() },
+          { label: 'Disabled', onSelect: vi.fn(), disabled: true },
+          { label: 'Download', onSelect: vi.fn() },
+          { label: 'Remove', onSelect: vi.fn() },
+        ]}
+      />,
+    );
+    const trigger = screen.getByRole('button', { name: 'Diagram' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const item = (name: string) => screen.getByRole('menuitem', { name });
+    expect(document.activeElement).toBe(item('Edit'));
+    const key = (k: string) => fireEvent.keyDown(document.activeElement!, { key: k });
+    key('ArrowDown');
+    expect(document.activeElement).toBe(item('Download')); // the disabled item is skipped
+    key('End');
+    expect(document.activeElement).toBe(item('Remove'));
+    key('ArrowDown');
+    expect(document.activeElement).toBe(item('Edit')); // wraps
+    key('ArrowUp');
+    expect(document.activeElement).toBe(item('Remove'));
+    key('Home');
+    expect(document.activeElement).toBe(item('Edit'));
+    key('Escape');
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
 });

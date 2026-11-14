@@ -2,6 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { imageAlign, imageCaption } from '../../extensions/figureImage';
 import { isRemoteImageSrc } from '../../extensions/remoteImages';
 import { imageSize } from '../../import/imageSize';
+import { diagramPicture, noteDiagram } from '../diagramAssets';
 import { NOTES } from '../report';
 import type { OdtCtx } from './context';
 import { ODT_NOTES } from './notes';
@@ -38,8 +39,24 @@ const placeholder = (ctx: OdtCtx, text: string) => el('text:p', { 'text:style-na
  * description (svg:desc).
  */
 function framed(ctx: OdtCtx, data: Uint8Array, mime: string, widthPx: number, heightPx: number, name: string, alt: string, desc: string, align = 'center'): string {
-  const path = `Pictures/${String(++ctx.ids.picture).padStart(4, '0')}.${FORMATS[mime]}`;
-  ctx.pictures.set(path, { data, mime });
+  return framedImages(ctx, [{ data, mime }], widthPx, heightPx, name, alt, desc, align);
+}
+
+/**
+ * The same with several images of one picture in one frame, best first: an application shows the first it can
+ * (LibreOffice writes an SVG followed by its PNG fallback this way). Bytes stored before (a copy of the same diagram)
+ * are not stored again: the frames share one Pictures/ entry.
+ */
+function framedImages(ctx: OdtCtx, images: Array<{ data: Uint8Array; mime: string }>, widthPx: number, heightPx: number, name: string, alt: string, desc: string, align = 'center'): string {
+  const stored = (ctx.storedPictures ??= new WeakMap());
+  const paths = images.map(({ data, mime }) => {
+    const known = stored.get(data);
+    if (known) return { path: known, mime };
+    const path = `Pictures/${String(++ctx.ids.picture).padStart(4, '0')}.${FORMATS[mime]}`;
+    ctx.pictures.set(path, { data, mime });
+    stored.set(data, path);
+    return { path, mime };
+  });
   let w = widthPx;
   let h = heightPx;
   if (w > ctx.contentWidthPx) {
@@ -52,7 +69,7 @@ function framed(ctx: OdtCtx, data: Uint8Array, mime: string, widthPx: number, he
   const frame = el(
     'draw:frame',
     { 'draw:style-name': frameStyle, 'draw:name': `${name} ${++ctx.ids.frame}`, 'text:anchor-type': 'as-char', 'svg:width': pxToCm(w), 'svg:height': pxToCm(h), 'draw:z-index': 0 },
-    el('draw:image', { 'xlink:href': path, 'xlink:type': 'simple', 'xlink:show': 'embed', 'xlink:actuate': 'onLoad', 'draw:mime-type': mime }) +
+    paths.map(({ path, mime }) => el('draw:image', { 'xlink:href': path, 'xlink:type': 'simple', 'xlink:show': 'embed', 'xlink:actuate': 'onLoad', 'draw:mime-type': mime })).join('') +
       (alt ? el('svg:title', {}, esc(alt)) : '') +
       (desc ? el('svg:desc', {}, esc(desc)) : ''),
   );
@@ -85,17 +102,23 @@ export function imageBlock(node: JSONContent, ctx: OdtCtx): string {
   return framed(ctx, picture.data, picture.mime, width, height, 'Image', alt, String(node.attrs?.title ?? ''), align) + caption(node, ctx, align);
 }
 
-/** An embedded diagram: its rendered preview, at the size shown in the document. */
+/**
+ * An embedded diagram: its picture at the size shown in the document, aligned like a picture and followed by its
+ * caption. Phase 6 (ADR 0013): the vector drawing (SVG) first and the PNG as the fallback in one frame, the PNG carrying
+ * the diagram's editable data, a missing preview redrawn from the data (diagramAssets.ts). The title is the frame's
+ * svg:title (as before); alt text, when set, its svg:desc.
+ */
 export function diagramBlock(node: JSONContent, ctx: OdtCtx): string {
   const a = node.attrs ?? {};
   const title = String(a.title || 'Diagram');
-  const bytes = a.previewId ? ctx.assets.get(String(a.previewId)) : undefined;
-  if (!bytes) {
-    NOTES.missingDiagramPreview(ctx.report);
-    return placeholder(ctx, `[Diagram: ${title} — preview not available]`);
-  }
+  const align = imageAlign(a);
+  const picture = diagramPicture(a, ctx.assets, ctx.diagramRenders, (ctx.diagramPictures ??= new Map()));
+  noteDiagram(ctx.report, picture);
+  if (!picture) return placeholder(ctx, `[Diagram: ${title} — preview not available]`) + caption(node, ctx, align);
   const naturalW = Number(a.naturalWidth) || 400;
   const naturalH = Number(a.naturalHeight) || 300;
   const width = Math.min(Number(a.width) || naturalW, ctx.contentWidthPx);
-  return framed(ctx, bytes, 'image/png', width, Math.round((width * naturalH) / naturalW), 'Diagram', title, '');
+  const images = [...(picture.svg ? [{ data: picture.svg, mime: 'image/svg+xml' }] : []), { data: picture.png, mime: 'image/png' }];
+  const desc = typeof a.alt === 'string' ? a.alt.trim() : '';
+  return framedImages(ctx, images, width, Math.round((width * naturalH) / naturalW), 'Diagram', title, desc, align) + caption(node, ctx, align);
 }

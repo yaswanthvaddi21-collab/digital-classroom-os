@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { listMarkerText } from '../extensions/listStyles'; // G-FORMAT
+import { diagramLabels } from './diagramAssets';
 import { blockMathText, captionLines, inlineMathText, shapeText, textBoxText } from './insertText'; // G-INSERT
 
 /** Helpers handed to text handlers. */
@@ -33,7 +34,9 @@ export const TEXT_HANDLERS: Record<string, TextHandler> = {
   horizontalRule: (_n, _indent, t) => t.push('—'.repeat(20), ''),
   pageBreak: (_n, _indent, t) => t.push('\f'),
   codeBlock: (n, _indent, t) => t.push(t.inline(n), ''),
-  diagram: (n, indent, t) => t.push(`${indent}[Diagram: ${n.attrs?.title || 'Untitled'}]`, ''),
+  // Phase 6: the diagram's visible labels, indented under its line (diagramAssets.ts diagramLabels), then its caption.
+  diagram: (n, indent, t) =>
+    t.push(`${indent}[Diagram: ${n.attrs?.title || 'Untitled'}]`, ...diagramLabels(n.attrs?.source).map((l) => `${indent}   ${l}`), ...captionLines(n, indent), ''),
   // TD-13: never dropped silently. The table of contents lists the headings, as it does on screen.
   tableOfContents: (_n, indent, t) => t.push(indent + 'Table of Contents', ...t.headings.map((h) => `${indent}${'   '.repeat(h.level - 1)}${h.text}`), ''),
   image: (n, indent, t) => {

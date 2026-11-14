@@ -10,7 +10,7 @@
 import { zipSync, strToU8, type Zippable } from 'fflate';
 import { LAYOUT_DEFAULTS, layoutOf } from '../../pageLayout';
 import { CONTENT_FIELDS, DEFAULT_PAGE, paperSize, type DocumentContent } from '../../types';
-import { diagramPreviewIds } from '../docx/images';
+import { prepareDiagramExport, type DiagramExportOptions, type DiagramRenders } from '../diagramAssets';
 import { ExportReport } from '../report';
 import { AutoStyles, type OdtCtx } from './context';
 import { ODT_NOTES } from './notes';
@@ -88,6 +88,7 @@ export function buildOdtParts(
   assets: Map<string, Uint8Array> = new Map(),
   report = new ExportReport(),
   now = new Date(),
+  diagramRenders?: DiagramRenders,
 ): { parts: Record<string, string>; pictures: Map<string, { data: Uint8Array; mime: string }> } {
   const page = content.page;
   const paper = paperSize(page);
@@ -97,6 +98,7 @@ export function buildOdtParts(
     styles: new AutoStyles(),
     pictures: new Map(),
     assets,
+    diagramRenders,
     headings: collectHeadings(content.doc),
     report,
     paragraphStyle: 'Standard',
@@ -147,8 +149,15 @@ export function buildOdtParts(
 }
 
 /** The .odt file: a zip whose first entry is the uncompressed "mimetype", as ODF requires. */
-export function buildOdt(content: DocumentContent, title = 'Document', assets: Map<string, Uint8Array> = new Map(), report = new ExportReport(), now = new Date()): Uint8Array {
-  const { parts, pictures } = buildOdtParts(content, title, assets, report, now);
+export function buildOdt(
+  content: DocumentContent,
+  title = 'Document',
+  assets: Map<string, Uint8Array> = new Map(),
+  report = new ExportReport(),
+  now = new Date(),
+  diagramRenders?: DiagramRenders,
+): Uint8Array {
+  const { parts, pictures } = buildOdtParts(content, title, assets, report, now, diagramRenders);
   const mtime = now;
   const files: Zippable = { mimetype: [strToU8(ODT_MIME), { level: 0, mtime }] };
   for (const [path, xml] of Object.entries(parts)) files[path] = [strToU8(xml), { level: 6, mtime }];
@@ -157,15 +166,20 @@ export function buildOdt(content: DocumentContent, title = 'Document', assets: M
   return zipSync(files);
 }
 
-/** Loads embedded diagram previews (via the app's storage) and writes the .odt. */
-export async function exportOdt(content: DocumentContent, title: string, loadAsset?: (id: string) => Promise<Blob | undefined>, report = new ExportReport()): Promise<Blob> {
+/**
+ * Loads embedded diagram previews (via the app's storage) and writes the .odt, as exportDocx does: a failing load is
+ * treated as missing, `options.renderPreview` redraws missing previews and adds each diagram's SVG, and every PNG
+ * carries the diagram's editable data (Phase 6, ADR 0013).
+ */
+export async function exportOdt(
+  content: DocumentContent,
+  title: string,
+  loadAsset?: (id: string) => Promise<Blob | undefined>,
+  report = new ExportReport(),
+  options: DiagramExportOptions = {},
+): Promise<Blob> {
   const assets = new Map<string, Uint8Array>();
-  if (loadAsset) {
-    for (const id of diagramPreviewIds(content.doc)) {
-      const blob = await loadAsset(id);
-      if (blob) assets.set(id, new Uint8Array(await blob.arrayBuffer()));
-    }
-  }
-  const bytes = buildOdt(content, title, assets, report);
+  const renders = await prepareDiagramExport(content.doc, assets, loadAsset, options);
+  const bytes = buildOdt(content, title, assets, report, new Date(), renders);
   return new Blob([bytes as BlobPart], { type: ODT_MIME });
 }

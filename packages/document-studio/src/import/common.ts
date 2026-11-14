@@ -19,7 +19,39 @@ export interface ImportResult {
   /** A title for the new document: the file's own title, or its name. */
   title: string;
   report: ImportReport;
-  format: 'docx' | 'odt';
+  format: 'docx' | 'odt' | 'dcosdoc';
+  /**
+   * Phase 6 (ADR 0013): pictures the new document refers to by attachment id (the previews of embedded diagrams),
+   * which the app must store before saving the document: store each one, then give the content to
+   * withStoredAttachments with the ids the store gave them. Absent when the document refers to none; present but
+   * empty when it refers to pictures none of which could be read (their ids must still be cleared).
+   */
+  attachments?: ImportedAttachment[];
+}
+
+/** A picture an imported document refers to by `id` (a diagram's previewId or svgPreviewId). */
+export interface ImportedAttachment {
+  /** The id the imported content uses for it (in the file, or made up by the import), replaced when stored. */
+  id: string;
+  data: Uint8Array;
+  mimeType: 'image/png' | 'image/svg+xml';
+}
+
+/**
+ * The imported content with each diagram's previewId and svgPreviewId replaced by the id its picture was stored
+ * under (`stored`: id in the import → id in the store). An id that was not stored becomes null: the diagram keeps its
+ * data and shows that its preview is missing (it can be drawn again from the data), never someone else's picture.
+ * The content's schema number is worked out again, since clearing an SVG preview can lower it.
+ */
+export function withStoredAttachments(content: DocumentContent, stored: ReadonlyMap<string, string>): DocumentContent {
+  const swap = (v: unknown) => (typeof v === 'string' && v ? stored.get(v) ?? null : null);
+  const walk = (n: JSONContent): JSONContent => {
+    const next: JSONContent = n.type === 'diagram' && n.attrs ? { ...n, attrs: { ...n.attrs, previewId: swap(n.attrs.previewId), svgPreviewId: swap(n.attrs.svgPreviewId) } } : { ...n };
+    if (n.content) next.content = n.content.map(walk);
+    return next;
+  };
+  const { schemaVersion: _old, ...rest } = { ...content, doc: walk(content.doc) };
+  return { ...rest, schemaVersion: contentSchemaFor(rest as unknown as Pick<DocumentContent, 'doc'> & Record<string, unknown>) } as DocumentContent;
 }
 
 /**
@@ -171,7 +203,8 @@ export function attachCaptions(doc: JSONContent): JSONContent {
     for (let i = 0; i + 1 < blocks.length; i++) {
       const image = blocks[i];
       const next = blocks[i + 1];
-      if (image.type !== 'image' || image.attrs?.caption || next.type !== 'paragraph' || next.attrs?.paragraphStyle !== 'caption') continue;
+      // Phase 6: an imported diagram takes its caption the same way.
+      if ((image.type !== 'image' && image.type !== 'diagram') || image.attrs?.caption || next.type !== 'paragraph' || next.attrs?.paragraphStyle !== 'caption') continue;
       const runs = next.content ?? [];
       if (!runs.every((c) => c.type === 'text' && (c.marks ?? []).every((m) => m.type === 'italic'))) continue;
       const caption = runs.map((c) => c.text ?? '').join('').trim();

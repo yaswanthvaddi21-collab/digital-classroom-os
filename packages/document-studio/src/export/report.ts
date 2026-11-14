@@ -58,6 +58,19 @@ export const NOTES = {
     r.add('remote-image', '1 image was not saved for offline use and was written as a placeholder', '{n} images were not saved for offline use and were written as placeholders', count),
   unsupportedImage: (r: ExportReport, count = 1) =>
     r.add('unsupported-image', '1 image in a format Word cannot show was written as a placeholder', '{n} images in formats Word cannot show were written as placeholders', count),
+  // Phase 6 (ADR 0013): every format but .dcosdoc writes a diagram as a picture. The picture carries the diagram's
+  // data, so importing the file back into Classroom OS restores an editable diagram; other apps show the picture.
+  diagramPicture: (r: ExportReport, count = 1) =>
+    r.add(
+      'diagram-picture',
+      '1 diagram was written as a picture; it can be edited again when this file is imported back into Classroom OS',
+      '{n} diagrams were written as pictures; they can be edited again when this file is imported back into Classroom OS',
+      count,
+    ),
+  diagramPictureOnly: (r: ExportReport, count = 1) =>
+    r.add('diagram-picture-only', "1 diagram was written as a picture only: its editable data could not be kept in the file", "{n} diagrams were written as pictures only: their editable data could not be kept in the file", count),
+  diagramRedrawn: (r: ExportReport, count = 1) =>
+    r.add('diagram-redrawn', "1 diagram's missing preview was redrawn from its data", "{n} diagrams' missing previews were redrawn from their data", count),
   missingDiagramPreview: (r: ExportReport, count = 1) =>
     r.add('diagram-preview', '1 diagram has no preview and was written as a placeholder', '{n} diagrams have no preview and were written as placeholders', count),
   unsafeLink: (r: ExportReport, count = 1) =>

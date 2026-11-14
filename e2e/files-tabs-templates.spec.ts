@@ -52,7 +52,7 @@ test('a Word document imports as a new document, with a report of what was left 
   await page.goto('./#/documents');
   const before = (await documents(page)).length;
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Import Word document' }).click();
+  await page.getByRole('button', { name: 'Import document' }).click();
   await (await chooser).setFiles({ name: 'trip.docx', mimeType: DOCX_MIME, buffer: await wordFile() });
 
   const dialog = page.getByRole('dialog').filter({ hasText: 'Imported with notes' });

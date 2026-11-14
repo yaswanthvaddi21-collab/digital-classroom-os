@@ -1,6 +1,6 @@
 # Document compatibility
 
-What Document Studio writes when it exports a document, what it reads when it imports one, and what older versions of the app can open. This describes the code at the end of Phase 4. Design decisions are in [ADR 0011](adr/0011-document-format-phase4.md); the module layout is in [ARCHITECTURE.md](ARCHITECTURE.md#document-studio).
+What Document Studio writes when it exports a document, what it reads when it imports one, and what older versions of the app can open. This describes the code at the end of Phase 4, with the Phase 6 changes for embedded diagrams. Design decisions are in [ADR 0011](adr/0011-document-format-phase4.md) and, for embedded diagrams, [ADR 0013](adr/0013-document-diagram-integration.md); the module layout is in [ARCHITECTURE.md](ARCHITECTURE.md#document-studio).
 
 **Evidence.** Every statement below rests on the export and import code in `packages/document-studio/src` and on automated tests: XML assertions, golden snapshots of the exported XML, a re-read of every exported DOCX by an independent parser (mammoth), and round trips through the app's own importers (§7). On 2026-11-13/14 the 16 sample DOCX files were opened in **Apple Pages (all 16)** and **Microsoft Word for Mac 16.115 (2 of 16, read-only)**; §8 has the results. No ODT file has been opened in another word processor, nothing has been tested in LibreOffice or Word for Windows, and no file has been validated against the OOXML or ODF schemas.
 
@@ -21,6 +21,7 @@ Stored documents carry a content schema number (`schemaVersion`).
 
 - **Schema 1** is what v0.1.0 could store. The vocabulary of v0.1.0 (every node and mark type, each attribute and its default, the top-level fields, the page fields, the paper sizes A4 and Letter, the orientations, the margin keys and the two editing modes) is frozen in `compat.ts` (`V010_VOCABULARY`).
 - **Schema 2** is anything outside that vocabulary: an embedded diagram (since Release 0.2), and every Phase 4 feature that stores something new. `contentSchemaFor()` decides this on every save, so the number follows the content: deleting the last comment or section break makes the document schema 1 again (tested in `e2e/review.spec.ts` and `e2e/layout-document.spec.ts`).
+- **Schema 3** (Phase 6, [ADR 0013](adr/0013-document-diagram-integration.md)) is anything outside the Phase 5 vocabulary (`V020_VOCABULARY`, frozen from `8f772ba`). Today that means a diagram with a caption, alt text, a left or right alignment (the object bar stores centre as no alignment), or a stored SVG preview (this version never stores one itself, ADR 0013 decision 12; a `.dcosdoc` file can carry one). A document that uses none of these stays schema 2, and the Phase 4 and Phase 5 builds keep editing it; a schema-3 document opens read-only in those builds. Removing the last such value makes it schema 2 again.
 
 What makes a document schema 2:
 
@@ -33,6 +34,8 @@ What makes a document schema 2:
 | A top-level field: `comments` (when not empty) or `language` (when set) | An ordered list start number (`orderedList.start` existed in v0.1.0) |
 
 **Compatibility rule.** v0.1.0 understands schema 1 only. It refuses a whole backup file whose `schemaVersion` (the highest content schema in it) is above 1 ([ADR 0007](adr/0007-backup-format.md)), and it cannot open a database written by a newer version ([ADR 0006](adr/0006-migrations-and-safety-copies.md)). So a document that uses any feature in the left column reaches v0.1.0 only after that feature is removed. All built-in templates, including the four added in Phase 4, are schema 1 (tested in `compat.test.ts`).
+
+**Unsaved diagram-dialog edits and older builds.** Since Phase 6, unsaved edits in the diagram dialog are kept as drafts of their document (ADR 0013 decision 7). The Phase 4 and Phase 5 builds don't know these drafts and offer them as unsaved document changes when the same browser profile is opened with them. So each draft is stored as an ordinary schema-2 document: a note, the diagram as it was (when the dialog was opened on an existing one) and the edited diagram. Recovering it there ("Recover them", or "Save as a new document" in Settings → Storage) makes an editable "(recovered)" copy showing those diagrams. The edited one has no preview picture until it is opened in the diagram editor and saved. Tested in `apps/web/src/lib/diagram-dialog-drafts.test.tsx`.
 
 **This version, opening content it does not understand.** A node type, mark, attribute value, page setting, editing mode or top-level field that this version does not know opens the document in the protected read-only view, with the reason. The stored original is never changed when a document is opened (`prepareDocument()` in `safety.ts`). Tested in `safety.test.ts`, `layout.test.ts` and `review/review.test.ts`.
 
@@ -80,7 +83,7 @@ In the DOCX column, the automated checks are XML-level. What Word and Pages actu
 | Links | Native for http, https, mailto and other allowed schemes; scheme-less stored links get `https://`. Disallowed addresses (`javascript:`, `data:`) and `#anchors` are written as text: "1 link with an unsupported address was written as plain text" | Same rule and sentence | As on screen | Text only |
 | Table of contents | Native: a real Word TOC field over Heading 1–4, with the current entries as its cached result. **Approximation:** "The table of contents was written without page numbers; they are added when its field is updated in Word". Silent: a table of contents inside a table cell is written as plain paragraphs | Native: an ODF index with the current entries (plain paragraphs inside a table cell). "The table of contents was written without page numbers; they are added when it is updated in your word processor" | As on screen, without page numbers | "Table of Contents" and the headings, indented by level |
 | Page breaks | Native | Native (a paragraph with a page break after it) | Native | Form feed |
-| Embedded diagrams | The PNG preview. Without a preview: placeholder, "1 diagram has no preview and was written as a placeholder" | Same | The preview | `[Diagram: title]` |
+| Embedded diagrams (Phase 6, `export/diagramAssets.ts`) | **Approximation:** a picture at the size shown in the document: the SVG drawing with the PNG as its fallback (`asvg:svgBlip`). The PNG carries the diagram's editable data (an iTXt chunk `dcos-diagram`), so importing the file back into Classroom OS gives an editable diagram; other apps show the picture. Alignment and caption are written as for pictures; the alt text (else the title) is the picture's description. "1 diagram was written as a picture; it can be edited again when this file is imported back into Classroom OS" (or "…written as a picture only: its editable data could not be kept in the file"). A missing or unreadable preview is drawn again from the diagram's data ("1 diagram's missing preview was redrawn from its data"); when there is no data or it cannot be drawn: placeholder, "1 diagram has no preview and was written as a placeholder". A diagram from a newer version keeps its stored PNG only | Same, with one frame holding the SVG and then the PNG (two `draw:image`); the title is the frame's `svg:title`, the alt text its `svg:desc` | The SVG drawing (stored, or drawn from the data; the on-screen PNG when that fails or takes more than 5 seconds in all), aligned and captioned as on screen, without editing hints. With no picture at all: "[Diagram: title — preview not available]" | `[Diagram: title]`, then the labels of visible shapes (top to bottom, then left to right) and of connectors ("from → to: label"), indented, then the caption |
 
 ### 3.4 Equations, shapes and text boxes
 
@@ -111,13 +114,16 @@ In the DOCX column, the automated checks are XML-level. What Word and Pages actu
 
 ## 4. Export toast sentences
 
-These are the exact sentences (one occurrence shown; counts above one use the plural). The source is `NOTES` in `export/report.ts` and `ODT_NOTES` in `export/odt/notes.ts`, except the ODT list sentences (`export/odt/lists.ts`) and the ODT starting-page-number and page-setting sentences (`export/odt/index.ts`). `tests/integration/kitchen-sink-v2-golden.test.ts` pins the complete toast text for both formats.
+These are the exact sentences (one occurrence shown; counts above one use the plural). The source is `NOTES` in `export/report.ts` and `ODT_NOTES` in `export/odt/notes.ts`, except the ODT list sentences (`export/odt/lists.ts`) and the ODT starting-page-number and page-setting sentences (`export/odt/index.ts`). `tests/integration/kitchen-sink-v2-golden.test.ts` pins the complete toast text for both formats. The Phase 6 diagram sentences are checked in `export/diagram-roundtrip.test.ts`, `export/dcosdoc.test.ts` and `e2e/diagram-embed-export.spec.ts`.
 
 **DOCX** ("Exported Word document. …")
 
 - "1 image was not saved for offline use and was written as a placeholder"
 - "1 image in a format Word cannot show was written as a placeholder"
 - "1 diagram has no preview and was written as a placeholder"
+- "1 diagram was written as a picture; it can be edited again when this file is imported back into Classroom OS"
+- "1 diagram was written as a picture only: its editable data could not be kept in the file"
+- "1 diagram's missing preview was redrawn from its data"
 - "1 link with an unsupported address was written as plain text"
 - "1 highlight colour was changed to Word's nearest highlight colour"
 - "The table of contents was written without page numbers; they are added when its field is updated in Word"
@@ -132,7 +138,7 @@ These are the exact sentences (one occurrence shown; counts above one use the pl
 - "1 text box was written as a one-cell table"
 - "1 section break inside a table, list or quote was left out"
 
-**ODT** ("Exported OpenDocument text. …"): the shared sentences for remote images, diagram previews and links above, plus
+**ODT** ("Exported OpenDocument text. …"): the shared sentences for remote images, diagrams and links above, plus
 
 - "1 image in a format ODT files cannot hold was written as a placeholder"
 - "The table of contents was written without page numbers; they are added when it is updated in your word processor"
@@ -146,11 +152,13 @@ These are the exact sentences (one occurrence shown; counts above one use the pl
 - "The starting page number was left out: in ODT files it is set on the first paragraph, and this document starts with something else"
 - Generic sentences for anything a later feature adds before the ODT exporter learns it, so it is never dropped silently: a node type ("1 “x” item is not supported in ODT files yet and was left out"), a mark, an attribute ("The “x” setting of y items is not supported in ODT files yet and was left out"), a page setting or a document field.
 
-**Print/PDF.** The export menu says the browser's print dialog is used ("choose “Save as PDF”") and that the header, footer and page numbers need a recent Chrome or Edge. Where the browser is detected as lacking page margin boxes (Safari, Firefox, iOS browsers; `export/printSupport.ts`, by user agent), the menu says so, and printing a page that has a header, footer or page numbers shows: "This browser's print dialog leaves out the header, footer and page numbers. They need a recent Chrome or Edge."
+**Classroom OS document** ("Exported Classroom OS document. …", `.dcosdoc`): diagrams are not pictures there, so only "1 diagram's missing preview was redrawn from its data" and, written in `export/dcosdoc.ts`, "1 diagram's preview could not be read and was left out; the diagram keeps its data and its preview can be drawn again".
+
+**Print/PDF.** The export menu says the browser's print dialog is used ("choose “Save as PDF”") and that the header, footer and page numbers need a recent Chrome or Edge. Where the browser is detected as lacking page margin boxes (Safari, Firefox, iOS browsers; `export/printSupport.ts`, by user agent), the menu says so, and printing a page that has a header, footer or page numbers shows: "This browser's print dialog leaves out the header, footer and page numbers. They need a recent Chrome or Edge." Since Phase 6, printing a diagram with no picture at all shows "1 diagram has no preview and was printed as a placeholder." (`PRINT_ONE_PLACEHOLDER` in `export/print.ts`); the count is tested (`export/diagram-text-print.test.ts`), the toast itself is not.
 
 ## 5. Import
 
-Import always creates a **new** document; it never changes an existing one. Entry points: "Import Word document" on the Documents list and "Import a file" in the New dialog (`apps/web/src/components/ImportDocument.tsx`). The format is recognised from the file's contents, not its name. An older `.doc` file, a file that is not a document, a damaged file, and a package that would unpack to more than 512 MB are refused with a readable message. The import runs on the main thread, so a large file blocks the tab while it imports.
+Import always creates a **new** document; it never changes an existing one. Entry points: "Import document" on the Documents list and "Import a file" in the New dialog (`apps/web/src/components/ImportDocument.tsx`); since Phase 6 they also take a Classroom OS document file (`.dcosdoc`, [ADR 0013](adr/0013-document-diagram-integration.md)), and diagrams exported to DOCX or ODT by this app come back editable, with their size, alignment, caption and alt text (a picture without that data, or with damaged data, stays a picture; `import/diagrams.ts`). The format is recognised from the file's contents, not its name (a `.dcosdoc` file also by its name). A `.dcosdoc` file may be up to 100 MB (other files 50 MB); one from a newer version of the app, or holding content this version cannot keep exactly, is refused with the reason, and a picture missing from it is reported, the diagram keeping its data. Tested in `export/diagram-roundtrip.test.ts`, `export/dcosdoc.test.ts`, `apps/web/src/components/ImportDocument.diagrams.test.tsx` and `e2e/diagram-embed-export.spec.ts`. An older `.doc` file, a file that is not a document, a damaged file, and a package that would unpack to more than 512 MB are refused with a readable message. The import runs on the main thread, so a large file blocks the tab while it imports.
 
 After an import with anything to report, an "Imported with notes" dialog lists one sentence per kind of loss (most from `IMPORT_NOTES` in `import/common.ts`, a few written in `import/docx.ts` and `import/odt.ts`).
 
@@ -202,6 +210,7 @@ PDF is made by the browser: the export opens the print dialog on a hidden copy o
 | DOCX, unit | `export/docx.test.ts`, `export/docx/format.test.ts`, `export/layout-export.test.ts`, `export/insertExport.test.ts`, `review/review.test.ts`, `crossFeature.test.ts` | XML for each feature and fallback, toast wording, deterministic output |
 | ODT | `export/odt.test.ts` | Package order (uncompressed `mimetype` first), well-formed parts, each feature, toast wording, round trips |
 | Print/PDF | `export/docx.test.ts` ("print page safety", "print support"), `export/layout-export.test.ts`, `e2e/layout-document.spec.ts`, `e2e/insert-document.spec.ts` | Escaping of header and footer text, margin-box CSS, section wrappers and named pages, a landscape page in a Chromium PDF, KaTeX in the print page (Chromium) |
+| Embedded diagrams (Phase 6), all formats | `export/diagram-roundtrip.test.ts`, `export/diagram-text-print.test.ts`, `export/diagramPng.test.ts`, `export/dcosdoc.test.ts`, `tests/integration/phase6-cross-feature.test.ts`, `tests/integration/diagram-export-labels.test.ts`, `tests/integration/diagram-png-envelope.test.ts`, `e2e/diagram-embed-export.spec.ts` | DOCX `asvg:svgBlip` with PNG fallback and the ODT two-image frame; the data in the PNG; size, alignment, caption and alt text back from DOCX, ODT and `.dcosdoc`; redrawn and failed previews; toast wording; text labels; print without editing hints |
 | TXT | `export/docx.test.ts` ("text export never drops content silently", table cells), `export/layout-export.test.ts`, `export/insertExport.test.ts`, `review/review.test.ts` | Exact text output, markers, the comments appendix |
 
 Snapshots change only by a reviewed update (`npx vitest run -u`).
@@ -236,6 +245,8 @@ Checked on 2026-11-13/14 with the 16 DOCX samples exported by commit `fe3275a`. 
 - **03-insert** was read through Word's object model only (2 tables, 10 pictures).
 - Comments, equations, text boxes, shapes, the table of contents and the templates **have not been seen in Word**.
 
+**Phase 6 embedded diagrams (2026-11-14, Pages only).** One DOCX sample with two diagrams, one right-aligned with a caption and alt text, opened in Pages with no error; both diagrams were complete, at their own proportions, with the alt text as the picture description and the caption below. Details in [compatibility/phase6-2026-11-14/](compatibility/phase6-2026-11-14/README.md). Word and LibreOffice were not checked, the ODT sample was not opened in another app, and whether a file saved again by another app keeps the editable data is not known (TD-53).
+
 **Not tested:** Word for Windows, LibreOffice, Google Docs, and any ODT file in another word processor.
 
 ## 9. Known limitations
@@ -246,6 +257,7 @@ Checked on 2026-11-13/14 with the 16 DOCX samples exported by commit `fe3275a`. 
 - In Apple Pages: a landscape section after a portrait one is shown portrait, a continuous section break starts a new page, floating text boxes don't wrap their text, and after a numbering restart "Page x of y" counts per section (§8).
 - Print orientation per section is verified only in Chromium; restarted page numbers in print are not verified in any browser.
 - ODT uses ODF 1.3 `header-first`/`footer-first`, which older LibreOffice versions may not read (not checked).
+- Embedded diagrams in DOCX (SVG with PNG fallback) were seen in Pages only; the ODT frame with two images has not been opened in another app, and a DOCX or ODT saved again by another app may lose the diagram's editable data (not checked; TD-53).
 
 **Editor**
 

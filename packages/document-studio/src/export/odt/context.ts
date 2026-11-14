@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import type { DocumentContent } from '../../types';
+import type { DiagramPicture, DiagramRenders } from '../diagramAssets';
 import type { ExportReport } from '../report';
 import { el } from './xml';
 
@@ -83,6 +84,12 @@ export interface OdtCtx {
   pictures: Map<string, { data: Uint8Array; mime: string }>;
   /** Diagram previews, by attachment id. */
   assets: Map<string, Uint8Array>;
+  /** Phase 6: diagram drawings made at export time (missing previews, SVG), by diagramKey. */
+  diagramRenders?: DiagramRenders;
+  /** Phase 6: what was written for each diagram (diagramPicture), so copies are written with the same bytes. */
+  diagramPictures?: Map<string, DiagramPicture | null>;
+  /** Phase 6: the package path of picture bytes already stored, so copies of a diagram share one Pictures/ entry. */
+  storedPictures?: WeakMap<Uint8Array, string>;
   headings: Array<{ level: number; text: string }>;
   report: ExportReport;
   /** Paragraph style that plain paragraphs derive from here (Standard; Table_20_Contents inside cells …). */

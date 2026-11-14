@@ -7,8 +7,10 @@ import {
   addLayer,
   byIdOf,
   centredOn,
+  clipboardForms,
   CLIPBOARD_MIME,
   distributeNodes,
+  documentDiagramsFromHtml,
   fitGroups,
   groupSelection,
   isGroup,
@@ -18,7 +20,7 @@ import {
   moveLayer,
   moveToLayer,
   normalizeLayers,
-  parseClipboardPayload,
+  readClipboardPayload,
   redirectDrag,
   redirectSelection,
   removeEmptyGroups,
@@ -54,6 +56,13 @@ const fullscreenElement = () => {
   const d = fsDoc();
   return d ? (d.fullscreenElement ?? d.webkitFullscreenElement ?? null) : null;
 };
+
+/** Whether a paste event brings any data (some browsers list no types for an empty clipboard, others give ''). */
+function carriesData(data: DataTransfer | null, get: (type: string) => string): boolean {
+  if (!data) return false;
+  if ((data.types?.length ?? 0) > 0 || (data.files?.length ?? 0) > 0) return true;
+  return !!(get('text/plain') || get('text/html'));
+}
 
 /** How long a finger rests on a shape before it is added to (or taken out of) the selection. */
 export const LONG_PRESS_MS = 500;
@@ -365,27 +374,30 @@ export function useCanvas({ state, mutations, rf, toast, wrapper, clipboard, onA
   // ── Clipboard: in memory, and the system clipboard for other diagrams and tabs ──
   const [instance] = useState(() => newId('editor'));
   const serial = useRef(0);
-  /** JSON waiting for the copy or cut event that follows the key press. */
-  const pendingCopy = useRef<string | null>(null);
+  /** Clipboard data (JSON, readable text, HTML) waiting for the copy or cut event that follows the key press. */
+  const pendingCopy = useRef<ReturnType<typeof clipboardForms> | null>(null);
   const pendingPaste = useRef(false);
   /** The in-memory copy may be older than the system clipboard (the window lost focus since). */
   const stale = useRef(false);
 
-  const writeSystemClipboard = async (json: string) => {
+  const writeSystemClipboard = async ({ json, text, html }: ReturnType<typeof clipboardForms>) => {
     const clip = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
     if (!clip) return;
     try {
       if (typeof ClipboardItem !== 'undefined' && clip.write) {
         const custom = `web ${CLIPBOARD_MIME}`;
         const supports = (ClipboardItem as unknown as { supports?: (t: string) => boolean }).supports?.(custom) ?? false;
-        const blob = (type: string) => new Blob([json], { type });
-        await clip.write([new ClipboardItem({ 'text/plain': blob('text/plain'), ...(supports ? { [custom]: blob(custom) } : {}) })]);
+        const blob = (value: string, type: string) => new Blob([value], { type });
+        // Readable text for other apps; the JSON travels in the custom type where the browser allows it, and always
+        // inside the HTML (Phase 6), so pages of this app (diagrams and documents) can paste the shapes.
+        await clip.write([new ClipboardItem({ 'text/plain': blob(text, 'text/plain'), 'text/html': blob(html, 'text/html'), ...(supports ? { [custom]: blob(json, custom) } : {}) })]);
         return;
       }
     } catch {
       // fall through to plain text
     }
     try {
+      // Only plain text can be written here: the JSON, so the shapes can still be pasted (other apps see the JSON).
       await clip.writeText(json);
     } catch {
       // Not allowed here: the copy stays in memory for this diagram.
@@ -398,13 +410,13 @@ export function useCanvas({ state, mutations, rf, toast, wrapper, clipboard, onA
     stale.current = false;
     const payload = toClipboardPayload(nodes, edges, instance, ++serial.current, settings);
     if (!payload) return true;
-    const json = JSON.stringify(payload);
-    pendingCopy.current = json;
+    const forms = clipboardForms(payload);
+    pendingCopy.current = forms;
     // No copy event followed the key press (Safari, without editable content): write through the async API.
     setTimeout(() => {
-      if (pendingCopy.current !== json) return;
+      if (pendingCopy.current !== forms) return;
       pendingCopy.current = null;
-      void writeSystemClipboard(json);
+      void writeSystemClipboard(forms);
     }, 0);
     return true;
   };
@@ -456,19 +468,29 @@ export function useCanvas({ state, mutations, rf, toast, wrapper, clipboard, onA
       return !!rootRef.current && !!a && rootRef.current.contains(a) && !isTyping(a) && !inDialog(a, rootRef.current);
     };
     const onCopy = (e: ClipboardEvent) => {
-      if (!inEditor() || !e.clipboardData) return;
+      if (!inEditor()) {
+        // Something else was copied (a document, a text field): the in-memory shapes are no longer what the user copied
+        // last, so Ctrl+V must read the system clipboard (Phase 6).
+        stale.current = true;
+        return;
+      }
+      if (!e.clipboardData) return;
       // Text the user selected (in the shortcut help, a panel, a label) is copied as text, not replaced by shapes.
       const text = typeof window.getSelection === 'function' ? window.getSelection()?.toString() : '';
       if (text) {
         pendingCopy.current = null;
+        // That text is now what the user copied last: Ctrl+V must not paste the older in-memory shapes (Round 3).
+        stale.current = true;
         return;
       }
       if (!pendingCopy.current && !(e.type === 'copy' && live.current.copySelection())) return;
-      const json = pendingCopy.current;
+      const forms = pendingCopy.current;
       pendingCopy.current = null;
-      if (!json) return;
-      e.clipboardData.setData('text/plain', json);
-      e.clipboardData.setData(CLIPBOARD_MIME, json);
+      if (!forms) return;
+      // Phase 6: other apps get the shape labels as text (and HTML); the JSON is in its own type (and the HTML carrier).
+      e.clipboardData.setData('text/plain', forms.text);
+      e.clipboardData.setData('text/html', forms.html);
+      e.clipboardData.setData(CLIPBOARD_MIME, forms.json);
       e.preventDefault();
     };
     const onPaste = (e: ClipboardEvent) => {
@@ -476,22 +498,47 @@ export function useCanvas({ state, mutations, rf, toast, wrapper, clipboard, onA
       const wasPending = pendingPaste.current;
       pendingPaste.current = false;
       const data = e.clipboardData;
-      let payload: ReturnType<typeof parseClipboardPayload> = null;
+      const get = (type: string) => {
+        try {
+          return data?.getData(type) ?? '';
+        } catch {
+          return '';
+        }
+      };
+      let payload: ReturnType<typeof readClipboardPayload> = null;
+      let fromDocument: ReturnType<typeof documentDiagramsFromHtml> = null;
       try {
-        payload = parseClipboardPayload(data?.getData(CLIPBOARD_MIME) || data?.getData('text/plain'));
+        payload = readClipboardPayload(get);
+        // Phase 6: a diagram copied from a document pastes as its shapes (newer versions refused with the same message).
+        if (!payload) fromDocument = documentDiagramsFromHtml(get('text/html'));
       } catch (err) {
         e.preventDefault();
         live.current.toast(err instanceof Error ? err.message : String(err), 'error');
         return;
       }
-      if (!payload) {
+      if (payload) {
+        e.preventDefault();
+        const own = payload.source === instance && payload.serial === serial.current && !!clipboard.current;
+        if (own) live.current.paste();
+        else live.current.pasteForeign(payload.diagram);
+        // Only this editor's own latest copy makes the in-memory shapes current again; after pasting something copied
+        // elsewhere, the next Ctrl+V must read the system clipboard again (not this editor's older copy).
+        stale.current = !own;
+        return;
+      }
+      if (fromDocument) {
+        e.preventDefault();
+        live.current.pasteForeign(fromDocument);
+        stale.current = true;
+        return;
+      }
+      // Phase 6: the in-memory copy is used only when the paste event carries nothing at all. Anything else on the
+      // clipboard (text, a picture, a web page) is newer than those shapes and is not shapes: say so, paste nothing.
+      if (!carriesData(data, get)) {
         if (wasPending) live.current.paste();
         return;
       }
-      e.preventDefault();
-      if (payload.source === instance && payload.serial === serial.current && clipboard.current) live.current.paste();
-      else live.current.pasteForeign(payload.diagram);
-      stale.current = false;
+      live.current.toast('The clipboard holds no shapes to paste.', 'info');
     };
     const markStale = () => {
       stale.current = true;

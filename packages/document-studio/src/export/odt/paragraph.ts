@@ -58,7 +58,10 @@ export const ODT_HANDLED_ATTRS: Record<string, string[]> = {
   tableHeader: ['colspan', 'rowspan', 'colwidth', 'align'],
   image: ['src', 'alt', 'title', 'width', 'height', 'align', 'caption'],
   sectionBreak: ['breakType', 'orientation', 'columns', 'columnSpacing', 'numberFormat', 'numberStart'],
-  diagram: ['source', 'previewId', 'naturalWidth', 'naturalHeight', 'width', 'height', 'title'],
+  // Phase 6 diagram attributes (ADR 0013), all written by diagramBlock (images.ts): align and caption through the
+  // picture alignment and caption paths, alt as the frame's svg:desc, svgPreviewId as the SVG image before the PNG
+  // fallback, and source inside the PNG (diagramPng.ts), so the ODT file keeps the diagram editable for Classroom OS.
+  diagram: ['source', 'previewId', 'naturalWidth', 'naturalHeight', 'width', 'height', 'title', 'align', 'caption', 'alt', 'svgPreviewId'],
   codeBlock: ['language'],
   link: ['href', 'target', 'rel', 'class', 'title'],
   textStyle: ['backgroundColor', 'color', 'fontFamily', 'fontSize', 'lineHeight'],

@@ -5,9 +5,14 @@ import { useNavigate } from 'react-router-dom';
 import { notifyStorageChanged, requestPersistentStorage, storage } from '../lib/storage';
 import { itemHref } from '../modules';
 
-/** Word and OpenDocument files (kept in step with IMPORT_ACCEPT in document-studio, which loads with the editor). */
-const ACCEPT = '.docx,.odt,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text';
+/**
+ * Word, OpenDocument and Classroom OS document (.dcosdoc) files (kept in step with IMPORT_ACCEPT in document-studio,
+ * which loads with the editor).
+ */
+const ACCEPT = '.docx,.odt,.dcosdoc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text,application/vnd.dcos.document+json';
 const MAX_BYTES = 50 * 1024 * 1024;
+/** A .dcosdoc file holds its pictures as text, so it may be larger (document-studio DCOSDOC_MAX_BYTES). */
+const MAX_DCOSDOC_BYTES = 100 * 1024 * 1024;
 
 /** Asks the user for one file. Resolves null when they cancel. */
 export function chooseFile(accept: string): Promise<File | null> {
@@ -29,7 +34,7 @@ export interface ImportOutcome {
 }
 
 /**
- * Imports a Word (.docx) or OpenDocument (.odt) file as a NEW document (never into an existing one). With nothing
+ * Imports a Word (.docx), OpenDocument (.odt) or Classroom OS document (.dcosdoc) file as a NEW document (never into an existing one). With nothing
  * to report, the new document opens straight away; otherwise `outcome` holds the report to show first.
  */
 export function useImportDocument() {
@@ -42,11 +47,18 @@ export function useImportDocument() {
     async (file: File) => {
       setBusy(true);
       try {
-        if (file.size > MAX_BYTES) throw new Error('The file is larger than 50 MB');
+        const native = /\.dcosdoc$/i.test(file.name);
+        if (file.size > (native ? MAX_DCOSDOC_BYTES : MAX_BYTES)) throw new Error(`The file is larger than ${native ? 100 : 50} MB`);
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const { importDocumentFile, importSummary } = await import('@dcos/document-studio');
+        const { importDocumentFile, importSummary, withStoredAttachments } = await import('@dcos/document-studio');
         const result = await importDocumentFile(file.name, bytes);
-        const item = await storage.create('document', { title: result.title, content: result.content, templateId: null });
+        // Phase 6 (ADR 0013): the previews of embedded diagrams (from a .dcosdoc, or restored from a DOCX/ODT picture)
+        // are stored first, and the document is saved pointing at the stored copies. Nothing is saved if one fails.
+        const stored = new Map<string, string>();
+        for (const a of result.attachments ?? []) stored.set(a.id, (await storage.putAttachment(new Blob([a.data as BlobPart], { type: a.mimeType }), a.mimeType)).id);
+        // Always when the file names pictures, even if none could be stored: ids the store does not hold become null.
+        const content = result.attachments ? withStoredAttachments(result.content, stored) : result.content;
+        const item = await storage.create('document', { title: result.title, content, templateId: null });
         notifyStorageChanged({ kind: 'document', id: item.id });
         void requestPersistentStorage();
         const { message, notes } = importSummary(result.title, result.report);

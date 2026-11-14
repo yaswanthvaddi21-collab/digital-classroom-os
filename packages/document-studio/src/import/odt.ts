@@ -11,7 +11,9 @@ import { formatOf, type ParagraphStyleName } from '../extensions/paragraphFormat
 import { isAllowedHref } from '../links';
 import { MAX_COLUMN_SPACING, MAX_COLUMNS, MAX_PAGE_NUMBER_START, PART_ALIGNS, type HeaderFooterParts, type NumberFormat as PageNumberFormat, type PageNumberText, type PartAlign } from '../pageLayout';
 import { isLanguageTag } from '../review/language';
-import { attachCaptions, IMPORT_NOTES, ImportReport, importedContent, lengthMm, lengthPt, pageFromGeometry, unpack, type ImportResult } from './common';
+import { diagramNodes } from '../export/diagramAssets';
+import { attachCaptions, IMPORT_NOTES, ImportReport, importedContent, lengthMm, lengthPt, pageFromGeometry, unpack, type ImportedAttachment, type ImportResult } from './common';
+import { diagramFromPicture, previewIds } from './diagrams';
 import { imageSize, toDataUrl } from './imageSize';
 
 const NS = {
@@ -201,6 +203,9 @@ interface Ctx {
   report: ImportReport;
   notes: JSONContent[][];
   counts: Record<string, number>;
+  /** Phase 6: previews of the diagrams restored from pictures, and the ids they are given. */
+  attachments: ImportedAttachment[];
+  nextPreviewId: () => string;
 }
 
 const count = (ctx: Ctx, key: string, n = 1) => (ctx.counts[key] = (ctx.counts[key] ?? 0) + n);
@@ -277,7 +282,30 @@ function inlineContent(e: Element, ctx: Ctx, out: Inline, marks: NonNullable<JSO
   }
 }
 
-/** A draw:frame: a picture, a text box (its paragraphs) or an embedded object (its preview picture). */
+/** A draw:image's picture bytes (stored in the package or inline), its media type from the manifest, and its address. */
+function pictureData(image: Element, ctx: Ctx): { data?: Uint8Array; mime?: string; href: string; linked: boolean } {
+  const href = attr(image, 'xlink', 'href') ?? '';
+  const binary = first(image, 'office', 'binary-data');
+  if (binary) {
+    try {
+      const bin = atob((binary.textContent ?? '').replace(/\s+/g, ''));
+      return { data: Uint8Array.from(bin, (ch) => ch.charCodeAt(0)), href, linked: false };
+    } catch {
+      return { href, linked: false };
+    }
+  }
+  if (href && !/^[a-z][a-z0-9+.-]*:/i.test(href)) {
+    const path = href.replace(/^\.\//, '');
+    return { data: ctx.files[path], mime: ctx.mimes.get(path), href, linked: false };
+  }
+  return { href, linked: !!href };
+}
+
+/**
+ * A draw:frame: a picture, a text box (its paragraphs) or an embedded object (its preview picture). Phase 6: a frame
+ * holding a PNG that carries a Classroom OS diagram (export/diagramPng.ts; the ODT export writes it after the SVG of
+ * the same drawing) comes back as an editable diagram.
+ */
 function frame(f: Element, ctx: Ctx): JSONContent[] {
   const image = first(f, 'draw', 'image');
   const textBox = first(f, 'draw', 'text-box');
@@ -291,22 +319,21 @@ function frame(f: Element, ctx: Ctx): JSONContent[] {
     if (!object) count(ctx, 'shapes');
     return [];
   }
-  const href = attr(image, 'xlink', 'href') ?? '';
-  let data: Uint8Array | undefined;
-  let mime: string | undefined;
-  const binary = first(image, 'office', 'binary-data');
-  if (binary) {
-    try {
-      const bin = atob((binary.textContent ?? '').replace(/\s+/g, ''));
-      data = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
-    } catch {
-      data = undefined;
+  const alt = (first(f, 'svg', 'title')?.textContent ?? '').trim();
+  const title = (first(f, 'svg', 'desc')?.textContent ?? '').trim();
+  const wMm = lengthMm(attr(f, 'svg', 'width'));
+  for (const candidate of childElements(f).filter((c) => is(c, 'draw', 'image'))) {
+    const got = pictureData(candidate, ctx);
+    if (!got.data || sniff(got.data) !== 'image/png') continue;
+    // The frame's title is the diagram's title; its description, when there is one, the diagram's alt text.
+    const diagram = diagramFromPicture(got.data, { id: ctx.nextPreviewId(), widthPx: wMm ? (wMm / 25.4) * 96 : null, maxWidthPx: Number.POSITIVE_INFINITY, alt: title, title: alt });
+    if (diagram) {
+      ctx.attachments.push(diagram.attachment);
+      return [{ type: 'diagram', attrs: diagram.attrs }];
     }
-  } else if (href && !/^[a-z][a-z0-9+.-]*:/i.test(href)) {
-    const path = href.replace(/^\.\//, '');
-    data = ctx.files[path];
-    mime = ctx.mimes.get(path);
-  } else if (href) {
+  }
+  const { data, mime, href, linked } = pictureData(image, ctx);
+  if (linked) {
     count(ctx, 'linked-image');
     return [];
   }
@@ -316,13 +343,10 @@ function frame(f: Element, ctx: Ctx): JSONContent[] {
   }
   const ext = (/\.([a-z0-9]+)$/i.exec(href)?.[1] ?? '').toLowerCase();
   const type = mime && Object.values(SHOWN_IMAGES).includes(mime) ? mime : SHOWN_IMAGES[ext] ?? sniff(data);
-  const alt = (first(f, 'svg', 'title')?.textContent ?? '').trim();
-  const title = (first(f, 'svg', 'desc')?.textContent ?? '').trim();
   if (!type) {
     count(ctx, 'image-format');
     return [{ type: 'paragraph', content: [{ type: 'text', text: `[Picture not imported${alt ? `: ${alt}` : ''} — ${ext ? ext.toUpperCase() : 'unknown'} format]`, marks: [{ type: 'italic' }] }] }];
   }
-  const wMm = lengthMm(attr(f, 'svg', 'width'));
   const hMm = lengthMm(attr(f, 'svg', 'height'));
   const natural = imageSize(data);
   const width = wMm ? Math.round((wMm / 25.4) * 96) : natural?.width ?? null;
@@ -382,7 +406,8 @@ function paragraphPieces(e: Element, ctx: Ctx, heading: boolean): Piece[] {
     if (!inline.empty) emit();
     produced = true;
     // A picture takes the alignment of the paragraph holding it (centred is the editor's default).
-    for (const b of blocks) pieces.push({ block: b.type === 'image' && (align === 'left' || align === 'right') ? { ...b, attrs: { ...b.attrs, align } } : b });
+    // Phase 6: a restored diagram too.
+    for (const b of blocks) pieces.push({ block: (b.type === 'image' || b.type === 'diagram') && (align === 'left' || align === 'right') ? { ...b, attrs: { ...b.attrs, align } } : b });
   });
   const breakBefore = pieces.length > 0 && 'block' in pieces[0] && pieces[0].block.type === 'pageBreak';
   const breakAfter = prop('fo:break-after') === 'page';
@@ -772,7 +797,7 @@ export function importOdt(bytes: Uint8Array, fileName = 'Imported document'): Im
 
   const body = content.getElementsByTagNameNS(NS.office, 'text')[0];
   if (!body) throw new Error('This OpenDocument file has no text body');
-  const ctx: Ctx = { styles, files, mimes, report, notes: [], counts: {} };
+  const ctx: Ctx = { styles, files, mimes, report, notes: [], counts: {}, attachments: [], nextPreviewId: previewIds('odt') };
   const blocks = blocksOf(body, ctx);
   if (ctx.notes.length) {
     blocks.push({ type: 'paragraph', content: [{ type: 'text', text: 'Notes', marks: [{ type: 'bold' }] }] });
@@ -798,5 +823,9 @@ export function importOdt(bytes: Uint8Array, fileName = 'Imported document'): Im
   const page = readPage(stylesDoc, styles, firstP ? attr(firstP, 'text', 'style-name') : null, report);
   const metaTitle = files['meta.xml'] ? (parseXml(strFromU8(files['meta.xml']), 'meta.xml').getElementsByTagNameNS(NS.dc, 'title')[0]?.textContent ?? '').trim() : '';
   const title = metaTitle || fileName.replace(/\.(odt|ott)$/i, '') || 'Imported document';
-  return { content: importedContent(attachCaptions({ type: 'doc', content: blocks }), page, language), title, report, format: 'odt' };
+  const imported = importedContent(attachCaptions({ type: 'doc', content: blocks }), page, language);
+  // Only the previews of diagrams that made it into the document (all of them, unless the file is damaged).
+  const used = new Set(diagramNodes(imported.doc).map((n) => n.attrs?.previewId));
+  const kept = ctx.attachments.filter((a) => used.has(a.id));
+  return { content: imported, title, report, format: 'odt', ...(kept.length ? { attachments: kept } : {}) };
 }
