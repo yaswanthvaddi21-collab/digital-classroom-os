@@ -15,8 +15,8 @@ Baseline review, 2026-11-12:
 | prosemirror-* (via @tiptap/pm) | — | MIT | Document model | |
 | docx | ^9.15.3 (installed 9.15.3) | MIT | DOCX export | Pure JS, works offline. Range raised from ^9.5.0 in Phase 4: equations use its `docx/math` subpath (`latexToMath`), tested with 9.15.3 |
 | @xyflow/react | 12.x | MIT | Diagram engine | Attribution link kept visible |
-| html-to-image | 1.11.11 | MIT | Diagram PNG/SVG | Pinned exact; upgrade deliberately and re-test exports |
-| jspdf | 4.2.x | MIT | Diagram PDF | 3.x had critical advisories; 4.2.1+ required. Lazy-loaded |
+| html-to-image | 1.11.11 | MIT | Diagram PNG/SVG | Pinned exact; upgrade deliberately and re-test exports. Since Phase 5 only the legacy `export.ts` capture uses it, which the editor no longer calls (TD-42) |
+| jspdf | 4.2.x | MIT | Diagram PDF | 3.x had critical advisories; 4.2.1+ required. Lazy-loaded. Since Phase 5 it receives vector paths and text from svg2pdf.js instead of a raster |
 | idb | 8.x | ISC | IndexedDB wrapper | |
 | fflate | 0.8.x | MIT | Reading compressed diagrams.net pages; writing and reading ODT and reading DOCX/ODT packages | Added 2026-11-13. Small, pure JS, no network. Phase 4: also a direct dependency of `@dcos/document-studio` (^0.8.3) |
 | lucide-react | 0.460 | ISC | Icons | |
@@ -29,8 +29,8 @@ Baseline review, 2026-11-12:
 | @playwright/test | 1.x | Apache-2.0 | Dev/test only | Browser tests (Chromium, WebKit, Firefox) |
 | @testing-library/react, /dom, /user-event | — | MIT | Dev/test only | Component tests |
 | mammoth | 1.13.0 | BSD-2-Clause | DOCX import; tests re-read exported DOCX files | Phase 4: moved to a runtime dependency of `@dcos/document-studio` (^1.13.0); still a root devDependency for the tests. See its production dependencies below |
-| @tauri-apps/cli, tauri | 2.x | MIT OR Apache-2.0 | Desktop shell | Phase 5 |
-| @capacitor/* | 7.x | MIT | Android shell | Phase 5 |
+| @tauri-apps/cli, tauri | 2.x | MIT OR Apache-2.0 | Desktop shell | Brief phase 12 (PRD Phase 5, cross-platform release). Declared only in `apps/desktop` (`package.json`, `src-tauri/Cargo.toml`), which is outside the npm workspace and lockfile and has no `Cargo.lock`, so it is not installed, licence-checked or audited (TD-30) |
+| @capacitor/* | 7.x | MIT | Android shell | Brief phase 12 (PRD Phase 5, cross-platform release). Declared only in `apps/android/package.json`, which is outside the npm workspace and lockfile, so it is not installed, licence-checked or audited (TD-30) |
 
 
 ## Added or moved in Phase 4 (Document Studio)
@@ -52,5 +52,19 @@ Licences checked in each package's `package.json` (and its LICENSE file where th
 | docx | ^9.15.3 | MIT | DOCX export, native Word equations | Range raised (above); no new package |
 
 No other dependency was added. Every licence above is permissive (jszip is used under MIT).
+
+## Added in Phase 5 (Diagram Studio)
+
+Licences checked in each package's `package.json` and LICENSE file. `npm run licenses` lists 138 production packages (114 MIT) with "Packages needing review: none" ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).
+
+| Dependency | Version | Licence | Why | Notes |
+|---|---|---|---|---|
+| svg2pdf.js | 2.8.1 (exact) | MIT | Vector diagram PDF: converts the exported SVG into PDF paths and real text through jsPDF | Pinned exact, like html-to-image: upgrade deliberately and re-run the export tests. Peer range jspdf ^2 \|\| ^3 \|\| ^4 (4.2.1 installed). Lazy-loaded with jsPDF only when a PDF is exported. Pure JS, no network (pictures reach it only as embedded `data:` URLs; web picture addresses are dropped on import, so it never fetches anything). Copyright yWorks GmbH and Vitaly Puzrin |
+| ↳ cssesc | 3.0.0 | MIT | Through svg2pdf.js | |
+| ↳ font-family-papandreou | 0.2.0-patch2 | MIT | Through svg2pdf.js | |
+| ↳ specificity | 0.4.1 | MIT | Through svg2pdf.js | |
+| ↳ svgpath | 2.6.0 | MIT | Through svg2pdf.js | |
+
+No other dependency was added in Phase 5. html-to-image stays installed while `export.ts` exists (TD-42).
 
 Planned later: PDF.js (Apache-2.0) for PDF Studio and Yjs (MIT) for collaboration. Both comply.

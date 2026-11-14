@@ -1,5 +1,7 @@
 import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/react';
 import { createContext, memo, useContext, useEffect, useRef, useState } from 'react';
+import { HANDLE_IDS, shapeDef, type HandleId } from './shapeRegistry';
+import { labelBoxStyle, labelTextStyle, RotatedBody } from './shapePresentation';
 import { labelInset, ShapeSvg } from './shapes';
 import { COMPARTMENT_SHAPES, splitCompartments, type ShapeData, type ShapeNode as ShapeNodeType } from './types';
 
@@ -41,12 +43,8 @@ export interface DiagramActions {
 export const DiagramActionsContext = createContext<DiagramActions | null>(null);
 const useActions = () => useContext(DiagramActionsContext)!;
 
-const HANDLES = [
-  { id: 't', position: Position.Top },
-  { id: 'r', position: Position.Right },
-  { id: 'b', position: Position.Bottom },
-  { id: 'l', position: Position.Left },
-];
+const HANDLE_POSITION: Record<HandleId, Position> = { t: Position.Top, r: Position.Right, b: Position.Bottom, l: Position.Left };
+const HANDLES = HANDLE_IDS.map((id) => ({ id, position: HANDLE_POSITION[id] }));
 
 function LabelEditor({ id, data, onDone }: { id: string; data: ShapeData; onDone: () => void }) {
   const { updateNodeData } = useActions();
@@ -103,23 +101,28 @@ export const ShapeNode = memo(function ShapeNode({ id, data, selected, width, he
         isVisible={selected && !editing && !readOnly}
         minWidth={40}
         minHeight={30}
-        keepAspectRatio={data.shape === 'circle'}
+        keepAspectRatio={!!shapeDef(data.shape)?.keepAspectRatio}
         onResizeStart={snapshot}
         lineClassName="dcos-resize-line"
         handleClassName="dcos-resize-handle"
       />
-      <ShapeSvg shape={data.shape} width={w} height={h} fill={data.fill} stroke={data.stroke} strokeWidth={data.strokeWidth} dashed={data.dashed} />
-      <div className="dcos-shape-label" style={labelInset(data.shape)}>
+      {/* @phase5:drawio-render — `data` gives image shapes their picture and every shape its opacity; labelBoxStyle and
+          labelTextStyle place and set the text, and RotatedBody turns the body, as diagrams.net files describe them
+          (shapePresentation.tsx). */}
+      <RotatedBody rotation={data.rotation}>
+      <ShapeSvg shape={data.shape} width={w} height={h} fill={data.fill} stroke={data.stroke} strokeWidth={data.strokeWidth} dashed={data.dashed} data={data} />
+      <div className="dcos-shape-label" style={{ ...labelInset(data.shape), ...labelBoxStyle(data) }}>
         {editing ? (
           <LabelEditor id={id} data={data} onDone={() => setEditingId(null)} />
         ) : COMPARTMENT_SHAPES.has(data.shape) ? (
           <CompartmentBody data={data} />
         ) : (
-          <span style={{ color: data.textColor, fontSize: data.fontSize, fontWeight: data.bold ? 700 : 500 }}>
+          <span style={{ color: data.textColor, fontSize: data.fontSize, fontWeight: data.bold ? 700 : 500, ...labelTextStyle(data) }}>
             {data.label || (selected ? <span className="dcos-label-placeholder">Double-click to type</span> : null)}
           </span>
         )}
       </div>
+      </RotatedBody>
       {HANDLES.map((handle) => (
         <Handle key={handle.id} id={handle.id} type="source" position={handle.position} className="dcos-handle" />
       ))}

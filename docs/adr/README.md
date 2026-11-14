@@ -10,8 +10,9 @@ Each record states one decision: the problem, what was decided, what it costs, a
 | [0004](0004-autosave-and-drafts.md) | Autosave pipeline: one queue, failures classified, edits kept as drafts per session | Accepted (Phase 3) |
 | [0005](0005-version-history.md) | Version history: 50 per item, protected versions, large images stored once | Accepted (Release 0.2, extended in Phase 3) |
 | [0006](0006-migrations-and-safety-copies.md) | Migrations only add, run after a verified safety copy, one tab at a time | Accepted (Release 0.2, hardened in Phase 2) |
-| [0007](0007-backup-format.md) | Backups: one validated JSON file that never overwrites and can be restored twice | Accepted (Release 0.2, hardened in Phases 2 and 3) |
+| [0007](0007-backup-format.md) | Backups: one validated JSON file that never overwrites and can be restored twice | Accepted (Release 0.2, hardened in Phases 2 and 3, extended in Phase 5) |
 | [0008](0008-attachments.md) | Attachments: content-addressed, cleaned up only when provably unused | Accepted (Phase 3) |
 | [0009](0009-cross-tab-coordination.md) | Cross-tab coordination: change notices, holds, locks, and stopping after an upgrade | Accepted (Release 0.2, extended in Phases 2 and 3) |
 | [0010](0010-soft-delete-and-recovery.md) | Soft delete, purge, and recovering edits to deleted items | Accepted (v0.1.0, extended in Phase 3) |
 | [0011](0011-document-format-phase4.md) | Document format in Phase 4: schema 2 from a frozen v0.1.0 vocabulary, comments and sections in the content, equations as LaTeX, approximations reported | Accepted (Phase 4) |
+| [0012](0012-diagram-format-phase5.md) | Diagram format in Phase 5: schema 3 from a frozen schema-2 vocabulary; groups as React Flow parent nodes, layers, waypoints, ports, the `.dcosdiagram` file and the diagrams.net mapping | Accepted (Phase 5 Round 1, extended in Rounds 2 and 3) |

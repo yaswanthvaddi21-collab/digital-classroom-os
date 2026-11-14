@@ -1,0 +1,46 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram id="styles" name="Styles">
+    <mxGraphModel dx="1000" dy="600" grid="1" gridSize="10">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="rot" value="Turned" style="rounded=0;whiteSpace=wrap;html=1;rotation=30;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="faint" value="Faint" style="rounded=0;whiteSpace=wrap;html=1;opacity=40;fillColor=#dae8fc;" vertex="1" parent="1">
+          <mxGeometry x="200" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="grad" value="Gradient" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;gradientColor=#7ea6e0;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sk" value="Sketchy" style="rounded=0;whiteSpace=wrap;html=1;sketch=1;glass=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="font" value="Serif left top" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Georgia;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="40" y="140" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="right" value="Right bottom" style="rounded=0;whiteSpace=wrap;html=1;align=right;verticalAlign=bottom;fontStyle=3;" vertex="1" parent="1">
+          <mxGeometry x="240" y="140" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="rich" value="Mix of &lt;b&gt;bold&lt;/b&gt; and &lt;font color=&quot;#ff0000&quot;&gt;red&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="140" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="allbold" value="&lt;b&gt;Heading&lt;/b&gt;" style="text;html=1;" vertex="1" parent="1">
+          <mxGeometry x="640" y="140" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="out" value="Below" style="ellipse;whiteSpace=wrap;html=1;verticalLabelPosition=bottom;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="40" y="260" width="60" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="vert" value="Up" style="rounded=0;whiteSpace=wrap;html=1;horizontal=0;" vertex="1" parent="1">
+          <mxGeometry x="160" y="260" width="40" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="lock" value="Fixed" style="rounded=0;whiteSpace=wrap;html=1;locked=1;" vertex="1" parent="1">
+          <mxGeometry x="240" y="260" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="alpha" value="Half fill" style="rounded=0;whiteSpace=wrap;html=1;fillOpacity=50;" vertex="1" parent="1">
+          <mxGeometry x="400" y="260" width="120" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

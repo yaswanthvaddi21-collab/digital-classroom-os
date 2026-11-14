@@ -1,0 +1,25 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram id="img" name="Pictures">
+    <mxGraphModel dx="1000" dy="600" grid="1" gridSize="10">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="png" value="Logo" style="shape=image;verticalLabelPosition=bottom;labelBackgroundColor=default;verticalAlign=top;aspect=fixed;imageAspect=0;image=data:image/png,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="svg" value="" style="shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;image=data:image/svg+xml,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCI+PGNpcmNsZSBjeD0iNSIgY3k9IjUiIHI9IjQiIGZpbGw9IiMyNTYzZWIiLz48L3N2Zz4=;" vertex="1" parent="1">
+          <mxGeometry x="160" y="40" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="web" value="Web picture" style="shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;image=https://example.com/school.png;" vertex="1" parent="1">
+          <mxGeometry x="280" y="40" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="icon" value="With icon" style="label;whiteSpace=wrap;html=1;image=https://example.com/icon.png;" vertex="1" parent="1">
+          <mxGeometry x="40" y="180" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="inline" value="Look: &lt;img src=&quot;https://example.com/x.png&quot;&gt; here" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="240" y="180" width="160" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

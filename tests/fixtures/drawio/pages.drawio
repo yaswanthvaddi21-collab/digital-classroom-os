@@ -1,0 +1,25 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram id="p1" name="Term 1">
+    <mxGraphModel dx="1000" dy="600" grid="1" gridSize="10">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="p1a" value="Term 1" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="p2" name="Term 2">xVNBbsMgEHwNdwJV762T5tRT+gFiVgYVDFqvY/v3JQYlcl1X7aU9WGJnmGVnMExWfjyiiuY1aHBMHpisMATKKz9W4BwT3Gom90wInj4mXjbY3czyqBBa+okgCpUlF+V6yNgboE+IyERHkysEhr7VcFXumHwejCU4RVVf2SE5SJgh7wpd2gISjJvDzVCZ7AjBA+GUthTBQ56dT8tysJpM0Rd73IBtTGn6WDDV5bq5Nb4HkRYli61czqtcDqPy3SqUpLOxgz8J5H8TgbX3Vj8hhiFVZxfq968Mg27ge7upZeixhk9/JClsgBbXsQ4GwSmyl+UJv7CZyvtjm7nFW/wA</diagram>
+  <diagram id="p3" name="Holidays">
+    <mxGraphModel dx="1000" dy="600" grid="1" gridSize="10">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="p3a" value="Break" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="120" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

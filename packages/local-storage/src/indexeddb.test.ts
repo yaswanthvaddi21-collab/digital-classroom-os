@@ -226,7 +226,8 @@ describe('backup and restore', () => {
     const base = { format: 'dcos-backup', schemaVersion: 1, exportedAt: '2026-01-01T00:00:00Z', deviceId: 'd', versions: [] };
     await expect(store.importBackup({ format: 'other' })).rejects.toBeInstanceOf(InvalidBackupError);
     await expect(store.importBackup({ ...base, schemaVersion: -1, items: [] })).rejects.toBeInstanceOf(InvalidBackupError);
-    await expect(store.importBackup({ ...base, schemaVersion: 3, items: [] })).rejects.toThrow(/newer/);
+    // Schema 3 is a current diagram schema (ADR 0012), so the first schema this build refuses is 4.
+    await expect(store.importBackup({ ...base, schemaVersion: 4, items: [] })).rejects.toThrow(/newer/);
     await expect(store.importBackup({ ...base, formatVersion: 3, items: [] })).rejects.toThrow(/newer/);
     const mixed = {
       ...base,
@@ -237,6 +238,32 @@ describe('backup and restore', () => {
     };
     await expect(store.importBackup(mixed)).rejects.toThrow(/no content/);
     expect(await store.get('document', 'ok')).toBeUndefined();
+  });
+
+  it('restores its own backup of a schema-3 diagram (Phase 5, ADR 0007 and 0012)', async () => {
+    const content = { schemaVersion: 3, nodes: [{ id: 'g', type: 'shape', position: { x: 0, y: 0 }, data: { kind: 'group' } }], edges: [] };
+    const diagram = await store.create('diagram', { title: 'Grouped', content });
+    const backup = JSON.parse(JSON.stringify(await store.exportBackup()));
+    expect(backup.schemaVersion).toBe(3);
+    expect(() => validateBackup(backup)).not.toThrow();
+    const other = new IndexedDbAdapter(`${name}-schema3`);
+    expect(await other.importBackup(backup)).toMatchObject({ added: 1 });
+    expect((await other.get('diagram', diagram.id))?.content).toEqual(content);
+    await other.close();
+  });
+
+  it('checks each item and version against the newest schema of its own kind', async () => {
+    const file = (items: unknown[], versions: unknown[] = []) => ({
+      format: 'dcos-backup', formatVersion: 2, schemaVersion: 3, exportedAt: '2026-01-01T00:00:00Z', deviceId: 'd', items, versions,
+    });
+    // Documents are still schema 2: a schema-3 document comes from a newer app even though diagrams may be 3.
+    expect(() => validateBackup(file([{ id: 'd', kind: 'document', title: 'D', version: 1, content: { schemaVersion: 3 } }]))).toThrow(/newer/);
+    expect(() => validateBackup(file([{ id: 'a', kind: 'diagram', title: 'A', version: 1, content: { schemaVersion: 4 } }]))).toThrow(/newer/);
+    expect(() => validateBackup(file([], [{ id: 'v', itemId: 'a', kind: 'diagram', content: { schemaVersion: 4 } }]))).toThrow(/newer/);
+    expect(() => validateBackup(file([], [{ id: 'v', itemId: 'd', kind: 'document', content: { schemaVersion: 3 } }]))).toThrow(/newer/);
+    expect(validateBackup(file([{ id: 'a', kind: 'diagram', title: 'A', version: 1, content: { schemaVersion: 3 } }], [{ id: 'v', itemId: 'a', kind: 'diagram', content: { schemaVersion: 3 } }])).items).toHaveLength(1);
+    await expect(store.importBackup(file([{ id: 'd', kind: 'document', title: 'D', version: 1, content: { schemaVersion: 3 } }]))).rejects.toThrow(/newer/);
+    expect(await store.get('document', 'd')).toBeUndefined();
   });
 
   it('counts records of unknown kinds instead of failing (newer app backups)', async () => {

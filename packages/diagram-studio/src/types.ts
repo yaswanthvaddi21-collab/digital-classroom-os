@@ -1,4 +1,10 @@
 import type { Edge, Node, Viewport } from '@xyflow/react';
+import { schemaFor } from './compat';
+import { CONNECTOR_DATA_READERS, parentsFirst, readFields, readLayers, SHAPE_DATA_READERS, validParents, type DiagramLayer, type EdgePort, type Point } from './model';
+import type { LibraryShapeKind } from './library/kinds';
+import { shapeDef } from './shapeRegistry';
+
+export type { DiagramLayer, EdgePort, Point } from './model';
 
 export type ShapeKind =
   | 'rectangle'
@@ -17,7 +23,14 @@ export type ShapeKind =
   | 'umlClass'
   | 'erEntity'
   | 'actor'
-  | 'package';
+  | 'package'
+  // schema 3: an invisible container; the shapes in it have `parentId` set to it (React Flow parent nodes).
+  | 'group'
+  // schema 3 (G-DRAWIO): a picture embedded in the diagram (`data.image`), from diagrams.net image cells.
+  | 'image'
+  // schema 3 (G-SHAPES): BPMN, UML sequence/activity/state/use case, network icons and timeline dates (library/kinds.ts).
+  | LibraryShapeKind;
+// @phase5:shapes — new kinds are added to the union above (and to SHAPE_DEFS in shapeRegistry.ts).
 
 /** Shapes whose label is split into a header and compartments (lines separated by a line holding only `--`). */
 export const COMPARTMENT_SHAPES: ReadonlySet<ShapeKind> = new Set(['umlClass', 'erEntity']);
@@ -44,11 +57,38 @@ export type ShapeStyle = {
   bold: boolean;
 };
 
-export type ShapeData = ShapeStyle & { label: string };
+export type ShapeData = ShapeStyle & {
+  label: string;
+  /** schema 3: rotation in degrees, clockwise, about the centre. Absent = 0. */
+  rotation?: number;
+  /** schema 3: a web or mail address (or diagrams.net page link) the shape opens. Unsafe schemes are not kept. */
+  link?: string;
+  /** schema 3: text shown when pointing at the shape. */
+  tooltip?: string;
+  /** schema 3: custom properties (diagrams.net "Edit Data"), string to string. */
+  properties?: Record<string, string>;
+  /** schema 3 (diagrams.net): opacity of the fill and outline in percent, 0–100. Absent = opaque. */
+  opacity?: number;
+  /** schema 3 (diagrams.net): font family of the text, as the file names it. Absent = the app's font. */
+  fontFamily?: string;
+  /** schema 3 (diagrams.net): text alignment across the shape. Absent = centred. */
+  textAlign?: 'left' | 'right';
+  /** schema 3 (diagrams.net): text alignment down the shape. Absent = middle. */
+  verticalAlign?: 'top' | 'bottom';
+  /** schema 3 (diagrams.net): the picture of an `image` shape, as an embedded data: URL. */
+  image?: string;
+  // @phase5:model — new shape data fields (optional; add a reader to SHAPE_DATA_READERS in model.ts).
+};
 
-export type ShapeNode = Node<ShapeData, 'shape'>;
+/**
+ * A shape on the canvas. `parentId` and `hidden` are React Flow's own fields; `locked` and `layer` are ours and are
+ * ignored by React Flow (features derive React Flow's `draggable`, `deletable` … from them when rendering).
+ */
+export type ShapeNode = Node<ShapeData, 'shape'> & { locked?: boolean; layer?: string };
 
 export type EdgeLineType = 'smoothstep' | 'step' | 'straight' | 'default';
+/** Every line type, in menu order. @phase5:edges — add new types here, to EdgeLineType and to EDGE_PATHS (edges.tsx). */
+export const EDGE_LINE_TYPES: EdgeLineType[] = ['smoothstep', 'step', 'straight', 'default'];
 export type ArrowMode = 'end' | 'both' | 'none';
 
 /** Connector end decorations. UML: triangle = inheritance, diamond = aggregation, diamond-filled = composition. */
@@ -76,6 +116,14 @@ export type ConnectorData = {
   /** schema 2: explicit end decorations; when set they take precedence over `arrow`. */
   startMarker?: MarkerKind;
   endMarker?: MarkerKind;
+  /** schema 3: bend points in flow coordinates, from source to target. */
+  waypoints?: Point[];
+  /** schema 3: where the label sits along the connector, 0 (source) to 1 (target). Absent = 0.5. */
+  labelPosition?: number;
+  /** schema 3: attachment beyond the four side handles (perimeter or a fixed point). Absent = the handle. */
+  sourcePort?: EdgePort;
+  targetPort?: EdgePort;
+  // @phase5:model — new connector data fields (optional; add a reader to CONNECTOR_DATA_READERS in model.ts).
 };
 
 /** The decorations actually drawn at each end of a connector. */
@@ -107,6 +155,14 @@ export interface SerializedNode {
   height: number;
   data: ShapeData;
   zIndex?: number;
+  /** schema 3: the containing group (or container) node. `position` is then relative to that node. */
+  parentId?: string;
+  /** schema 3: cannot be moved, resized, edited or deleted until unlocked. Stored only when true. */
+  locked?: true;
+  /** schema 3: not shown or exported (diagrams.net hidden cells). Stored only when true. */
+  hidden?: true;
+  /** schema 3: id of the layer (in `DiagramContent.layers`) the shape is on. Absent = the first layer. */
+  layer?: string;
 }
 
 export interface SerializedEdge {
@@ -126,6 +182,8 @@ export interface DiagramContent {
   edges: SerializedEdge[];
   viewport: Viewport | null;
   settings: DiagramSettings;
+  /** schema 3: layers, bottom first. Absent = one implicit layer holding everything. */
+  layers?: DiagramLayer[];
 }
 
 export const DEFAULT_SETTINGS: DiagramSettings = { snapToGrid: true, showGrid: true, autoLayout: 'none' };
@@ -134,40 +192,9 @@ export const DEFAULT_CONNECTOR: ConnectorData = { color: '#475569', width: 2, da
 
 export function shapeDefaults(shape: ShapeKind): ShapeStyle & { width: number; height: number } {
   const base = { shape, fill: '#ffffff', stroke: '#334155', strokeWidth: 2, textColor: '#0f172a', fontSize: 14, dashed: false, bold: false };
-  switch (shape) {
-    case 'circle':
-      return { ...base, width: 110, height: 110 };
-    case 'ellipse':
-      return { ...base, width: 150, height: 80, fill: '#e0e7ff', stroke: '#4f46e5' };
-    case 'diamond':
-      return { ...base, width: 150, height: 110, fill: '#fef3c7', stroke: '#b45309' };
-    case 'parallelogram':
-      return { ...base, width: 170, height: 70, fill: '#dcfce7', stroke: '#15803d' };
-    case 'hexagon':
-      return { ...base, width: 160, height: 80, fill: '#f3e8ff', stroke: '#7e22ce' };
-    case 'triangle':
-      return { ...base, width: 130, height: 110 };
-    case 'cylinder':
-      return { ...base, width: 120, height: 110, fill: '#e0f2fe', stroke: '#0369a1' };
-    case 'document':
-      return { ...base, width: 160, height: 90 };
-    case 'note':
-      return { ...base, width: 160, height: 120, fill: '#fef9c3', stroke: '#ca8a04', strokeWidth: 1 };
-    case 'text':
-      return { ...base, width: 160, height: 40, fill: 'transparent', stroke: 'transparent', strokeWidth: 0, fontSize: 16 };
-    case 'rounded':
-      return { ...base, width: 160, height: 70 };
-    case 'umlClass':
-      return { ...base, width: 200, height: 130, fill: '#ffffff', stroke: '#334155', fontSize: 13 };
-    case 'erEntity':
-      return { ...base, width: 190, height: 120, fill: '#ffffff', stroke: '#0369a1', fontSize: 13 };
-    case 'actor':
-      return { ...base, width: 70, height: 110, fill: '#ffffff', stroke: '#334155', fontSize: 13 };
-    case 'package':
-      return { ...base, width: 180, height: 110, fill: '#fefce8', stroke: '#a16207' };
-    default:
-      return { ...base, width: 160, height: 70 };
-  }
+  const def = shapeDef(shape);
+  // A kind from a newer version keeps the base style at the default size (it is drawn as a placeholder).
+  return def ? { ...base, ...def.style, width: def.width, height: def.height } : { ...base, width: 160, height: 70 };
 }
 
 /** Derives React Flow presentation props (stroke, markers, label style) from connector data. */
@@ -187,8 +214,11 @@ export function styledEdge(edge: Connector): Connector {
   };
 }
 
-/** Newest diagram content schema this build reads and writes. Newer content opens read-only. */
-export const DIAGRAM_SCHEMA = 2;
+/**
+ * Newest diagram content schema this build reads and writes. Newer content opens read-only. Content is stored under
+ * `schemaFor(content)` (compat.ts): 2 when it uses only the schema-2 vocabulary, so older builds can still edit it.
+ */
+export const DIAGRAM_SCHEMA = 3;
 
 export function diagramSchemaOf(raw: unknown): number {
   const v = raw && typeof raw === 'object' ? (raw as { schemaVersion?: unknown }).schemaVersion : undefined;
@@ -196,19 +226,28 @@ export function diagramSchemaOf(raw: unknown): number {
 }
 
 export function createEmptyDiagram(): DiagramContent {
-  return { schemaVersion: DIAGRAM_SCHEMA, nodes: [], edges: [], viewport: null, settings: { ...DEFAULT_SETTINGS } };
+  return { schemaVersion: 2, nodes: [], edges: [], viewport: null, settings: { ...DEFAULT_SETTINGS } };
 }
 
-export function serializeDiagram(nodes: ShapeNode[], edges: Connector[], viewport: Viewport | null, settings: DiagramSettings): DiagramContent {
-  return {
-    schemaVersion: DIAGRAM_SCHEMA,
+/** The stored form of shape data: schema-3 fields at their default are left out. */
+const storedShapeData = (d: ShapeData): ShapeData => readFields(d, SHAPE_DATA_READERS);
+const storedConnectorData = (d: ConnectorData): ConnectorData => readFields(d, CONNECTOR_DATA_READERS);
+
+/** The stored form of the editor's diagram. Runtime fields (selection, measurements) are left out. */
+export function serializeDiagram(nodes: ShapeNode[], edges: Connector[], viewport: Viewport | null, settings: DiagramSettings, layers?: DiagramLayer[]): DiagramContent {
+  const content: DiagramContent = {
+    schemaVersion: 2,
     nodes: nodes.map((n) => ({
       id: n.id,
       position: { x: Math.round(n.position.x * 10) / 10, y: Math.round(n.position.y * 10) / 10 },
       width: Math.round(n.width ?? n.measured?.width ?? 160),
       height: Math.round(n.height ?? n.measured?.height ?? 70),
-      data: n.data,
+      data: storedShapeData(n.data),
       ...(n.zIndex !== undefined ? { zIndex: n.zIndex } : {}),
+      ...(n.parentId ? { parentId: n.parentId } : {}),
+      ...(n.locked ? { locked: true as const } : {}),
+      ...(n.hidden ? { hidden: true as const } : {}),
+      ...(n.layer ? { layer: n.layer } : {}),
     })),
     edges: edges.map((e) => ({
       id: e.id,
@@ -218,31 +257,54 @@ export function serializeDiagram(nodes: ShapeNode[], edges: Connector[], viewpor
       targetHandle: e.targetHandle ?? null,
       type: (e.type as EdgeLineType) ?? 'smoothstep',
       label: typeof e.label === 'string' ? e.label : '',
-      data: { ...DEFAULT_CONNECTOR, ...e.data },
+      data: storedConnectorData({ ...DEFAULT_CONNECTOR, ...e.data }),
     })),
     viewport,
     settings,
+    ...(layers?.length ? { layers } : {}),
   };
+  content.schemaVersion = schemaFor(content);
+  return content;
 }
 
-/** Rebuilds editor state from stored content, tolerating missing fields and dangling edges. */
-export function deserializeDiagram(raw: unknown): { nodes: ShapeNode[]; edges: Connector[]; viewport: Viewport | null; settings: DiagramSettings } {
+/** Editor state rebuilt from stored content. */
+export interface DeserializedDiagram {
+  nodes: ShapeNode[];
+  edges: Connector[];
+  viewport: Viewport | null;
+  settings: DiagramSettings;
+  /** Present only when the diagram has layers. */
+  layers?: DiagramLayer[];
+}
+
+/**
+ * Rebuilds editor state from stored content, tolerating missing fields and dangling edges. Schema-3 fields with
+ * invalid values are left out (model.ts); unknown data fields are kept as they are. Never changes `raw`.
+ */
+export function deserializeDiagram(raw: unknown): DeserializedDiagram {
   const c = (raw && typeof raw === 'object' ? raw : {}) as Partial<DiagramContent>;
-  const nodes: ShapeNode[] = (Array.isArray(c.nodes) ? c.nodes : [])
-    .filter((n) => n && typeof n.id === 'string')
-    .map((n) => {
-      const shape = (n.data?.shape ?? 'rectangle') as ShapeKind;
-      const { width, height, ...defaults } = shapeDefaults(shape);
-      return {
-        id: n.id,
-        type: 'shape' as const,
-        position: { x: Number(n.position?.x) || 0, y: Number(n.position?.y) || 0 },
-        width: Number(n.width) || width,
-        height: Number(n.height) || height,
-        data: { ...defaults, ...n.data, label: n.data?.label ?? '' },
-        ...(n.zIndex !== undefined ? { zIndex: n.zIndex } : {}),
-      };
-    });
+  const layers = readLayers(c.layers);
+  const layerIds = new Set(layers?.map((l) => l.id));
+  const stored = (Array.isArray(c.nodes) ? c.nodes : []).filter((n) => n && typeof n.id === 'string');
+  const parents = validParents(stored);
+  const nodes: ShapeNode[] = stored.map((n) => {
+    const shape = (n.data?.shape ?? 'rectangle') as ShapeKind;
+    const { width, height, ...defaults } = shapeDefaults(shape);
+    const parentId = parents.get(n.id);
+    return {
+      id: n.id,
+      type: 'shape' as const,
+      position: { x: Number(n.position?.x) || 0, y: Number(n.position?.y) || 0 },
+      width: Number(n.width) || width,
+      height: Number(n.height) || height,
+      data: storedShapeData({ ...defaults, ...n.data, label: n.data?.label ?? '' }),
+      ...(n.zIndex !== undefined ? { zIndex: n.zIndex } : {}),
+      ...(parentId ? { parentId } : {}),
+      ...(n.locked === true ? { locked: true } : {}),
+      ...(n.hidden === true ? { hidden: true } : {}),
+      ...(typeof n.layer === 'string' && layerIds.has(n.layer) ? { layer: n.layer } : {}),
+    };
+  });
   const ids = new Set(nodes.map((n) => n.id));
   const edges: Connector[] = (Array.isArray(c.edges) ? c.edges : [])
     .filter((e) => e && ids.has(e.source) && ids.has(e.target))
@@ -255,8 +317,8 @@ export function deserializeDiagram(raw: unknown): { nodes: ShapeNode[]; edges: C
         targetHandle: e.targetHandle ?? null,
         type: e.type ?? 'smoothstep',
         label: e.label || undefined,
-        data: { ...DEFAULT_CONNECTOR, ...e.data },
+        data: storedConnectorData({ ...DEFAULT_CONNECTOR, ...e.data }),
       }),
     );
-  return { nodes, edges, viewport: c.viewport ?? null, settings: { ...DEFAULT_SETTINGS, ...c.settings } };
+  return { nodes: parentsFirst(nodes), edges, viewport: c.viewport ?? null, settings: { ...DEFAULT_SETTINGS, ...c.settings }, ...(layers ? { layers } : {}) };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { anchorPoint, canConnect, directionFromKey, facingHandles, placeNew, QUICK_GAP, type Box } from './quickConnectGeometry';
+import { anchorPoint, canConnect, directionFromKey, facingHandles, placeNew, QUICK_GAP, quickObstacles, type Box } from './quickConnectGeometry';
 
 const box = (id: string, x: number, y: number, width = 100, height = 50): Box => ({ id, x, y, width, height });
 const size = { width: 100, height: 50 };
@@ -50,5 +50,21 @@ describe('geometry helpers', () => {
     expect(anchorPoint(box('a', 10, 20), 'top')).toEqual({ x: 60, y: 20 });
     expect(directionFromKey('ArrowLeft')).toBe('left');
     expect(directionFromKey('a')).toBeNull();
+  });
+});
+
+describe('Quick Connect next to a shape in a lane or group (Round 3)', () => {
+  it('does not treat the containers the source sits in as obstacles, so the new shape stays beside it', () => {
+    const nodes = [
+      { id: 'pool', x: 0, y: 0, width: 700, height: 300 },
+      { id: 'lane', parentId: 'pool', x: 30, y: 0, width: 670, height: 300 },
+      { id: 't1', parentId: 'lane', x: 90, y: 100, width: 130, height: 80 },
+      { id: 'other', x: 400, y: 100, width: 100, height: 80, hidden: true },
+    ];
+    expect(quickObstacles(nodes, 't1').map((n) => n.id)).toEqual([]);
+    const at = placeNew(nodes[2], 'right', { width: 130, height: 80 }, quickObstacles(nodes, 't1'));
+    expect(at.x + 130).toBeLessThan(700); // inside the lane, not pushed past the pool
+    // Without the exclusion the pool and lane push it out (the Round 2 behaviour).
+    expect(placeNew(nodes[2], 'right', { width: 130, height: 80 }, nodes).x).toBeGreaterThanOrEqual(700);
   });
 });

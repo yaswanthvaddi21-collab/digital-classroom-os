@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { deflateSync, strToU8 } from 'fflate';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DrawioImportError, fromDrawio, htmlToText, toDrawio } from './drawio';
+import { DRAWIO_SWIMLANE_KINDS } from './drawioFeatures';
+import { canvasPosition } from './model';
 import { diagramTemplates } from './templates';
 import { deserializeDiagram, edgeMarkers, serializeDiagram } from './types';
 
@@ -63,8 +65,11 @@ describe('importing files drawn in diagrams.net', () => {
     expect(byId.cls.data.shape).toBe('umlClass');
     expect(byId.cls.data.label).toBe('Book\n+ title: String\n+ isbn: String\n--\n+ borrow(): void');
     expect(byId.r1).toBeUndefined();
-    expect(byId.grp).toBeUndefined();
-    expect(byId.inner.position).toEqual({ x: 120, y: 310 });
+    // Phase 5 (G-DRAWIO): groups are kept as groups; the shape inside stores its position relative to the group.
+    expect(byId.grp.data.shape).toBe('group');
+    expect(byId.inner).toMatchObject({ parentId: 'grp', position: { x: 20, y: 10 } });
+    // An embedded picture is kept as an image shape (diagrams.net writes `data:image/png,<base64>`).
+    expect(byId.pic.data).toMatchObject({ shape: 'image', image: 'data:image/png;base64,abc' });
     expect(byId.star.data.shape).toBe('rectangle');
 
     const e1 = content.edges.find((e) => e.id === 'e1')!;
@@ -76,7 +81,7 @@ describe('importing files drawn in diagrams.net', () => {
 
     expect(report.title).toBe('Page-1');
     expect(report.notes.join(' ')).toMatch(/first page/);
-    expect(report.notes.join(' ')).toMatch(/Images/);
+    expect(report.notes.join(' ')).not.toMatch(/Images|flattened/);
     expect(report.notes.join(' ')).toMatch(/mxgraph\.basic\.star/);
     expect(report.notes.join(' ')).toMatch(/1 connector/);
   });
@@ -107,6 +112,12 @@ describe('importing files drawn in diagrams.net', () => {
   });
 });
 
+/** Canvas positions of every node (children store positions relative to their container). */
+const canvas = (c: { nodes: Array<{ id: string; position: { x: number; y: number }; parentId?: string }> }) => {
+  const byId = new Map(c.nodes.map((n) => [n.id, n]));
+  return c.nodes.map((n) => canvasPosition(n, byId));
+};
+
 const page = (cells: string) => `<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>${cells}</root></mxGraphModel>`;
 
 describe('cells wrapped in <UserObject> / <object>', () => {
@@ -131,13 +142,18 @@ describe('cells wrapped in <UserObject> / <object>', () => {
       ['inner', 'Inner'],
       ['cls', 'Book\n+ title: String'],
     ]);
-    expect(content.nodes.find((n) => n.id === 'inner')!.position).toEqual({ x: 420, y: 130 });
+    // Phase 5: a container keeps its shapes inside it, at positions relative to it.
+    expect(content.nodes.find((n) => n.id === 'inner')).toMatchObject({ parentId: 'box', position: { x: 20, y: 30 } });
+    // …and the wrapper's link, tooltip and other attributes are kept (DS-R1).
+    expect(content.nodes.find((n) => n.id === 'a')!.data.link).toBe('https://example.com');
+    expect(content.nodes.find((n) => n.id === 'b')!.data).toMatchObject({ tooltip: 'Second step', properties: { owner: 'sam' }, bold: true });
     expect(content.edges.map((e) => [e.id, e.source, e.target, e.label])).toEqual([
       ['e1', 'a', 'b', ''],
       ['e2', 'b', 'inner', 'checks'],
       ['e3', 'inner', 'cls', ''],
     ]);
-    expect(report.notes).toEqual([]);
+    // DS-R1: this used to assert no notes although the connector's link was dropped. Connectors cannot hold links.
+    expect(report.notes).toEqual(['Links, tooltips or custom properties on 1 connector were left out: connectors cannot hold them here.']);
     const state = deserializeDiagram(content);
     expect(state.nodes).toHaveLength(5);
     expect(state.edges).toHaveLength(3);
@@ -152,6 +168,13 @@ describe('cells wrapped in <UserObject> / <object>', () => {
 });
 
 describe('swimlanes and containers', () => {
+  // These cover the outline fallback (no BPMN kinds); drawio-phase5.test.ts covers the pool and lane mapping.
+  const saved = { ...DRAWIO_SWIMLANE_KINDS };
+  beforeEach(() => Object.assign(DRAWIO_SWIMLANE_KINDS, { pool: null, lane: null }));
+  afterEach(() => Object.assign(DRAWIO_SWIMLANE_KINDS, saved));
+
+  // Phase 5 (G-DRAWIO): a lane holds its shapes (parentId, positions relative to it). These tests cover the outline
+  // fallback used while no BPMN lane kind is registered (DRAWIO_SWIMLANE_KINDS); drawio-phase5.test.ts covers the hook.
   it('imports a process lane as a box behind its shapes, not as a class', () => {
     const { content, report } = fromDrawio(
       page(`
@@ -162,17 +185,24 @@ describe('swimlanes and containers', () => {
     );
     expect(content.nodes.map((n) => [n.id, n.data.shape, n.data.label, n.position])).toEqual([
       ['lane', 'rectangle', 'Student', { x: 100, y: 50 }],
-      ['s', 'rounded', 'Submit', { x: 120, y: 90 }],
-      ['r', 'diamond', 'Review', { x: 300, y: 90 }],
+      ['s', 'rounded', 'Submit', { x: 20, y: 40 }],
+      ['r', 'diamond', 'Review', { x: 200, y: 40 }],
     ]);
+    expect(canvas(content).slice(1)).toEqual([
+      { x: 120, y: 90 },
+      { x: 300, y: 90 },
+    ]);
+    expect(content.nodes.slice(1).map((n) => n.parentId)).toEqual(['lane', 'lane']);
     expect(content.nodes[0]).toMatchObject({ width: 400, height: 200 });
+    // The title sits at the top, where diagrams.net draws the lane's title band.
+    expect(content.nodes[0].data.verticalAlign).toBe('top');
     // Transparent, so connectors between the shapes inside stay visible.
     expect(content.nodes[0].data.fill).toBe('transparent');
     expect(content.edges.map((e) => [e.source, e.target])).toEqual([['s', 'r']]);
-    expect(report.notes.join(' ')).toMatch(/Swimlanes were imported as plain boxes/);
+    expect(report.notes).toEqual(['1 swimlane was imported as an outline that holds its shapes: the title band and the lane colour are not drawn.']);
   });
 
-  it('keeps everything in a pool of lanes, at absolute positions, containers first', () => {
+  it('keeps everything in a pool of lanes, at the same canvas positions, containers first', () => {
     // Pools in diagrams.net use a stack layout for their lanes; that alone must not make them a class.
     const { content } = fromDrawio(
       page(`
@@ -183,12 +213,12 @@ describe('swimlanes and containers', () => {
       <mxCell id="a" value="Apply" style="rounded=1;" vertex="1" parent="lane1"><mxGeometry x="40" y="30" width="100" height="50" as="geometry"/></mxCell>
       <mxCell id="e" edge="1" source="a" target="b" parent="pool"><mxGeometry relative="1" as="geometry"/></mxCell>`),
     );
-    expect(content.nodes.map((n) => [n.id, n.data.shape, n.data.label, n.position])).toEqual([
-      ['pool', 'rectangle', 'Admissions', { x: 40, y: 40 }],
-      ['lane1', 'rectangle', 'Applicant', { x: 60, y: 40 }],
-      ['a', 'rounded', 'Apply', { x: 100, y: 70 }],
-      ['lane2', 'rectangle', 'Office', { x: 60, y: 160 }],
-      ['b', 'ellipse', 'Done', { x: 120, y: 170 }],
+    expect(content.nodes.map((n, i) => [n.id, n.data.shape, n.data.label, canvas(content)[i], n.parentId])).toEqual([
+      ['pool', 'rectangle', 'Admissions', { x: 40, y: 40 }, undefined],
+      ['lane1', 'rectangle', 'Applicant', { x: 60, y: 40 }, 'pool'],
+      ['a', 'rounded', 'Apply', { x: 100, y: 70 }, 'lane1'],
+      ['lane2', 'rectangle', 'Office', { x: 60, y: 160 }, 'pool'],
+      ['b', 'ellipse', 'Done', { x: 120, y: 170 }, 'lane2'],
     ]);
     expect(content.edges.map((e) => [e.source, e.target])).toEqual([['a', 'b']]);
   });

@@ -30,6 +30,22 @@ const overlaps = (a: { x: number; y: number; width: number; height: number }, b:
  * Where a new shape goes when created from `source` towards `dir`: centred on the source along the other axis,
  * `gap` away, and pushed further out until it overlaps nothing.
  */
+/**
+ * What a new Quick Connect shape must not overlap: every other shape except the groups and containers the source is
+ * in (they hold it, and the new shape joins them: a task in a BPMN lane gets its neighbour in the lane) and hidden
+ * shapes.
+ */
+export function quickObstacles<T extends { id: string; parentId?: string; hidden?: boolean }>(nodes: readonly T[], sourceId: string): T[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const holders = new Set<string>();
+  const seen = new Set([sourceId]);
+  for (let p = byId.get(sourceId)?.parentId; p && !seen.has(p); p = byId.get(p)?.parentId) {
+    holders.add(p);
+    seen.add(p);
+  }
+  return nodes.filter((n) => n.id !== sourceId && !holders.has(n.id) && !n.hidden);
+}
+
 export function placeNew(source: Box, dir: Direction, size: { width: number; height: number }, others: Box[], gap = QUICK_GAP): { x: number; y: number } {
   const cx = source.x + source.width / 2;
   const cy = source.y + source.height / 2;

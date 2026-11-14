@@ -62,9 +62,14 @@ export function useDiagramHost(): { host: DiagramHost; dialogs: React.ReactNode;
         return a ? new Blob([a.data], { type: a.mimeType }) : undefined;
       },
       toDrawio: async (source, title) => {
-        const { toDrawio, deserializeDiagram, serializeDiagram } = await loadDiagramStudio();
+        const { drawioExportNotes, toDrawio, deserializeDiagram, serializeDiagram } = await loadDiagramStudio();
         const s = deserializeDiagram(source);
-        return toDrawio(serializeDiagram(s.nodes, s.edges, s.viewport, s.settings), title);
+        const content = serializeDiagram(s.nodes, s.edges, s.viewport, s.settings, s.layers);
+        const xml = toDrawio(content, title);
+        // What the .drawio file cannot hold is said, never left out silently (the editor's export does the same).
+        const notes = drawioExportNotes(content);
+        if (notes.length) toast(`Exported for diagrams.net. ${notes.join(' ')}`, 'info');
+        return xml;
       },
     }),
     [toast],

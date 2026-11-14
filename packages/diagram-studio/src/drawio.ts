@@ -3,18 +3,48 @@ import {
   COMPARTMENT_SHAPES,
   DEFAULT_CONNECTOR,
   DEFAULT_SETTINGS,
-  DIAGRAM_SCHEMA,
   edgeMarkers,
   shapeDefaults,
   splitCompartments,
   type ConnectorData,
   type DiagramContent,
+  type DiagramLayer,
   type EdgeLineType,
   type MarkerKind,
   type SerializedEdge,
   type SerializedNode,
   type ShapeKind,
 } from './types';
+import {
+  DRAWIO_ARROWS,
+  DRAWIO_EDGE_READERS,
+  DRAWIO_EDGE_STYLE_WRITERS,
+  DRAWIO_EXPORT_LOSSES,
+  DRAWIO_SHAPE_KEYS,
+  DRAWIO_VERTEX_READERS,
+  DRAWIO_VERTEX_STYLE_WRITERS,
+  LINE_TO_DRAWIO,
+  MARKER_TO_DRAWIO,
+  type DrawioCell,
+  type DrawioImportContext,
+  type DrawioStyle,
+} from './drawioRegistry';
+import { schemaFor, SCHEMA2_VOCABULARY } from './compat';
+import { CONNECTOR_DATA_READERS, parentsFirst, SHAPE_DATA_READERS, validParents, type Point } from './model';
+import {
+  endFromStyle,
+  endStyle,
+  labelGeometryX,
+  nameOf,
+  readLabelPlace,
+  readPoints,
+  richText,
+  splitProperties,
+  swimlaneKind,
+  tally,
+  tallyNotes,
+} from './drawioFeatures';
+import { shapeDef } from './shapeRegistry';
 
 /*
  * diagrams.net (draw.io) interchange. Files are mxGraph XML, either plain or with each page deflated + base64.
@@ -25,52 +55,9 @@ import {
 
 // ── Export ───────────────────────────────────────────────────────────────────────────────────────────
 
-const BASE_STYLE: Record<ShapeKind, string> = {
-  rectangle: 'rounded=0;whiteSpace=wrap;html=1;',
-  rounded: 'rounded=1;whiteSpace=wrap;html=1;',
-  ellipse: 'ellipse;whiteSpace=wrap;html=1;',
-  circle: 'ellipse;whiteSpace=wrap;html=1;aspect=fixed;',
-  diamond: 'rhombus;whiteSpace=wrap;html=1;',
-  parallelogram: 'shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;',
-  hexagon: 'shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;',
-  triangle: 'triangle;whiteSpace=wrap;html=1;direction=north;',
-  cylinder: 'shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;',
-  document: 'shape=document;whiteSpace=wrap;html=1;boundedLbl=1;',
-  note: 'shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;',
-  text: 'text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;',
-  actor: 'shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;',
-  package: 'shape=folder;fontStyle=1;spacingTop=10;tabWidth=60;tabHeight=18;tabPosition=left;html=1;whiteSpace=wrap;',
-  umlClass:
-    'swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;',
-  erEntity:
-    'swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;rounded=1;whiteSpace=wrap;html=1;',
-};
 const ROW_STYLE =
   'text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;';
 const LINE_STYLE = 'line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=inherit;';
-
-const MARKER_TO_DRAWIO: Record<MarkerKind, { arrow: string; fill: 0 | 1 }> = {
-  none: { arrow: 'none', fill: 0 },
-  arrow: { arrow: 'block', fill: 1 },
-  'open-arrow': { arrow: 'open', fill: 0 },
-  triangle: { arrow: 'block', fill: 0 },
-  diamond: { arrow: 'diamondThin', fill: 0 },
-  'diamond-filled': { arrow: 'diamondThin', fill: 1 },
-  circle: { arrow: 'oval', fill: 0 },
-  'crow-many': { arrow: 'ERmany', fill: 0 },
-  'crow-one': { arrow: 'ERmandOne', fill: 0 },
-  'crow-zero-many': { arrow: 'ERzeroToMany', fill: 0 },
-  'crow-zero-one': { arrow: 'ERzeroToOne', fill: 0 },
-};
-
-const LINE_TO_DRAWIO: Record<EdgeLineType, string> = {
-  smoothstep: 'edgeStyle=orthogonalEdgeStyle;rounded=1;',
-  step: 'edgeStyle=orthogonalEdgeStyle;rounded=0;',
-  straight: 'edgeStyle=none;',
-  default: 'edgeStyle=orthogonalEdgeStyle;curved=1;',
-};
-
-const HANDLE_POINT: Record<string, [number, number]> = { t: [0.5, 0], r: [1, 0.5], b: [0.5, 1], l: [0, 0.5] };
 
 // Characters XML 1.0 forbids are dropped (a file containing them cannot be opened at all). Tab, CR and LF are written
 // as character references, because attribute-value normalisation would otherwise turn them into spaces.
@@ -88,11 +75,17 @@ const htmlEscape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
 const color = (c: string) => (c === 'transparent' ? 'none' : c);
 const r = (n: number) => Math.round(n * 10) / 10;
 
+/** The exported style of a kind; a kind this version does not know is written as a rectangle. */
+const baseStyle = (kind: string) => (shapeDef(kind) ?? shapeDef('rectangle')!).drawioStyle;
+
 function vertexStyle(node: SerializedNode) {
   const d = node.data;
-  let style = `${BASE_STYLE[d.shape] ?? BASE_STYLE.rectangle}dcosShape=${d.shape};fillColor=${color(d.fill)};strokeColor=${color(d.stroke)};fontColor=${d.textColor};fontSize=${d.fontSize};strokeWidth=${d.strokeWidth};`;
+  let style = `${baseStyle(d.shape)}dcosShape=${d.shape};fillColor=${color(d.fill)};strokeColor=${color(d.stroke)};fontColor=${d.textColor};fontSize=${d.fontSize};strokeWidth=${d.strokeWidth};`;
   if (d.dashed) style += 'dashed=1;';
   if (d.bold && !COMPARTMENT_SHAPES.has(d.shape) && d.shape !== 'package') style += 'fontStyle=1;';
+  // A group is drawn invisible here; without this diagrams.net would paint its stored colours as a box.
+  if (d.shape === 'group') style += 'fillColor=none;strokeColor=none;';
+  for (const write of DRAWIO_VERTEX_STYLE_WRITERS) style += write(node);
   return style;
 }
 
@@ -103,22 +96,99 @@ function edgeStyle(edge: SerializedEdge) {
   const e = MARKER_TO_DRAWIO[end];
   let style = `${LINE_TO_DRAWIO[edge.type] ?? LINE_TO_DRAWIO.smoothstep}html=1;dcosLine=${edge.type};strokeColor=${d.color};strokeWidth=${d.width};startArrow=${s.arrow};startFill=${s.fill};endArrow=${e.arrow};endFill=${e.fill};dcosStart=${start};dcosEnd=${end};`;
   if (d.dashed) style += 'dashed=1;';
-  const exit = edge.sourceHandle ? HANDLE_POINT[edge.sourceHandle] : undefined;
-  const entry = edge.targetHandle ? HANDLE_POINT[edge.targetHandle] : undefined;
-  if (exit) style += `exitX=${exit[0]};exitY=${exit[1]};exitDx=0;exitDy=0;`;
-  if (entry) style += `entryX=${entry[0]};entryY=${entry[1]};entryDx=0;entryDy=0;`;
+  // Side handles as exit/entry points, fixed ports as their exact point, perimeter ports as floating ends.
+  style += endStyle(edge, 'source') + endStyle(edge, 'target');
+  for (const write of DRAWIO_EDGE_STYLE_WRITERS) style += write(edge);
   return style;
 }
 
-/** Serialises a diagram as a diagrams.net file (plain, uncompressed mxGraph XML). */
+const KNOWN_SHAPE_DATA = new Set<string>([...SCHEMA2_VOCABULARY.shapeDataFields, ...Object.keys(SHAPE_DATA_READERS)]);
+const KNOWN_CONNECTOR_DATA = new Set<string>([...SCHEMA2_VOCABULARY.connectorDataFields, ...Object.keys(CONNECTOR_DATA_READERS)]);
+const unknownFields = (data: object | undefined, known: Set<string>) => !!data && Object.entries(data).some(([k, v]) => v !== undefined && !known.has(k));
+
+/**
+ * What a `toDrawio` export of `content` leaves out or changes, one plain sentence each; empty when the file holds
+ * everything. Shown in the export toast. Each entry of DRAWIO_EXPORT_LOSSES, plus kinds, line types and fields that
+ * this version does not know (from a newer version).
+ */
+export function drawioExportNotes(content: DiagramContent): string[] {
+  const notes: string[] = [];
+  for (const loss of DRAWIO_EXPORT_LOSSES) {
+    const n = loss.count(content);
+    if (n > 0) notes.push(loss.note(n));
+  }
+  const unknownKinds = content.nodes.filter((n) => !shapeDef(n.data.shape)).length;
+  if (unknownKinds) notes.push(`${unknownKinds} ${unknownKinds === 1 ? 'shape of a kind' : 'shapes of kinds'} this version does not know ${unknownKinds === 1 ? 'was' : 'were'} written as ${unknownKinds === 1 ? 'a rectangle' : 'rectangles'}.`);
+  const unknownLines = content.edges.filter((e) => !LINE_TO_DRAWIO[e.type]).length;
+  if (unknownLines) notes.push(`${unknownLines} ${unknownLines === 1 ? 'connector of a line type' : 'connectors of line types'} this version does not know ${unknownLines === 1 ? 'was' : 'were'} written as rounded elbow lines.`);
+  const extra = content.nodes.filter((n) => unknownFields(n.data, KNOWN_SHAPE_DATA)).length + content.edges.filter((e) => unknownFields(e.data, KNOWN_CONNECTOR_DATA)).length;
+  if (extra) notes.push(`Settings from a newer version on ${extra} ${extra === 1 ? 'shape or connector were' : 'shapes or connectors were'} left out.`);
+  return notes;
+}
+
+/** A cell, wrapped in `<UserObject>` when the shape has a link, tooltip or custom properties (diagrams.net's own form). */
+function cellXml(node: SerializedNode, label: string, attrs: string, geometry: string): string {
+  const d = node.data;
+  const { kept } = splitProperties(d.properties);
+  if (!d.link && !d.tooltip && !kept.length) return `<mxCell id="${xmlEscape(node.id)}" value="${xmlEscape(label)}" ${attrs}>${geometry}</mxCell>`;
+  let wrapper = `<UserObject label="${xmlEscape(label)}"`;
+  if (d.link) wrapper += ` link="${xmlEscape(d.link)}"`;
+  if (d.tooltip) wrapper += ` tooltip="${xmlEscape(d.tooltip)}"`;
+  for (const [k, v] of kept) wrapper += ` ${k}="${xmlEscape(v)}"`;
+  return `${wrapper} id="${xmlEscape(node.id)}"><mxCell ${attrs}>${geometry}</mxCell></UserObject>`;
+}
+
+/**
+ * Serialises a diagram as a diagrams.net file (plain, uncompressed mxGraph XML). Groups are written as diagrams.net
+ * groups (their shapes inside them, at positions relative to the group, as stored), layers as layers (hidden and
+ * locked as in the diagram), hidden shapes with visible="0", and links, tooltips and properties on a `<UserObject>`.
+ * What the file still cannot hold is listed by `drawioExportNotes`.
+ */
 export function toDrawio(content: DiagramContent, title = 'Diagram'): string {
-  const cells: string[] = ['<mxCell id="0" />', '<mxCell id="1" parent="0" />'];
-  for (const node of content.nodes) {
+  const nodes = parentsFirst(content.nodes);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const parentOf = validParents(nodes);
+  const containers = new Set(parentOf.values());
+  const used = new Set<string>(['0', ...nodes.map((n) => n.id), ...content.edges.map((e) => e.id)]);
+  const cells: string[] = ['<mxCell id="0" />'];
+
+  // One diagrams.net layer per layer, bottom first; without layers, the single default layer "1".
+  const layerCell = new Map<string, string>();
+  const layers = content.layers?.length ? content.layers : null;
+  if (layers) {
+    layers.forEach((l, i) => {
+      let id = l.id;
+      for (let k = i + 1; used.has(id); k++) id = `layer-${k}`;
+      used.add(id);
+      layerCell.set(l.id, id);
+      cells.push(`<mxCell id="${xmlEscape(id)}" value="${xmlEscape(htmlEscape(l.name))}"${l.locked ? ' style="locked=1;"' : ''} parent="0"${l.visible ? '' : ' visible="0"'} />`);
+    });
+  } else cells.push('<mxCell id="1" parent="0" />');
+  const firstLayer = layers ? layerCell.get(layers[0].id)! : '1';
+  /** The outermost group a shape is in (itself when in none): its layer is the layer of every shape inside it. */
+  const top = (n: SerializedNode) => {
+    let t = n;
+    for (let p = parentOf.get(t.id); p !== undefined; p = parentOf.get(t.id)) t = byId.get(p)!;
+    return t;
+  };
+  const layerOf = (n: SerializedNode) => {
+    const t = top(n);
+    return (t.layer && layerCell.get(t.layer)) || firstLayer;
+  };
+
+  // @phase5:drawio-export — real group, layer and hidden cells, and UserObject wrappers for links and properties, go here.
+  for (const node of nodes) {
+    // Positions are stored relative to the group a shape is in, which is also how diagrams.net stores children.
     const { x, y } = node.position;
     const id = xmlEscape(node.id);
+    const parent = parentOf.get(node.id) ?? layerOf(node);
+    let style = vertexStyle(node);
+    if (containers.has(node.id) && node.data.shape !== 'group') style += 'container=1;';
+    const attrs = `style="${xmlEscape(style)}" vertex="1" parent="${xmlEscape(parent)}"${node.hidden ? ' visible="0"' : ''}`;
+    const geometry = `<mxGeometry x="${r(x)}" y="${r(y)}" width="${r(node.width)}" height="${r(node.height)}" as="geometry" />`;
     if (COMPARTMENT_SHAPES.has(node.data.shape)) {
       const { header, sections } = splitCompartments(node.data.label);
-      cells.push(`<mxCell id="${id}" value="${xmlEscape(htmlEscape(header))}" style="${xmlEscape(vertexStyle(node))}" vertex="1" parent="1"><mxGeometry x="${r(x)}" y="${r(y)}" width="${r(node.width)}" height="${r(node.height)}" as="geometry" /></mxCell>`);
+      cells.push(cellXml(node, htmlEscape(header), attrs, geometry));
       // Rows are laid out by diagrams.net's stack layout; we give them sensible starting geometry.
       let cy = 26;
       const rowH = Math.max(26, (node.height - 26 - 8 * (sections.length - 1)) / Math.max(1, sections.length));
@@ -132,13 +202,20 @@ export function toDrawio(content: DiagramContent, title = 'Diagram'): string {
         cy += rowH;
       });
     } else {
-      const html = node.data.label.split('\n').map(htmlEscape).join('<br>');
-      cells.push(`<mxCell id="${id}" value="${xmlEscape(html)}" style="${xmlEscape(vertexStyle(node))}" vertex="1" parent="1"><mxGeometry x="${r(x)}" y="${r(y)}" width="${r(node.width)}" height="${r(node.height)}" as="geometry" /></mxCell>`);
+      cells.push(cellXml(node, node.data.label.split('\n').map(htmlEscape).join('<br>'), attrs, geometry));
     }
   }
   for (const edge of content.edges) {
+    // Connectors go on the layer of the shape they start from; bend points are canvas coordinates, as is a layer's.
+    const source = byId.get(edge.source);
+    const parent = source ? layerOf(source) : firstLayer;
+    const position = edge.data?.labelPosition;
+    const gx = position !== undefined && position !== 0.5 ? ` x="${labelGeometryX(position)}"` : '';
+    const points = edge.data?.waypoints?.length ? `<Array as="points">${edge.data.waypoints.map((p) => `<mxPoint x="${r(p.x)}" y="${r(p.y)}" />`).join('')}</Array>` : '';
     cells.push(
-      `<mxCell id="${xmlEscape(edge.id)}" value="${xmlEscape(htmlEscape(edge.label ?? ''))}" style="${xmlEscape(edgeStyle(edge))}" edge="1" parent="1" source="${xmlEscape(edge.source)}" target="${xmlEscape(edge.target)}"><mxGeometry relative="1" as="geometry" /></mxCell>`,
+      `<mxCell id="${xmlEscape(edge.id)}" value="${xmlEscape(htmlEscape(edge.label ?? ''))}" style="${xmlEscape(edgeStyle(edge))}" edge="1" parent="${xmlEscape(parent)}" source="${xmlEscape(edge.source)}" target="${xmlEscape(edge.target)}">` +
+        (points ? `<mxGeometry relative="1"${gx} as="geometry">${points}</mxGeometry>` : `<mxGeometry relative="1"${gx} as="geometry" />`) +
+        '</mxCell>',
     );
   }
   const grid = content.settings?.showGrid === false ? 0 : 1;
@@ -169,7 +246,7 @@ export class DrawioImportError extends Error {
   }
 }
 
-type Style = { names: Set<string>; map: Map<string, string> };
+type Style = DrawioStyle;
 
 function parseStyle(style: string | null): Style {
   const names = new Set<string>();
@@ -209,32 +286,12 @@ function decodePage(diagram: Element): Element {
   return model;
 }
 
-const SHAPE_KEYS: Record<string, ShapeKind> = {
-  parallelogram: 'parallelogram',
-  hexagon: 'hexagon',
-  cylinder3: 'cylinder',
-  cylinder: 'cylinder',
-  datastore: 'cylinder',
-  document: 'document',
-  note: 'note',
-  note2: 'note',
-  umlActor: 'actor',
-  folder: 'package',
-  umlFrame: 'package',
-  module: 'package',
-  table: 'erEntity',
-  tableRow: 'erEntity',
-  ellipse: 'ellipse',
-  rhombus: 'diamond',
-  triangle: 'triangle',
-  rectangle: 'rectangle',
-  swimlane: 'umlClass',
-};
-
 /** Shape from the generic style names (`ellipse;`, `rhombus;` …), ignoring any specific `shape=` key. */
 function shapeFromNames(st: Style): ShapeKind {
   const n = st.names;
   if (n.has('swimlane')) return st.map.get('rounded') === '1' ? 'erEntity' : 'umlClass';
+  if (n.has('group')) return 'group';
+  if (n.has('image')) return 'image';
   if (n.has('ellipse')) return st.map.get('aspect') === 'fixed' ? 'circle' : 'ellipse';
   if (n.has('rhombus')) return 'diamond';
   if (n.has('triangle')) return 'triangle';
@@ -246,11 +303,11 @@ const KIND_NAMES: Partial<Record<ShapeKind, string>> = { ellipse: 'ellipses', re
 
 function shapeFromStyle(st: Style, notes: Set<string>): ShapeKind {
   const tagged = st.map.get('dcosShape') as ShapeKind | undefined;
-  if (tagged && tagged in BASE_STYLE) return tagged;
+  if (tagged && shapeDef(tagged)) return tagged;
   // A specific `shape=` wins over generic names: `ellipse;shape=cloud` is a cloud, not an ellipse.
   const shape = st.map.get('shape');
   if (shape) {
-    const known = SHAPE_KEYS[shape];
+    const known = Object.hasOwn(DRAWIO_SHAPE_KEYS, shape) ? DRAWIO_SHAPE_KEYS[shape] : undefined;
     if (known) return known === 'umlClass' ? shapeFromNames(st) : known === 'ellipse' && st.map.get('aspect') === 'fixed' ? 'circle' : known;
     const fallback = shapeFromNames(st);
     notes.add(`Shapes of type “${shape}” were imported as ${KIND_NAMES[fallback] ?? fallback}.`);
@@ -261,62 +318,20 @@ function shapeFromStyle(st: Style, notes: Set<string>): ShapeKind {
 
 function markerFromStyle(st: Style, end: 'start' | 'end', fallback: MarkerKind): MarkerKind {
   const tagged = st.map.get(end === 'start' ? 'dcosStart' : 'dcosEnd') as MarkerKind | undefined;
-  if (tagged && tagged in MARKER_TO_DRAWIO) return tagged;
+  if (tagged && Object.hasOwn(MARKER_TO_DRAWIO, tagged)) return tagged;
   const arrow = st.map.get(end === 'start' ? 'startArrow' : 'endArrow');
   const filled = st.map.get(end === 'start' ? 'startFill' : 'endFill') !== '0';
   if (arrow === undefined) return fallback;
-  switch (arrow) {
-    case 'none':
-    case '':
-      return 'none';
-    case 'block':
-    case 'classic':
-    case 'classicThin':
-    case 'blockThin':
-      return filled ? 'arrow' : 'triangle';
-    case 'open':
-    case 'openThin':
-    case 'openAsync':
-      return 'open-arrow';
-    case 'diamond':
-    case 'diamondThin':
-      return filled ? 'diamond-filled' : 'diamond';
-    case 'oval':
-    case 'circle':
-      return 'circle';
-    case 'ERmany':
-    case 'ERoneToMany':
-      return 'crow-many';
-    case 'ERmandOne':
-    case 'ERone':
-      return 'crow-one';
-    case 'ERzeroToMany':
-      return 'crow-zero-many';
-    case 'ERzeroToOne':
-      return 'crow-zero-one';
-    default:
-      return 'arrow';
-  }
+  return Object.hasOwn(DRAWIO_ARROWS, arrow) ? DRAWIO_ARROWS[arrow](filled) : 'arrow';
 }
 
 function lineFromStyle(st: Style): EdgeLineType {
   const tagged = st.map.get('dcosLine') as EdgeLineType | undefined;
-  if (tagged && tagged in LINE_TO_DRAWIO) return tagged;
+  if (tagged && Object.hasOwn(LINE_TO_DRAWIO, tagged)) return tagged;
   const es = st.map.get('edgeStyle');
   if (st.map.get('curved') === '1') return 'default';
   if (!es || es === 'none') return 'straight';
   return st.map.get('rounded') === '0' ? 'step' : 'smoothstep';
-}
-
-function handleFrom(x: string | undefined, y: string | undefined): string | null {
-  if (x === undefined || y === undefined) return null;
-  const fx = Number(x);
-  const fy = Number(y);
-  if (fy <= 0.05) return 't';
-  if (fy >= 0.95) return 'b';
-  if (fx <= 0.05) return 'l';
-  if (fx >= 0.95) return 'r';
-  return null;
 }
 
 /** Picks facing sides when a file does not say where a connector attaches. */
@@ -330,17 +345,7 @@ function facing(a: SerializedNode, b: SerializedNode): [string, string] {
 const colorOf = (v: string | undefined, fallback: string) => (v === undefined || v === 'default' ? fallback : v === 'none' ? 'transparent' : v);
 const num = (v: string | null | undefined, fallback: number) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : fallback);
 
-type Cell = {
-  id: string;
-  value: string | null;
-  parent: string;
-  st: Style;
-  vertex: boolean;
-  edge: boolean;
-  source: string | null;
-  target: string | null;
-  g: Element | null;
-};
+type Cell = DrawioCell;
 
 const WRAPPERS = new Set(['UserObject', 'object']);
 
@@ -361,24 +366,60 @@ function readCells(model: Element): Cell[] {
       source: el.getAttribute('source'),
       target: el.getAttribute('target'),
       g: el.getElementsByTagName('mxGeometry')[0] ?? null,
+      wrapper,
+      el,
     };
   });
 }
 
-/** Reads a diagrams.net / draw.io file (.drawio, .xml, plain or compressed). Uses the first page. */
-export function fromDrawio(text: string): { content: DiagramContent; report: DrawioImportReport } {
+/** The pages of a diagrams.net file, by name, in file order (a bare mxGraphModel is one unnamed page). */
+export function drawioPages(text: string): string[] {
+  const doc = new DOMParser().parseFromString(text.trim(), 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new DrawioImportError('This file is not valid diagrams.net XML.');
+  const root = doc.documentElement;
+  if (root.nodeName === 'mxGraphModel') return [''];
+  if (root.nodeName !== 'mxfile') throw new DrawioImportError('This is not a diagrams.net file.');
+  return Array.from(root.getElementsByTagName('diagram')).map((d, i) => d.getAttribute('name') || `Page-${i + 1}`);
+}
+
+export interface DrawioImportOptions {
+  /** Which page to import (0-based). Default: the first. */
+  page?: number;
+}
+
+/**
+ * Reads a diagrams.net / draw.io file (.drawio, .xml, plain or compressed): one page, the first unless `options.page`
+ * names another. Groups, containers and swimlanes keep their shapes inside them; layers, hidden cells, locks, links,
+ * tooltips, custom properties, rotation, opacity, fonts, alignment, pictures, bend points, connection points and label
+ * positions are kept. Everything approximated or left out is named in `report.notes` (DS-R1).
+ */
+export function fromDrawio(text: string, options: DrawioImportOptions = {}): { content: DiagramContent; report: DrawioImportReport } {
   const doc = new DOMParser().parseFromString(text.trim(), 'application/xml');
   if (doc.getElementsByTagName('parsererror').length) throw new DrawioImportError('This file is not valid diagrams.net XML.');
   const root = doc.documentElement;
   const notes = new Set<string>();
+  const ctx: DrawioImportContext = { notes };
   let title = 'Imported diagram';
   let model: Element;
+  let pageId: string | null = null;
   if (root.nodeName === 'mxfile') {
     const pages = Array.from(root.getElementsByTagName('diagram'));
     if (!pages.length) throw new DrawioImportError('The file contains no diagram pages.');
-    title = pages[0].getAttribute('name') || title;
-    if (pages.length > 1) notes.add(`Only the first page (“${title}”) was imported; the file has ${pages.length} pages.`);
-    model = decodePage(pages[0]);
+    const index = options.page ?? 0;
+    if (!Number.isInteger(index) || index < 0 || index >= pages.length) throw new DrawioImportError(`The file has no page ${index + 1}.`);
+    const names = pages.map((d, i) => d.getAttribute('name') || `Page-${i + 1}`);
+    title = pages[index].getAttribute('name') || title;
+    if (pages.length > 1) {
+      const others = names.filter((_, i) => i !== index).map((n) => `“${n}”`);
+      const list = others.length === 1 ? others[0] : `${others.slice(0, -1).join(', ')} and ${others[others.length - 1]}`;
+      notes.add(
+        index === 0
+          ? `Only the first page (“${names[0]}”) was imported; the file has ${pages.length} pages. The ${others.length === 1 ? 'other page' : 'other pages'}, ${list}, ${others.length === 1 ? 'was' : 'were'} not imported.`
+          : `Only page ${index + 1} (“${names[index]}”) was imported; the file has ${pages.length} pages. The ${others.length === 1 ? 'other page' : 'other pages'}, ${list}, ${others.length === 1 ? 'was' : 'were'} not imported.`,
+      );
+    }
+    pageId = pages[index].getAttribute('id');
+    model = decodePage(pages[index]);
   } else if (root.nodeName === 'mxGraphModel') {
     model = root;
   } else {
@@ -388,23 +429,74 @@ export function fromDrawio(text: string): { content: DiagramContent; report: Dra
   const cells = readCells(model);
   const byId = new Map(cells.map((c) => [c.id, c]));
   const children = new Map<string, Cell[]>();
-  for (const c of cells) children.set(c.parent, [...(children.get(c.parent) ?? []), c]);
+  // Appended in place: copying the list for every cell was quadratic on large flat files (TD-20).
+  for (const c of cells) {
+    const list = children.get(c.parent);
+    if (list) list.push(c);
+    else children.set(c.parent, [c]);
+  }
   const vertexChildren = (id: string) => (children.get(id) ?? []).filter((k) => k.vertex);
-  const y = (c: Cell) => num(c.g?.getAttribute('y'), 0);
-  const x = (c: Cell) => num(c.g?.getAttribute('x'), 0);
+  /**
+   * A vertex with relative geometry inside another vertex (diagrams.net's BPMN boundary events, badges on a border):
+   * x and y are fractions of the parent's size, plus an offset point. Edges keep their own relative geometry.
+   */
+  const relativeIn = (c: Cell): Cell | undefined => {
+    if (!c.vertex || c.g?.getAttribute('relative') !== '1') return undefined;
+    const parent = byId.get(c.parent);
+    return parent?.vertex ? parent : undefined;
+  };
+  const offsetOf = (c: Cell) => Array.from(c.g?.children ?? []).find((k) => k.nodeName === 'mxPoint' && k.getAttribute('as') === 'offset');
+  const along = (c: Cell, axis: 'x' | 'y'): number => {
+    const v = num(c.g?.getAttribute(axis), 0);
+    const parent = relativeIn(c);
+    if (!parent) return v;
+    const size = num(parent.g?.getAttribute(axis === 'x' ? 'width' : 'height'), 0);
+    return size * v + num(offsetOf(c)?.getAttribute(axis), 0);
+  };
+  const y = (c: Cell) => along(c, 'y');
+  const x = (c: Cell) => along(c, 'x');
+  const isHidden = (c: Cell) => c.el?.getAttribute('visible') === '0';
+
+  // Layers: the cells directly under the root cell (diagrams.net's "0"). Shapes belong to the layer they sit under.
+  const isRoot = (c: Cell | undefined) => !!c && !c.vertex && !c.edge && !byId.has(c.parent);
+  const layerCells = cells.filter((c) => !c.vertex && !c.edge && isRoot(byId.get(c.parent)));
+  const layerIds = new Set(layerCells.map((c) => c.id));
+  const layerOf = (c: Cell): Cell | undefined => {
+    const visited = new Set<Cell>();
+    for (let k: Cell | undefined = c; k && !visited.has(k); k = byId.get(k.parent)) {
+      if (layerIds.has(k.id)) return k;
+      visited.add(k);
+    }
+    return undefined;
+  };
+  const hasLayers = layerCells.length > 1 || layerCells.some((l) => isHidden(l) || l.st.map.get('locked') === '1');
+  const layers: DiagramLayer[] | undefined = hasLayers
+    ? layerCells.map((l, i) => ({ id: l.id, name: htmlToText(l.value).trim() || (i === 0 ? 'Background' : `Layer ${i + 1}`), visible: !isHidden(l), locked: l.st.map.get('locked') === '1' }))
+    : undefined;
+  const hiddenLayer = (c: Cell) => {
+    const l = layerOf(c);
+    return !!l && isHidden(l);
+  };
+  if (layers) for (const l of layers) if (!l.visible) tally(ctx, 'hiddenLayers', l.name);
 
   // diagrams.net paints a container, then its contents, then the next sibling. React Flow paints nodes in array
-  // order, so visiting the cell tree depth-first keeps every container behind the shapes inside it.
-  const ordered: Cell[] = [];
-  const seen = new Set<Cell>();
-  const visit = (c: Cell) => {
-    if (seen.has(c)) return;
-    seen.add(c);
-    ordered.push(c);
-    for (const k of children.get(c.id) ?? []) visit(k);
-  };
-  for (const c of cells) if (!byId.has(c.parent)) visit(c);
-  for (const c of cells) visit(c); // anything unreachable (a malformed parent chain) keeps document order
+  // order, so visiting the cell tree depth-first keeps every container behind the shapes inside it. A file that
+  // already lists every cell after its parent (diagrams.net writes depth-first; our export writes the diagram's own
+  // order) is read in its own order, so a diagram exported here comes back in the order it was stored.
+  let ordered: Cell[] = [];
+  const position = new Map(cells.map((c, i) => [c.id, i]));
+  if (cells.every((c, i) => !byId.has(c.parent) || (position.get(c.parent) ?? i) < i)) ordered = cells;
+  else {
+    const seen = new Set<Cell>();
+    const visit = (c: Cell) => {
+      if (seen.has(c)) return;
+      seen.add(c);
+      ordered.push(c);
+      for (const k of children.get(c.id) ?? []) visit(k);
+    };
+    for (const c of cells) if (!byId.has(c.parent)) visit(c);
+    for (const c of cells) visit(c); // anything unreachable (a malformed parent chain) keeps document order
+  }
 
   /** Cells folded into a class/entity/table, mapped to the node that now holds their text. */
   const owner = new Map<string, string>();
@@ -412,6 +504,7 @@ export function fromDrawio(text: string): { content: DiagramContent; report: Dra
     for (const k of vertexChildren(id)) {
       if (owner.has(k.id)) continue;
       owner.set(k.id, into);
+      if (isHidden(k)) tally(ctx, 'hiddenRows');
       fold(k.id, into);
     }
   };
@@ -422,10 +515,17 @@ export function fromDrawio(text: string): { content: DiagramContent; report: Dra
   const isStack = (c: Cell) => {
     if (c.st.map.get('shape') === 'table') return true;
     const stack = c.st.map.get('childLayout') === 'stackLayout';
-    return vertexChildren(c.id).every((k) => isRow(k) || (stack && !vertexChildren(k.id).length && !k.st.names.has('swimlane')));
+    const kids = vertexChildren(c.id);
+    // An empty swimlane in a pool (or a vertical-title swimlane without a stack layout) is an empty lane, not a class.
+    if (!kids.length && !stack) {
+      const parent = byId.get(c.parent);
+      if ((parent?.vertex && isSwimlane(parent)) || c.st.map.get('horizontal') === '0') return false;
+    }
+    return kids.every((k) => isRow(k) || (stack && !vertexChildren(k.id).length && !k.st.names.has('swimlane')));
   };
+  const isSwimlane = (c: Cell) => c.st.names.has('swimlane') || c.st.map.get('shape') === 'swimlane';
 
-  const absolute = (c: Cell): { x: number; y: number } => {
+  const absolute = (c: Cell): Point => {
     let pos = { x: x(c), y: y(c) };
     let parent = byId.get(c.parent);
     const visited = new Set<Cell>();
@@ -436,25 +536,39 @@ export function fromDrawio(text: string): { content: DiagramContent; report: Dra
     }
     return pos;
   };
+  /** The canvas origin of a cell's coordinates: its parent's absolute position (0,0 on a layer). */
+  const originOf = (c: Cell): Point => {
+    const parent = byId.get(c.parent);
+    return parent?.vertex ? absolute(parent) : { x: 0, y: 0 };
+  };
 
   const nodes: SerializedNode[] = [];
   const nodeById = new Map<string, SerializedNode>();
-  const edgeLabels = new Map<string, string[]>();
+  const edgeLabels = new Map<string, Cell[]>();
+  /** Labels as plain text, counting what the HTML held beyond text. */
+  const labelText = (c: Cell) => {
+    const rt = richText(c.value);
+    if (rt.formatted) tally(ctx, 'richText');
+    for (let i = 0; i < rt.images; i++) tally(ctx, 'labelImages');
+    return { text: htmlToText(rt.inner), bold: rt.wholeBold };
+  };
 
   for (const c of ordered) {
     if (!c.vertex) continue;
     const { id, st } = c;
     // Labels drawn on connectors are child vertices of the edge.
     if (st.names.has('edgeLabel') || byId.get(c.parent)?.edge) {
-      edgeLabels.set(c.parent, [...(edgeLabels.get(c.parent) ?? []), htmlToText(c.value)]);
+      const labels = edgeLabels.get(c.parent);
+      if (labels) labels.push(c);
+      else edgeLabels.set(c.parent, [c]);
       continue;
     }
     if (owner.has(id)) continue; // a row of a class/entity, already folded into its owner
-    if (st.names.has('group')) continue; // groups are flattened; children keep absolute positions
     let shape = shapeFromStyle(st, notes);
-    if (st.map.get('shape') === 'image' || st.names.has('image')) notes.add('Images inside diagrams were not imported.');
-    let label = htmlToText(c.value);
+    const { text, bold: wholeBold } = labelText(c);
+    let label = text;
     let fill: string | undefined;
+    let swimlaneAlign: Pick<SerializedNode['data'], 'textAlign' | 'verticalAlign'> = {};
     if (COMPARTMENT_SHAPES.has(shape) && isStack(c)) {
       fold(id, id);
       const lines = [label];
@@ -470,27 +584,43 @@ export function fromDrawio(text: string): { content: DiagramContent; report: Dra
         // Table rows hold their text in cells (`PK`, `id`); the cells, left to right, make one line.
         const rowCells = isTableRow ? vertexChildren(row.id).sort((a, b) => x(a) - x(b)) : [];
         const text = rowCells.length
-          ? rowCells.map((k) => htmlToText(k.value).replace(/\s*\n\s*/g, ' ').trim()).filter(Boolean).join(' ')
-          : htmlToText(row.value);
+          ? rowCells.map((k) => labelText(k).text.replace(/\s*\n\s*/g, ' ').trim()).filter(Boolean).join(' ')
+          : labelText(row).text;
         if (text || !sawContent) lines.push(...text.split('\n'));
         sawContent = true;
       }
       label = lines.join('\n');
       if (st.map.get('shape') === 'table') notes.add('Tables were imported as entities: the cells of each row became one line of text.');
     } else if (COMPARTMENT_SHAPES.has(shape)) {
-      // A swimlane holding real shapes (a process lane, a pool): an outline behind its contents, which are imported
-      // as shapes of their own. Transparent, so connectors between those shapes stay visible.
-      shape = 'rectangle';
-      fill = 'transparent';
-      notes.add('Swimlanes were imported as plain boxes drawn behind the shapes they contain.');
+      // A swimlane holding real shapes (a process lane, a pool): a container that holds its shapes. As the BPMN pool
+      // or lane kind when one is registered (DRAWIO_SWIMLANE_KINDS), otherwise as a transparent outline, so the
+      // connectors between the shapes inside stay visible.
+      const role = vertexChildren(id).some(isSwimlane) ? 'pool' : 'lane';
+      const kind = swimlaneKind(role);
+      if (kind) {
+        shape = kind;
+        // The pool and lane kinds draw their title band on the left (diagrams.net's horizontal=0).
+        if (st.map.get('horizontal') !== '0') tally(ctx, 'swimlaneTitles');
+      } else {
+        shape = 'rectangle';
+        fill = 'transparent';
+        // The title sits in the band at the top (or, for horizontal=0, the left) as in diagrams.net.
+        swimlaneAlign = st.map.get('horizontal') === '0' ? { textAlign: 'left' } : { verticalAlign: 'top' };
+        tally(ctx, 'swimlanes');
+      }
     }
-    const defaults = shapeDefaults(shape);
+    // The default size is the geometry fallback only; it is not part of the shape's data.
+    const { width: defaultWidth, height: defaultHeight, ...defaults } = shapeDefaults(shape);
     const fontStyle = num(st.map.get('fontStyle'), 0);
+    const boldAllowed = !COMPARTMENT_SHAPES.has(shape) && shape !== 'package';
+    // A shape inside a group or container keeps its position relative to it (diagrams.net and React Flow agree).
+    const parent = byId.get(c.parent);
+    const parentNode = parent?.vertex ? nodeById.get(parent.id) : undefined;
     const node: SerializedNode = {
       id,
-      position: absolute(c),
-      width: num(c.g?.getAttribute('width'), defaults.width),
-      height: num(c.g?.getAttribute('height'), defaults.height),
+      position: parentNode ? { x: x(c), y: y(c) } : absolute(c),
+      width: num(c.g?.getAttribute('width'), defaultWidth),
+      height: num(c.g?.getAttribute('height'), defaultHeight),
       data: {
         ...defaults,
         shape,
@@ -501,15 +631,41 @@ export function fromDrawio(text: string): { content: DiagramContent; report: Dra
         fontSize: num(st.map.get('fontSize'), defaults.fontSize),
         strokeWidth: num(st.map.get('strokeWidth'), defaults.strokeWidth),
         dashed: st.map.get('dashed') === '1',
-        bold: (fontStyle & 1) === 1 && !COMPARTMENT_SHAPES.has(shape) && shape !== 'package' ? true : defaults.bold,
+        bold: ((fontStyle & 1) === 1 || wholeBold) && boldAllowed ? true : defaults.bold,
       },
     };
+    if (parentNode) node.parentId = parentNode.id;
+    if (parentNode && relativeIn(c)) tally(ctx, 'relativeChildren');
+    // With layers, every shape names its layer (as the editor stores it once a diagram has layers).
+    if (layers) {
+      const layer = layerOf(c);
+      if (layer) node.layer = layer.id;
+    }
+    // Hidden in the file: the cell itself, or a group it is in. A hidden layer hides its shapes as a layer.
+    if (isHidden(c) || parentNode?.hidden) {
+      node.hidden = true;
+      tally(ctx, 'hiddenShapes', nameOf(label) || undefined);
+    }
+    // A collapsed container is stored at its folded size; it opens at its full size (`alternateBounds`).
+    if (c.el?.getAttribute('collapsed') === '1' && vertexChildren(id).length) {
+      tally(ctx, 'collapsed');
+      const full = Array.from(c.g?.children ?? []).find((k) => k.getAttribute('as') === 'alternateBounds');
+      if (full) {
+        node.width = num(full.getAttribute('width'), node.width);
+        node.height = num(full.getAttribute('height'), node.height);
+      }
+    }
+    for (const read of DRAWIO_VERTEX_READERS) read(c, node, ctx);
+    // A swimlane outline's title placement, unless the file set an alignment of its own.
+    if (swimlaneAlign.textAlign && !node.data.textAlign) node.data.textAlign = swimlaneAlign.textAlign;
+    if (swimlaneAlign.verticalAlign && !node.data.verticalAlign) node.data.verticalAlign = swimlaneAlign.verticalAlign;
     nodes.push(node);
     nodeById.set(id, node);
   }
 
   const edges: SerializedEdge[] = [];
   let dropped = 0;
+  let toEdges = 0;
   let loops = 0;
   for (const c of cells) {
     if (!c.edge) continue;
@@ -518,7 +674,9 @@ export function fromDrawio(text: string): { content: DiagramContent; report: Dra
     const a = source ? nodeById.get(source) : undefined;
     const b = target ? nodeById.get(target) : undefined;
     if (!a || !b) {
-      dropped++;
+      // DS-R7: say why. A connector that ends on another connector is a different case from one left loose.
+      if ((source && byId.get(source)?.edge) || (target && byId.get(target)?.edge)) toEdges++;
+      else dropped++;
       continue;
     }
     // Two rows of one class folded into the same shape would make a loop the user never drew: leave those out.
@@ -541,24 +699,59 @@ export function fromDrawio(text: string): { content: DiagramContent; report: Dra
       endMarker: end,
     };
     const { id } = c;
-    const label = [htmlToText(c.value), ...(edgeLabels.get(id) ?? [])].filter(Boolean).join(' ');
-    edges.push({
+    // Labels: the connector's own, then label cells on it. The position comes from the first label with text.
+    const childLabels = (edgeLabels.get(id) ?? []).map((k) => ({ cell: k, text: labelText(k).text }));
+    const own = { cell: c, text: labelText(c).text };
+    const withText = [own, ...childLabels].filter((l) => l.text);
+    if (withText.length > 1) tally(ctx, 'multipleLabels');
+    const label = withText.map((l) => l.text).join(' ');
+    if (withText.length) {
+      const place = readLabelPlace(withText[0].cell.g);
+      if (place.position !== undefined) data.labelPosition = place.position;
+      if (place.offset) tally(ctx, 'labelOffsets');
+    }
+    // Bend points are stored in the coordinates of the connector's parent; here they are canvas coordinates.
+    const { points, tooMany } = readPoints(c.g);
+    if (points.length) {
+      const o = originOf(c);
+      data.waypoints = points.map((p) => ({ x: p.x + o.x, y: p.y + o.y }));
+    }
+    if (tooMany) tally(ctx, 'tooManyPoints');
+    const s = endFromStyle(st, 'source');
+    const t = endFromStyle(st, 'target');
+    if (s.port) data.sourcePort = s.port;
+    if (t.port) data.targetPort = t.port;
+    if (s.offset || t.offset) tally(ctx, 'pointOffsets');
+    const edge: SerializedEdge = {
       id,
       source: a.id,
       target: b.id,
-      sourceHandle: handleFrom(st.map.get('exitX'), st.map.get('exitY')) ?? fallbackS,
-      targetHandle: handleFrom(st.map.get('entryX'), st.map.get('entryY')) ?? fallbackT,
+      sourceHandle: s.handle ?? fallbackS,
+      targetHandle: t.handle ?? fallbackT,
       type: lineFromStyle(st),
       label,
       data,
-    });
+    };
+    if (isHidden(c)) tally(ctx, 'hiddenEdges', nameOf(label) || undefined);
+    else if (hiddenLayer(c) && !a.hidden && !b.hidden && !hiddenLayer(byId.get(a.id)!) && !hiddenLayer(byId.get(b.id)!)) tally(ctx, 'edgesOnHiddenLayers');
+    for (const read of DRAWIO_EDGE_READERS) read(c, edge, ctx);
+    edges.push(edge);
   }
-  if (dropped) notes.add(`${dropped} connector${dropped === 1 ? '' : 's'} not attached to shapes at both ends were left out.`);
+  if (dropped) notes.add(`${dropped} ${dropped === 1 ? 'connector' : 'connectors'} not attached to shapes at both ends ${dropped === 1 ? 'was' : 'were'} left out.`);
+  for (let i = 0; i < toEdges; i++) tally(ctx, 'edgeToEdge');
   if (loops) notes.add(`${loops} connector${loops === 1 ? '' : 's'} between rows of the same class or entity ${loops === 1 ? 'was' : 'were'} left out.`);
   if (!nodes.length) throw new DrawioImportError('The diagram has no shapes that could be imported.');
 
+  // Links to another page of the file lead nowhere here, since only one page is imported.
+  for (const n of nodes) {
+    const target = /^data:page\/id,(.*)$/i.exec(n.data.link ?? '')?.[1];
+    if (target !== undefined && target !== pageId) tally(ctx, 'pageLinks');
+  }
+
+  const content: DiagramContent = { schemaVersion: 2, nodes, edges, viewport: null, settings: { ...DEFAULT_SETTINGS }, ...(layers ? { layers } : {}) };
+  content.schemaVersion = schemaFor(content);
   return {
-    content: { schemaVersion: DIAGRAM_SCHEMA, nodes, edges, viewport: null, settings: { ...DEFAULT_SETTINGS } },
-    report: { title, nodes: nodes.length, edges: edges.length, notes: [...notes] },
+    content,
+    report: { title, nodes: nodes.length, edges: edges.length, notes: [...notes, ...tallyNotes(ctx)] },
   };
 }

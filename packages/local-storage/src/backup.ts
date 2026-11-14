@@ -4,8 +4,14 @@ import { ITEM_KINDS, type Attachment, type BackupFile, type ItemKind, type ItemV
 
 /** Newest backup layout this build reads and writes. */
 export const BACKUP_FORMAT_VERSION = 2;
-/** Newest content schema this build understands inside backups (documents and diagrams). */
-export const MAX_CONTENT_SCHEMA = 2;
+/**
+ * Newest content schema this build reads, per kind. Kept in step with document-studio's DOCUMENT_SCHEMA and
+ * diagram-studio's DIAGRAM_SCHEMA (tests/integration/diagram-schema.test.ts checks this; local-storage does
+ * not depend on the studios). Diagrams reached schema 3 in Phase 5 (ADR 0012), documents are still 2.
+ */
+export const MAX_CONTENT_SCHEMA_BY_KIND: Readonly<Record<ItemKind, number>> = { document: 2, diagram: 3 };
+/** Newest content schema of any kind this build reads: the highest a backup's `schemaVersion` may be. */
+export const MAX_CONTENT_SCHEMA = Math.max(...Object.values(MAX_CONTENT_SCHEMA_BY_KIND));
 
 const REASONS: VersionReason[] = ['create', 'manual', 'auto', 'restore'];
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -71,7 +77,7 @@ export function validateBackup(raw: unknown): ValidatedBackup {
     if (typeof i.id !== 'string' || !i.id) throw new InvalidBackupError(`${where} has no id`);
     if (!isVersion(i.version)) throw new InvalidBackupError(`${where} (${i.id}) has an invalid version`);
     checkContent(`${where} (${typeof i.title === 'string' && i.title ? `“${i.title}”, ` : ''}${i.id})`, i.kind, i.content);
-    if (contentSchemaOf(i.content) > MAX_CONTENT_SCHEMA) throw new InvalidBackupError(`${where} (${i.id}) has content from a newer version of the app`);
+    if (contentSchemaOf(i.content) > MAX_CONTENT_SCHEMA_BY_KIND[i.kind]) throw new InvalidBackupError(`${where} (${i.id}) has content from a newer version of the app`);
     const createdAt = isIso(i.createdAt) ? i.createdAt : isIso(i.updatedAt) ? i.updatedAt : exportedAt;
     const item: WorkspaceItem = {
       ...(i as unknown as WorkspaceItem),
@@ -97,6 +103,7 @@ export function validateBackup(raw: unknown): ValidatedBackup {
     }
     if (typeof v.id !== 'string' || !v.id || typeof v.itemId !== 'string' || !v.itemId) throw new InvalidBackupError(`${where} has no id or item id`);
     checkContent(`${where} (${v.id}, of item ${v.itemId})`, v.kind, v.content);
+    if (contentSchemaOf(v.content) > MAX_CONTENT_SCHEMA_BY_KIND[v.kind]) throw new InvalidBackupError(`${where} (${v.id}, of item ${v.itemId}) has content from a newer version of the app`);
     versions.push({
       ...(v as unknown as ItemVersion),
       version: isVersion(v.version) ? v.version : 1,

@@ -1,8 +1,9 @@
+import { schemaFor } from './compat';
 import { layoutTree } from './layout';
+import { LIBRARY_TEMPLATES, networkDiagram, timelineDiagram } from './library/templates';
 import {
   createEmptyDiagram,
   DEFAULT_CONNECTOR,
-  DIAGRAM_SCHEMA,
   DEFAULT_SETTINGS,
   shapeDefaults,
   type AutoLayout,
@@ -46,7 +47,10 @@ function make(nodes: SerializedNode[], edges: SerializedEdge[], autoLayout: Auto
     nodes = laid.nodes;
     edges = laid.edges;
   }
-  return { schemaVersion: DIAGRAM_SCHEMA, nodes, edges, viewport: null, settings: { ...DEFAULT_SETTINGS, autoLayout } };
+  const content: DiagramContent = { schemaVersion: 2, nodes, edges, viewport: null, settings: { ...DEFAULT_SETTINGS, autoLayout } };
+  // A template that uses only schema-2 features stays schema 2, so older builds can still edit diagrams made from it.
+  content.schemaVersion = schemaFor(content);
+  return content;
 }
 
 /** Builds a tree from an outline: [label, children[]] pairs. */
@@ -167,26 +171,8 @@ export const diagramTemplates: DiagramTemplate[] = [
     id: 'timeline',
     name: 'Timeline',
     description: 'Events in order along a line, alternating above and below.',
-    build: () => {
-      const events = [
-        ['1947', 'Independence'],
-        ['1950', 'Constitution adopted'],
-        ['1969', 'ISRO founded'],
-        ['1991', 'Economic reforms'],
-        ['2023', 'Chandrayaan-3'],
-      ];
-      const nodes: SerializedNode[] = [];
-      const edges: SerializedEdge[] = [];
-      events.forEach(([year, label], i) => {
-        const x = i * 200;
-        nodes.push(n(`y${i}`, 'circle', year, x + 40, 160, { ...PALETTE[i % PALETTE.length], w: 80, h: 80, bold: true }));
-        const up = i % 2 === 0;
-        nodes.push(n(`t${i}`, 'rounded', label, x, up ? 20 : 300, { w: 160, h: 60 }));
-        edges.push(e(`y${i}`, `t${i}`, { sh: up ? 't' : 'b', th: up ? 'b' : 't', type: 'straight', data: { arrow: 'none', dashed: true, width: 1.5 } }));
-        if (i) edges.push(e(`y${i - 1}`, `y${i}`, { sh: 'r', th: 'l', type: 'straight', data: { arrow: 'none', width: 3 } }));
-      });
-      return make(nodes, edges);
-    },
+    // schema 3 (G-SHAPES): drawn with the library's timeline dates, so Add event keeps the spacing (library/templates.ts).
+    build: timelineDiagram,
   },
   {
     id: 'venn',
@@ -246,25 +232,12 @@ export const diagramTemplates: DiagramTemplate[] = [
     id: 'network',
     name: 'Network diagram',
     description: 'Devices connected to a router and a server, e.g. a computer lab.',
-    build: () =>
-      make(
-        [
-          n('router', 'circle', 'Router', 300, 160, { fill: '#e0e7ff', stroke: '#4f46e5', bold: true }),
-          n('server', 'cylinder', 'File server', 295, 0),
-          n('pc1', 'rectangle', 'PC 1', 40, 320, { w: 120, h: 60 }),
-          n('pc2', 'rectangle', 'PC 2', 200, 340, { w: 120, h: 60 }),
-          n('pc3', 'rectangle', 'PC 3', 380, 340, { w: 120, h: 60 }),
-          n('printer', 'rectangle', 'Printer', 540, 320, { w: 120, h: 60, fill: '#f1f5f9' }),
-          n('net', 'ellipse', 'Internet', 560, 60, { fill: '#e0f2fe', stroke: '#0369a1' }),
-        ],
-        [
-          e('router', 'server', { sh: 't', th: 'b', type: 'straight', data: { arrow: 'none' } }),
-          e('router', 'pc1', { type: 'straight', data: { arrow: 'none' } }),
-          e('router', 'pc2', { type: 'straight', data: { arrow: 'none' } }),
-          e('router', 'pc3', { type: 'straight', data: { arrow: 'none' } }),
-          e('router', 'printer', { type: 'straight', data: { arrow: 'none' } }),
-          e('router', 'net', { sh: 'r', th: 'l', type: 'straight', data: { arrow: 'none', dashed: true } }),
-        ],
-      ),
+    // schema 3 (G-SHAPES): drawn with the library's network icons (library/templates.ts).
+    build: networkDiagram,
   },
+  // schema 2 and 3 (G-SHAPES): radial mind map, BPMN, UML sequence/activity/state/use case (library/templates.ts).
+  ...LIBRARY_TEMPLATES,
+  // @phase5:templates — new templates (the helpers below are exported for templates kept in their own files).
 ];
+
+export { e as templateEdge, make as makeTemplate, n as templateNode, PALETTE as TEMPLATE_PALETTE, tree as treeTemplate, type NodeOpts as TemplateNodeOpts, type Outline as TemplateOutline };

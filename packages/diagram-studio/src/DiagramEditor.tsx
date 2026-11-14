@@ -1,89 +1,30 @@
-import { Button, cn, downloadBlob, IconButton, Menu, safeFileName, Select, Separator, useToast } from '@dcos/ui';
-import {
-  addEdge,
-  Background,
-  BackgroundVariant,
-  ConnectionLineType,
-  ConnectionMode,
-  Controls,
-  MiniMap,
-  Panel,
-  ReactFlow,
-  ReactFlowProvider,
-  reconnectEdge,
-  useEdgesState,
-  useNodesState,
-  useReactFlow,
-  type Connection,
-  type NodeTypes,
-  type Viewport,
-} from '@xyflow/react';
-import {
-  AlignCenterHorizontal,
-  AlignCenterVertical,
-  AlignEndHorizontal,
-  AlignEndVertical,
-  AlignStartHorizontal,
-  AlignStartVertical,
-  ChevronDown,
-  Copy,
-  CornerDownRight,
-  Download,
-  FileImage,
-  FileJson,
-  FileText,
-  Grid3x3,
-  Magnet,
-  Maximize,
-  Network,
-  Plus,
-  Redo2,
-  ShieldAlert,
-  Trash2,
-  Undo2,
-} from 'lucide-react';
-import { useCallback, useEffect, useImperativeHandle, useMemo, useReducer, useRef, useState, type DragEvent, type KeyboardEvent, type Ref } from 'react';
+import { Button, cn, downloadBlob, safeFileName } from '@dcos/ui';
+import { Background, BackgroundVariant, ConnectionLineType, ConnectionMode, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useReactFlow, ViewportPortal, type NodeTypes } from '@xyflow/react';
+import { FileJson, ShieldAlert } from 'lucide-react';
+import { useCallback, useId, useImperativeHandle, useMemo, useRef, type DragEvent, type Ref } from 'react';
+import { connectCss } from './connect/css';
+import { ConnectActionsContext } from './connect/context';
+import { useConnect } from './connect/useConnect';
 import { diagramCss } from './diagramCss';
-import { toDrawio } from './drawio';
-import { exportPdf, exportPng, exportSize, exportSvg } from './export';
-import { TextEditSession, UndoStack } from './history';
-import { EdgeInspector, NodeInspector, type EdgePatch, type PatchOpts } from './Inspector';
-import { layoutTree, type LayoutDirection } from './layout';
-import { DiagramActionsContext, ShapeNode as ShapeNodeView, type DiagramActions } from './ShapeNode';
-import { edgeTypes } from './edges';
+import { edgeTypes, MarkerDefs, MarkerScopeContext } from './edges';
+import type { EditorController } from './editor/controller';
+import { ExportMenu } from './editor/ExportMenu';
+import { CanvasContext } from './editor/canvasContext';
+import { CanvasOverlays, LockedInspector } from './editor/CanvasOverlays';
+import { createMutations } from './editor/mutations';
+import { useCanvas } from './editor/useCanvas';
+import { DRAG_MIME, ShapeLibrary } from './editor/ShapeLibrary';
+import { handleShortcut, inDialog } from './editor/shortcuts';
+import { ToolbarGroups } from './editor/Toolbar';
+import { useDiagramState, type Snapshot } from './editor/useDiagramState';
+import { useEditorToast } from './editor/fullscreenToasts';
+import { EdgeInspector, NodeInspector } from './Inspector';
+import { addShapeInContainer, dropIntoContainers } from './library/editorActions';
 import { QuickConnect } from './QuickConnect';
-import { canConnect, directionFromKey, facingHandles, HANDLES_FOR, placeNew, type Box, type Direction } from './quickConnectGeometry';
-import { DEFAULT_LABELS, SHAPE_CATALOG, ShapeSvg } from './shapes';
-import {
-  DEFAULT_CONNECTOR,
-  deserializeDiagram,
-  serializeDiagram,
-  shapeDefaults,
-  styledEdge,
-  type Connector,
-  type DiagramContent,
-  type DiagramSettings,
-  type EdgeLineType,
-  type ShapeData,
-  type ShapeKind,
-  type ShapeNode,
-  DIAGRAM_SCHEMA,
-  diagramSchemaOf,
-} from './types';
+import { DiagramActionsContext, ShapeNode as ShapeNodeView, type DiagramActions } from './ShapeNode';
+import type { Connector, DiagramContent, ShapeData, ShapeKind, ShapeNode } from './types';
 
 const nodeTypes: NodeTypes = { shape: ShapeNodeView };
-const DRAG_MIME = 'application/x-dcos-shape';
-
-let counter = 0;
-const newId = (prefix: string) =>
-  `${prefix}-${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : `${Date.now().toString(36)}${(++counter).toString(36)}`}`;
-
-interface Snapshot {
-  nodes: ShapeNode[];
-  edges: Connector[];
-  /** Included so undoing an Arrange also turns auto-arrange back off (audit DIAG-2). */
-  settings?: DiagramSettings;
-}
 
 export interface DiagramEditorProps {
   /** Read once on mount. Remount (change `key`) to load different content. */
@@ -92,6 +33,8 @@ export interface DiagramEditorProps {
   onChange?: (content: DiagramContent) => void;
   /** Gives a host (such as the document's diagram dialog) access to the current diagram and its renders. */
   apiRef?: Ref<DiagramEditorApi>;
+  /** The host can open a diagram file (.dcosdiagram or diagrams.net) as a new diagram; adds "Open file…" to the menu. */
+  onOpenFile?: () => void;
 }
 
 export interface RenderedImage {
@@ -99,6 +42,8 @@ export interface RenderedImage {
   /** Natural size in CSS pixels; the PNG itself is pixelRatio times larger. */
   width: number;
   height: number;
+  /** The pixel ratio used: the one asked for, or less when the diagram is too large for a canvas at that ratio. */
+  pixelRatio?: number;
 }
 
 export interface DiagramEditorApi {
@@ -116,84 +61,31 @@ export function DiagramEditor(props: DiagramEditorProps) {
   return (
     <ReactFlowProvider>
       <style>{diagramCss}</style>
+      <style>{connectCss}</style>
       <Editor {...props} />
     </ReactFlowProvider>
   );
 }
 
-function isTyping(target: EventTarget | null) {
-  const el = target as HTMLElement | null;
-  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
-}
-
-/** Tree shortcuts (Tab, Enter, F2) belong to the canvas; on buttons and menus they keep their normal meaning (audit DIAG-5). */
-function onCanvas(target: EventTarget | null) {
-  const el = target as HTMLElement | null;
-  return !!el?.closest('.react-flow') && !el.closest('button, a, [role="menuitem"], .react-flow__panel');
-}
-
-const ARROWS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
-
-function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps) {
-  const [initial] = useState(() => deserializeDiagram(initialContent));
-  // Fixed at mount, like `initial`: a protected diagram is handed back exactly as it came (unknown fields included).
-  const [original] = useState(() => initialContent);
-  const [readOnly] = useState(() => diagramSchemaOf(initialContent) > DIAGRAM_SCHEMA);
-  const [nodes, setNodes, onNodesChange] = useNodesState<ShapeNode>(initial.nodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Connector>(initial.edges);
-  const [settings, setSettings] = useState<DiagramSettings>(initial.settings);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [, rerender] = useReducer((x: number) => x + 1, 0);
-  const history = useRef(new UndoStack<Snapshot>(150));
+/**
+ * The editor screen. State and history live in `useDiagramState`, every change in `createMutations`; the toolbar,
+ * selection actions, keyboard shortcuts, export formats, inspector sections and shapes are registries that features
+ * add entries to (see editor/ and the `@phase5:` markers).
+ */
+function Editor({ initialContent, title, onChange, apiRef, onOpenFile }: DiagramEditorProps) {
+  const state = useDiagramState(initialContent, onChange);
+  const { initial, original, readOnly, nodes, edges, settings, editingId, setEditingId, setNodes, setEdges, selectedNodes, selectedEdges, snapshot } = state;
   const clipboard = useRef<Snapshot | null>(null);
-  const viewport = useRef<Viewport | null>(initial.viewport);
   const wrapper = useRef<HTMLDivElement>(null);
   const rf = useReactFlow<ShapeNode, Connector>();
-  const toast = useToast();
+  const { toast, overlay: fullscreenToasts } = useEditorToast(); // @phase5:canvas — toasts stay visible in full screen
+  const mutations = createMutations({ state, rf, toast, wrapper, clipboard });
+  const connect = useConnect({ state, toast }); // @phase5:connect
+  // @phase5:canvas (G-CANVAS) — layers, locks, groups, clipboard, view. Applied position changes move bend points (G-CONNECT).
+  const canvas = useCanvas({ state, mutations, rf, toast, wrapper, clipboard, onApplied: connect.onPositionChanges });
+  const markerScope = `dcos${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
 
-  const current = useRef<Snapshot>({ nodes, edges });
-  current.current = { nodes, edges };
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
-  // Only real changes are reported: opening, selecting, panning and zooming are not edits (audit FUNC-28).
-  // Compared without the viewport, which is saved along with real edits but never triggers a save itself.
-  const lastEmitted = useRef(JSON.stringify(serializeDiagram(initial.nodes, initial.edges, null, initial.settings)));
-  const emit = useCallback(() => {
-    if (readOnly) return;
-    const json = JSON.stringify(serializeDiagram(current.current.nodes, current.current.edges, null, settingsRef.current));
-    if (json === lastEmitted.current) return;
-    lastEmitted.current = json;
-    onChangeRef.current?.(serializeDiagram(current.current.nodes, current.current.edges, viewport.current, settingsRef.current));
-  }, [readOnly]);
-  useEffect(emit, [nodes, edges, settings, emit]);
-
-  // ── History ──────────────────────────────────────────────────────────────
-  /** Inspector text fields: typing in one is a single undo step, recorded from the state before it (audit DIAG-3). */
-  const textEdit = useRef(new TextEditSession<Snapshot>());
-  const snapshot = useCallback(() => {
-    if (readOnly) return;
-    textEdit.current.invalidate();
-    history.current.push({ ...current.current, settings: settingsRef.current });
-    rerender();
-  }, [readOnly]);
-  const lastArrowSnapshot = useRef(0);
-  const restore = (s: Snapshot | undefined) => {
-    if (!s) return;
-    setNodes(s.nodes);
-    setEdges(s.edges);
-    if (s.settings) setSettings(s.settings);
-    setEditingId(null);
-    textEdit.current.invalidate();
-    rerender();
-  };
-  const undo = () => !readOnly && restore(history.current.undo({ ...current.current, settings: settingsRef.current }));
-  const redo = () => !readOnly && restore(history.current.redo({ ...current.current, settings: settingsRef.current }));
-
-  // ── Mutations ────────────────────────────────────────────────────────────
-  // Every path that changes the diagram returns early when it is read-only (audit DS-1).
+  // Label editing on the canvas (ShapeNode). Stable callbacks so shapes re-render only when their own props change.
   const updateNodeData = useCallback(
     (id: string, patch: Partial<ShapeData>) => {
       if (readOnly) return;
@@ -202,298 +94,9 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
     },
     [readOnly, snapshot, setNodes],
   );
-  const editLabel = useCallback((id: string | null) => setEditingId(readOnly ? null : id), [readOnly]);
-  const changeSettings = (update: (s: DiagramSettings) => DiagramSettings) => !readOnly && setSettings(update);
-
+  const editLabel = useCallback((id: string | null) => setEditingId(readOnly ? null : id), [readOnly, setEditingId]);
   const actions = useMemo<DiagramActions>(() => ({ snapshot, updateNodeData, editingId, setEditingId: editLabel, readOnly }), [snapshot, updateNodeData, editingId, editLabel, readOnly]);
 
-  const selectedNodes = nodes.filter((n) => n.selected);
-  const selectedEdges = edges.filter((e) => e.selected);
-  // A different selection means a different field: an earlier focus no longer describes "before this edit".
-  const selectionKey = `${selectedNodes.map((n) => n.id).join()}|${selectedEdges.map((e) => e.id).join()}`;
-  useEffect(() => textEdit.current.invalidate(), [selectionKey]);
-
-  const viewCenter = () => {
-    const r = wrapper.current?.getBoundingClientRect();
-    return r ? rf.screenToFlowPosition({ x: r.left + r.width / 2, y: r.top + r.height / 2 }) : { x: 0, y: 0 };
-  };
-
-  const addShape = (shape: ShapeKind, at?: { x: number; y: number }) => {
-    if (readOnly) return;
-    const { width, height, ...style } = shapeDefaults(shape);
-    const c = at ?? viewCenter();
-    const node: ShapeNode = {
-      id: newId('n'),
-      type: 'shape',
-      position: { x: Math.round(c.x - width / 2), y: Math.round(c.y - height / 2) },
-      width,
-      height,
-      selected: true,
-      data: { ...style, label: shape === 'text' ? 'Text' : (DEFAULT_LABELS[shape] ?? '') },
-    };
-    snapshot();
-    setNodes((ns) => [...ns.map((n) => ({ ...n, selected: false })), node]);
-    setEdges((es) => es.map((e) => ({ ...e, selected: false })));
-    setEditingId(node.id);
-  };
-
-  const relayout = (ns: ShapeNode[], es: Connector[], dir: LayoutDirection) => {
-    const laid = layoutTree(ns, es, dir);
-    return { nodes: laid.nodes, edges: laid.edges };
-  };
-
-  const applyLayout = (dir: LayoutDirection) => {
-    if (readOnly) return;
-    if (!edges.length) {
-      toast('Connect shapes first — auto-layout arranges connected trees', 'info');
-      return;
-    }
-    snapshot();
-    const laid = relayout(nodes, edges, dir);
-    setNodes(laid.nodes);
-    setEdges(laid.edges);
-    setSettings((s) => ({ ...s, autoLayout: dir }));
-    requestAnimationFrame(() => rf.fitView({ padding: 0.2, duration: 300, maxZoom: 1.2 }));
-  };
-
-  const addChild = (parentId?: string) => {
-    const parent = nodes.find((n) => n.id === (parentId ?? (selectedNodes.length === 1 ? selectedNodes[0].id : '')));
-    if (!parent || readOnly) return;
-    const dir = settings.autoLayout === 'LR' ? 'LR' : 'TB';
-    const childEdges = edges.filter((e) => e.source === parent.id);
-    const childCount = childEdges.length;
-    // New children match their siblings' look; the first child copies the parent.
-    const model = nodes.find((n) => n.id === childEdges[0]?.target) ?? parent;
-    const w = model.width ?? 160;
-    const h = model.height ?? 70;
-    const child: ShapeNode = {
-      id: newId('n'),
-      type: 'shape',
-      position: dir === 'TB' ? { x: parent.position.x + childCount * (w + 40), y: parent.position.y + h + 80 } : { x: parent.position.x + w + 80, y: parent.position.y + childCount * (h + 30) },
-      width: w,
-      height: h,
-      selected: true,
-      data: { ...model.data, label: '' },
-    };
-    const edge = styledEdge({
-      id: newId('e'),
-      source: parent.id,
-      target: child.id,
-      sourceHandle: dir === 'TB' ? 'b' : 'r',
-      targetHandle: dir === 'TB' ? 't' : 'l',
-      type: 'smoothstep',
-      data: { ...DEFAULT_CONNECTOR },
-    });
-    snapshot();
-    let ns = [...nodes.map((n) => ({ ...n, selected: false })), child];
-    let es = [...edges, edge];
-    if (settings.autoLayout !== 'none') ({ nodes: ns, edges: es } = relayout(ns, es, settings.autoLayout));
-    setNodes(ns);
-    setEdges(es);
-    setEditingId(child.id);
-  };
-
-  const addSibling = () => {
-    if (selectedNodes.length !== 1) return;
-    const parentEdge = edges.find((e) => e.target === selectedNodes[0].id);
-    if (parentEdge) addChild(parentEdge.source);
-    else {
-      const n = selectedNodes[0];
-      addShape(n.data.shape, { x: n.position.x + (n.width ?? 160) * 1.5 + 40, y: n.position.y + (n.height ?? 70) / 2 });
-    }
-  };
-
-  const pasteSnapshot = (src: Snapshot, offset: number) => {
-    if (!src.nodes.length || readOnly) return;
-    const ids = new Map(src.nodes.map((n) => [n.id, newId('n')]));
-    const copies = src.nodes.map((n) => ({ ...n, id: ids.get(n.id)!, position: { x: n.position.x + offset, y: n.position.y + offset }, selected: true }));
-    const copiedEdges = src.edges
-      .filter((e) => ids.has(e.source) && ids.has(e.target))
-      .map((e) => ({ ...e, id: newId('e'), source: ids.get(e.source)!, target: ids.get(e.target)!, selected: false }));
-    snapshot();
-    setNodes((ns) => [...ns.map((n) => ({ ...n, selected: false })), ...copies]);
-    setEdges((es) => [...es.map((e) => ({ ...e, selected: false })), ...copiedEdges]);
-  };
-
-  const duplicate = () => pasteSnapshot({ nodes: selectedNodes, edges }, 30);
-  const copy = () => {
-    if (selectedNodes.length) clipboard.current = { nodes: selectedNodes, edges: edges.filter((e) => selectedNodes.some((n) => n.id === e.source) && selectedNodes.some((n) => n.id === e.target)) };
-  };
-  const paste = () => clipboard.current && pasteSnapshot(clipboard.current, 40);
-  const deleteSelected = () => void (!readOnly && rf.deleteElements({ nodes: selectedNodes, edges: selectedEdges }));
-
-  const align = (kind: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => {
-    if (selectedNodes.length < 2 || readOnly) return;
-    const box = selectedNodes.map((n) => ({ id: n.id, x: n.position.x, y: n.position.y, w: n.width ?? 0, h: n.height ?? 0 }));
-    const minX = Math.min(...box.map((b) => b.x));
-    const maxX = Math.max(...box.map((b) => b.x + b.w));
-    const minY = Math.min(...box.map((b) => b.y));
-    const maxY = Math.max(...box.map((b) => b.y + b.h));
-    snapshot();
-    setNodes((ns) =>
-      ns.map((n) => {
-        if (!n.selected) return n;
-        const w = n.width ?? 0;
-        const h = n.height ?? 0;
-        const p = { ...n.position };
-        if (kind === 'left') p.x = minX;
-        if (kind === 'center') p.x = (minX + maxX) / 2 - w / 2;
-        if (kind === 'right') p.x = maxX - w;
-        if (kind === 'top') p.y = minY;
-        if (kind === 'middle') p.y = (minY + maxY) / 2 - h / 2;
-        if (kind === 'bottom') p.y = maxY - h;
-        return { ...n, position: p };
-      }),
-    );
-  };
-
-  /** Pushes the undo step for an inspector change, unless it continues a text edit that already has one. */
-  const recordInspectorChange = (opts: PatchOpts) => {
-    const step = textEdit.current.stepFor({ ...current.current, settings: settingsRef.current }, opts.snapshot);
-    if (!step) return;
-    history.current.push(step);
-    rerender();
-  };
-  /** Focus remembers the state, but an undo step is created only if the text actually changes. */
-  const onTextFocus = (focused: boolean) => {
-    if (focused) textEdit.current.begin({ ...current.current, settings: settingsRef.current });
-    else textEdit.current.end();
-  };
-
-  const patchNodes = (patch: Partial<ShapeData>, opts: PatchOpts) => {
-    if (readOnly || !Object.keys(patch).length) return;
-    const keys = Object.keys(patch) as Array<keyof ShapeData>;
-    if (selectedNodes.every((n) => keys.every((k) => n.data[k] === patch[k]))) return; // nothing would change
-    recordInspectorChange(opts);
-    setNodes((ns) => ns.map((n) => (n.selected ? { ...n, data: { ...n.data, ...patch } } : n)));
-  };
-
-  const patchEdges = (patch: EdgePatch, opts: PatchOpts) => {
-    if (readOnly || !Object.keys(patch).length) return;
-    recordInspectorChange(opts);
-    setEdges((es) =>
-      es.map((e) =>
-        e.selected
-          ? styledEdge({
-              ...e,
-              ...(patch.type ? { type: patch.type } : {}),
-              ...(patch.label !== undefined ? { label: patch.label || undefined } : {}),
-              data: { ...DEFAULT_CONNECTOR, ...e.data, ...patch.data },
-            })
-          : e,
-      ),
-    );
-  };
-
-  // ── React Flow handlers ──────────────────────────────────────────────────
-  const lineType = settings.connector ?? 'smoothstep';
-  const onConnect = (c: Connection) => {
-    if (readOnly) return;
-    snapshot();
-    setEdges((es) => addEdge(styledEdge({ ...c, id: newId('e'), type: lineType, data: { ...DEFAULT_CONNECTOR } }), es));
-  };
-
-  // ── Quick connect (draw.io-style blue arrows) ─────────────────────────────
-  const boxOf = (n: ShapeNode): Box => ({ id: n.id, x: n.position.x, y: n.position.y, width: n.width ?? n.measured?.width ?? 160, height: n.height ?? n.measured?.height ?? 70 });
-
-  /** Pans (keeping the zoom) so a box is fully on screen, as diagrams.net does after quick-connect creates a shape. */
-  const ensureVisible = (box: Box) => {
-    requestAnimationFrame(() => {
-      const r = wrapper.current?.getBoundingClientRect();
-      if (!r) return;
-      const tl = rf.flowToScreenPosition({ x: box.x, y: box.y });
-      const br = rf.flowToScreenPosition({ x: box.x + box.width, y: box.y + box.height });
-      const margin = 24;
-      if (tl.x >= r.left + margin && tl.y >= r.top + margin && br.x <= r.right - margin && br.y <= r.bottom - margin) return;
-      void rf.setCenter(box.x + box.width / 2, box.y + box.height / 2, { zoom: rf.getZoom(), duration: 250 });
-    });
-  };
-
-  /** New shape beside the selected one, connected to it, and selected. One undo step covers both. */
-  const quickCreate = (dir: Direction, shape?: ShapeKind, at?: { x: number; y: number }) => {
-    const source = selectedNodes.length === 1 ? selectedNodes[0] : undefined;
-    if (!source || readOnly) return;
-    const defaults = shape ? shapeDefaults(shape) : null;
-    const width = defaults?.width ?? source.width ?? 160;
-    const height = defaults?.height ?? source.height ?? 70;
-    const data: ShapeData = defaults
-      ? { ...(({ width: _w, height: _h, ...style }) => style)(defaults), label: DEFAULT_LABELS[defaults.shape] ?? '' }
-      : { ...source.data, label: '' };
-    const position = at
-      ? { x: Math.round(at.x - width / 2), y: Math.round(at.y - height / 2) }
-      : placeNew(boxOf(source), dir, { width, height }, nodes.map(boxOf));
-    const node: ShapeNode = { id: newId('n'), type: 'shape', position, width, height, selected: true, data };
-    const handles = at ? facingHandles(boxOf(source), { id: node.id, ...position, width, height }) : { sourceHandle: HANDLES_FOR[dir].source, targetHandle: HANDLES_FOR[dir].target };
-    snapshot();
-    setNodes((ns) => [...ns.map((n) => (n.selected ? { ...n, selected: false } : n)), node]);
-    setEdges((es) => [...es.map((e) => (e.selected ? { ...e, selected: false } : e)), styledEdge({ id: newId('e'), source: source.id, target: node.id, ...handles, type: lineType, data: { ...DEFAULT_CONNECTOR } })]);
-    ensureVisible({ id: node.id, ...position, width, height });
-  };
-
-  /** Arrow dragged onto a shape (connect, if allowed) or onto empty canvas (new connected shape there). */
-  const quickDrop = (dir: Direction, targetId: string | null, at: { x: number; y: number }) => {
-    const source = selectedNodes.length === 1 ? selectedNodes[0] : undefined;
-    if (!source || readOnly) return;
-    if (!targetId) return quickCreate(dir, undefined, at);
-    const check = canConnect(edges, new Set(nodes.map((n) => n.id)), source.id, targetId);
-    if (!check.ok) {
-      toast(check.reason === 'duplicate' ? 'These shapes are already connected.' : check.reason === 'self' ? 'A shape cannot be connected to itself.' : 'That shape no longer exists.', 'info');
-      return;
-    }
-    const target = nodes.find((n) => n.id === targetId)!;
-    snapshot();
-    setEdges((es) => [...es, styledEdge({ id: newId('e'), source: source.id, target: targetId, ...facingHandles(boxOf(source), boxOf(target)), type: lineType, data: { ...DEFAULT_CONNECTOR } })]);
-  };
-  const onReconnect = (oldEdge: Connector, c: Connection) => {
-    if (readOnly) return;
-    snapshot();
-    setEdges((es) => reconnectEdge(oldEdge, c, es));
-  };
-
-  const onDrop = (e: DragEvent) => {
-    const shape = e.dataTransfer.getData(DRAG_MIME) as ShapeKind;
-    if (!shape || readOnly) return;
-    e.preventDefault();
-    addShape(shape, rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
-  };
-
-  /** Runs before React Flow moves nodes with the arrow keys, so the move can be undone (audit DIAG-4). */
-  const onKeyDownCapture = (e: KeyboardEvent) => {
-    // Alt+Shift+Arrow: add a connected shape in that direction (the diagrams.net shortcut).
-    const quickDir = e.altKey && e.shiftKey ? directionFromKey(e.key) : null;
-    if (quickDir && !readOnly && !isTyping(e.target) && selectedNodes.length === 1) {
-      e.preventDefault();
-      e.stopPropagation();
-      quickCreate(quickDir);
-      return;
-    }
-    if (readOnly || isTyping(e.target) || !ARROWS.has(e.key.toLowerCase()) || !selectedNodes.length || !onCanvas(e.target)) return;
-    // One undo step per burst of arrow presses.
-    if (Date.now() - lastArrowSnapshot.current > 800) snapshot();
-    lastArrowSnapshot.current = Date.now();
-  };
-
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (readOnly || isTyping(e.target)) return;
-    const mod = e.metaKey || e.ctrlKey;
-    const key = e.key.toLowerCase();
-    const handled = () => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    if (mod && key === 'z' && !e.shiftKey) return handled(), undo();
-    if ((mod && key === 'z' && e.shiftKey) || (mod && key === 'y')) return handled(), redo();
-    if (mod && key === 'd') return handled(), duplicate();
-    if (mod && key === 'c') return copy();
-    if (mod && key === 'v') return handled(), paste();
-    if (mod && key === 'a') return handled(), setNodes((ns) => ns.map((n) => ({ ...n, selected: true })));
-    if (!onCanvas(e.target) || selectedNodes.length !== 1) return;
-    if (key === 'tab') return handled(), addChild();
-    if (key === 'enter') return handled(), addSibling();
-    if (key === 'f2') return handled(), editLabel(selectedNodes[0].id);
-  };
-
-  // ── Export ───────────────────────────────────────────────────────────────
   /** Clears selection and editing chrome, waits for the canvas to repaint, then hands over the flow element. */
   const prepareCapture = async () => {
     const el = wrapper.current;
@@ -502,284 +105,183 @@ function Editor({ initialContent, title, onChange, apiRef }: DiagramEditorProps)
     setEdges((es) => es.map((x) => (x.selected ? { ...x, selected: false } : x)));
     setEditingId(null);
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    return { el, ns: rf.getNodes() };
+    // Bounds are measured on the canvas: shapes inside groups at their canvas position, hidden shapes left out.
+    const ns = rf
+      .getNodes()
+      .filter((n) => !n.hidden)
+      .map((n) => (n.parentId ? { ...n, parentId: undefined, position: rf.getInternalNode(n.id)?.internals.positionAbsolute ?? n.position } : n));
+    return { el, ns };
   };
+
+  const ctx: EditorController = { ...state, ...mutations, ...canvas.controls, rf, toast, title, single: selectedNodes.length === 1, prepareCapture, onOpenFile };
 
   useImperativeHandle(
     apiRef,
     () => ({
-      getContent: () => (readOnly ? (original as DiagramContent) : serializeDiagram(current.current.nodes, current.current.edges, viewport.current, settingsRef.current)),
+      getContent: () => (readOnly ? (original as DiagramContent) : state.serialize()),
       isReadOnly: () => readOnly,
+      // @phase5:export — drawn from the diagram's content by the vector renderer (vector/), not captured from the canvas.
       renderPng: async (pixelRatio = 2) => {
-        const { el, ns } = await prepareCapture();
-        const size = exportSize(ns);
-        return { blob: await exportPng(el, ns, pixelRatio), ...size };
+        const { renderDiagramPng } = await import('./vector/raster');
+        const r = await renderDiagramPng(state.serialize(), { scale: pixelRatio });
+        return { blob: r.blob, width: r.width, height: r.height, pixelRatio: r.pixelRatio };
       },
       renderSvg: async () => {
-        const { el, ns } = await prepareCapture();
-        return exportSvg(el, ns);
+        const { renderDiagramSvg } = await import('./vector/renderSvg');
+        return new Blob([renderDiagramSvg(state.serialize(), { title }).svg], { type: 'image/svg+xml' });
       },
       renderPdf: async () => {
-        const { el, ns } = await prepareCapture();
-        return exportPdf(el, ns);
+        const { renderDiagramPdf } = await import('./vector/pdf');
+        return (await renderDiagramPdf(state.serialize(), { title })).blob;
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
-  const runExport = async (kind: 'png' | 'svg' | 'pdf' | 'drawio') => {
-    try {
-      if (kind === 'drawio') {
-        const xml = toDrawio(serializeDiagram(current.current.nodes, current.current.edges, viewport.current, settingsRef.current), title);
-        downloadBlob(new Blob([xml], { type: 'application/vnd.jgraph.mxfile' }), `${safeFileName(title)}.drawio`);
-        toast('Exported for diagrams.net', 'success');
-        return;
-      }
-      const { el, ns } = await prepareCapture();
-      const blob = kind === 'png' ? await exportPng(el, ns) : kind === 'svg' ? await exportSvg(el, ns) : await exportPdf(el, ns);
-      downloadBlob(blob, `${safeFileName(title)}.${kind}`);
-      toast(`Exported ${kind.toUpperCase()}`, 'success');
-    } catch (err) {
-      toast(`Export failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
-    }
+  const onDrop = (e: DragEvent) => {
+    const shape = e.dataTransfer.getData(DRAG_MIME) as ShapeKind;
+    if (!shape || readOnly) return;
+    e.preventDefault();
+    addShapeInContainer(ctx, shape, rf.screenToFlowPosition({ x: e.clientX, y: e.clientY })); // @phase5:shapes (G-SHAPES) — joins a container there.
   };
 
-  const single = selectedNodes.length === 1;
+  // @phase5:canvas (G-CANVAS) — locked shapes get the Unlock panel; inspector patches skip locked shapes.
   const inspector = readOnly ? null : selectedNodes.length > 0 ? (
-    <NodeInspector nodes={selectedNodes} onPatch={patchNodes} onTextFocus={onTextFocus} />
+    <CanvasContext.Provider value={ctx}>
+      {ctx.allSelectedLocked ? <LockedInspector ctx={ctx} /> : <NodeInspector nodes={selectedNodes} onPatch={ctx.patchNodes} onTextFocus={state.onTextFocus} />}
+    </CanvasContext.Provider>
   ) : selectedEdges.length > 0 ? (
-    <EdgeInspector edges={selectedEdges} onPatch={patchEdges} onTextFocus={onTextFocus} />
+    <EdgeInspector edges={selectedEdges} onPatch={mutations.patchEdges} onTextFocus={state.onTextFocus} />
   ) : null;
 
   return (
     <DiagramActionsContext.Provider value={actions}>
-      <div className="flex h-full flex-col" onKeyDown={onKeyDown} onKeyDownCapture={onKeyDownCapture}>
-        {readOnly && (
-          <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-warning/30 bg-warning/10 px-4 py-3 text-sm">
-            <ShieldAlert size={18} className="shrink-0 text-warning" />
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold">Opened read-only to protect this diagram</div>
-              <p className="text-muted">It was saved by a newer version of Classroom OS. Update the app on this device to edit it. Nothing has been changed.</p>
-            </div>
-            <Button
-              size="sm"
-              icon={<FileJson size={14} />}
-              onClick={() => downloadBlob(new Blob([JSON.stringify(initialContent, null, 2)], { type: 'application/json' }), `${safeFileName(title)} (original data).json`)}
-            >
-              Download original data
-            </Button>
-          </div>
-        )}
-        <div className="flex items-center border-b border-border bg-surface">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:thin]" role="toolbar" aria-label="Diagram tools">
-          <IconButton label="Undo (Ctrl+Z)" disabled={readOnly || !history.current.canUndo} onClick={undo}>
-            <Undo2 size={16} />
-          </IconButton>
-          <IconButton label="Redo (Ctrl+Shift+Z)" disabled={readOnly || !history.current.canRedo} onClick={redo}>
-            <Redo2 size={16} />
-          </IconButton>
-          <Separator vertical />
-          <IconButton label="Duplicate (Ctrl+D)" disabled={readOnly || !selectedNodes.length} onClick={duplicate}>
-            <Copy size={16} />
-          </IconButton>
-          <IconButton label="Delete (Del)" disabled={readOnly || (!selectedNodes.length && !selectedEdges.length)} onClick={deleteSelected}>
-            <Trash2 size={16} />
-          </IconButton>
-          <Separator vertical />
-          <IconButton label="Add child (Tab)" disabled={readOnly || !single} onClick={() => addChild()}>
-            <CornerDownRight size={16} />
-          </IconButton>
-          <IconButton label="Add sibling (Enter)" disabled={readOnly || !single} onClick={addSibling}>
-            <Plus size={16} />
-          </IconButton>
-          <Menu
-            trigger={(p) => (
-              <Button size="sm" variant="ghost" icon={<Network size={15} />} disabled={readOnly} {...p}>
-                <span className="hidden sm:inline">Arrange</span> <ChevronDown size={13} />
+      <MarkerScopeContext.Provider value={markerScope}>
+        <ConnectActionsContext.Provider value={connect.actions}>
+        <div ref={canvas.rootRef} className="dcos-canvas-root flex h-full flex-col" onKeyDown={(e) => handleShortcut('bubble', e, ctx)} onKeyDownCapture={(e) => handleShortcut('capture', e, ctx)}>
+          {readOnly && (
+            <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-warning/30 bg-warning/10 px-4 py-3 text-sm">
+              <ShieldAlert size={18} className="shrink-0 text-warning" />
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold">Opened read-only to protect this diagram</div>
+                <p className="text-muted">It was saved by a newer version of Classroom OS. Update the app on this device to edit it. Nothing has been changed.</p>
+              </div>
+              <Button
+                size="sm"
+                icon={<FileJson size={14} />}
+                onClick={() => downloadBlob(new Blob([JSON.stringify(initialContent, null, 2)], { type: 'application/json' }), `${safeFileName(title)} (original data).json`)}
+              >
+                Download original data
               </Button>
+            </div>
+          )}
+          {fullscreenToasts}
+          <div className="flex items-center border-b border-border bg-surface">
+            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:thin]" role="toolbar" aria-label="Diagram tools">
+              <ToolbarGroups ctx={ctx} />
+            </div>
+            <div className="shrink-0 border-l border-border px-2 py-1.5">
+              <ExportMenu ctx={ctx} />
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+            <ShapeLibrary readOnly={readOnly} onAdd={(shape) => addShapeInContainer(ctx, shape)} /* @phase5:shapes (G-SHAPES) */ />
+
+            <div ref={wrapper} className="relative min-h-0 flex-1" onDragOver={(e) => e.dataTransfer.types.includes(DRAG_MIME) && e.preventDefault()} onDrop={onDrop}>
+              <ReactFlow<ShapeNode, Connector>
+                className="dcos-flow"
+                nodes={canvas.nodes /* @phase5:canvas */}
+                edges={connect.flowEdges}
+                nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                onNodesChange={canvas.onNodesChange /* @phase5:canvas — groups move, resize and select as one */}
+                onEdgesChange={state.onEdgesChange}
+                onConnect={mutations.onConnect}
+                onReconnect={mutations.onReconnect}
+                // @phase5:connect — floating connections dropped on a shape, bends that follow their shapes, label editing.
+                onConnectEnd={connect.onConnectEnd}
+                onReconnectStart={connect.onReconnectStart}
+                onReconnectEnd={connect.onReconnectEnd}
+                onNodeDragStop={(_, n, ns) => {
+                  // @phase5:shapes (G-SHAPES) — shapes dropped in a pool, lane or boundary join it (a group dragged by one of
+                  // its shapes joins as the group: @phase5:canvas).
+                  dropIntoContainers(ctx, [...new Set((ns.length ? ns : [n]).map((x) => canvas.controls.dragTargetOf(x.id)))].map((id) => ({ id })));
+                }}
+                onEdgeDoubleClick={(_, e) => editLabel(e.id)}
+                onNodeDragStart={() => snapshot()}
+                onBeforeDelete={async ({ nodes: gone, edges: lost }) => {
+                  // Not while a dialog has the keyboard (Delete or Backspace on its buttons is not meant for the canvas).
+                  if (readOnly || inDialog(document.activeElement, canvas.rootRef.current)) return false;
+                  // Only when something goes (Delete on a locked shape removes nothing and is no undo step).
+                  if (gone.length || lost.length) snapshot();
+                  return true;
+                }}
+                onNodeDoubleClick={(_, n) => ctx.editLabel(n.id) /* @phase5:canvas — not for locked shapes */}
+                onPaneClick={() => setEditingId(null)}
+                onMoveEnd={(_, vp) => {
+                  // Remembered and saved with the next real edit; moving the view is not an edit itself.
+                  state.viewport.current = vp;
+                }}
+                nodesDraggable={!readOnly}
+                nodesConnectable={!readOnly}
+                edgesReconnectable={!readOnly}
+                elementsSelectable={!readOnly}
+                deleteKeyCode={readOnly ? null : ['Delete', 'Backspace']}
+                connectionMode={ConnectionMode.Loose}
+                connectionLineType={ConnectionLineType.SmoothStep}
+                snapToGrid={settings.snapToGrid}
+                snapGrid={[10, 10]}
+                defaultViewport={initial.viewport ?? undefined}
+                fitView={!initial.viewport}
+                fitViewOptions={{ padding: 0.2, maxZoom: 1.2 }}
+                minZoom={0.1}
+                maxZoom={4}
+                multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
+                elevateEdgesOnSelect
+                zoomOnDoubleClick={false}
+                colorMode="light"
+              >
+                <ViewportPortal>
+                  <MarkerDefs edges={edges} />
+                </ViewportPortal>
+                {settings.showGrid && <Background variant={BackgroundVariant.Dots} gap={20} size={1.3} color="#c4c8d4" />}
+                <Controls showInteractive={false} position="bottom-left" />
+                <CanvasOverlays ctx={ctx} /* @phase5:canvas — Layers panel, shortcut help */ />
+                <MiniMap<ShapeNode> pannable zoomable position="bottom-right" style={{ width: 150, height: 96 }} nodeColor={(n) => (n.data.fill === 'transparent' ? '#cbd5e1' : n.data.fill)} nodeStrokeColor="#94a3b8" />
+                {selectedNodes.length === 1 && selectedEdges.length === 0 && !editingId && !readOnly && (
+                  <QuickConnect node={selectedNodes[0]} nodes={nodes} onCreate={(dir, shape) => mutations.quickCreate(dir, shape)} onDrop={mutations.quickDrop} />
+                )}
+                {inspector && !ctx.layersOpen && (
+                  // Phones: floating panel (not while the Layers panel is open: both would not fit side by side; @phase5).
+                  // Wider screens get the docked panel beside the canvas instead.
+                  <Panel position="top-right" className="md:hidden">
+                    <div className={cn('max-h-[calc(100vh-220px)] w-60 overflow-y-auto rounded-xl border border-border bg-surface p-3.5 text-fg shadow-lg')} onKeyDown={(e) => e.stopPropagation()}>
+                      {inspector}
+                    </div>
+                  </Panel>
+                )}
+                {nodes.length === 0 && !readOnly && (
+                  <Panel position="top-center">
+                    <div className="mt-16 max-w-sm rounded-xl border border-dashed border-slate-300 bg-white/90 px-5 py-4 text-center text-sm text-slate-600 shadow-sm">
+                      <div className="font-semibold text-slate-900">Start your diagram</div>
+                      Click a shape on the left (or drag it here). Drag from a shape's edge dot to connect it. Double-click to type.
+                    </div>
+                  </Panel>
+                )}
+              </ReactFlow>
+            </div>
+            {inspector && (
+              // Docked like diagrams.net's Format panel, so it never covers the drawing or the quick-connect arrows.
+              <aside aria-label="Format" className="hidden w-64 shrink-0 overflow-y-auto border-l border-border bg-surface p-3.5 text-fg md:block" onKeyDown={(e) => e.stopPropagation()}>
+                {inspector}
+              </aside>
             )}
-            items={[
-              { label: 'Tree: top to bottom', onSelect: () => applyLayout('TB') },
-              { label: 'Tree: left to right', onSelect: () => applyLayout('LR') },
-              {
-                label: settings.autoLayout === 'none' ? 'Auto-arrange is off' : 'Turn off auto-arrange',
-                disabled: settings.autoLayout === 'none',
-                onSelect: () => changeSettings((s) => ({ ...s, autoLayout: 'none' })),
-              },
-            ]}
-          />
-          {selectedNodes.length > 1 && !readOnly && (
-            <>
-              <Separator vertical />
-              <IconButton label="Align left" onClick={() => align('left')}>
-                <AlignStartVertical size={16} />
-              </IconButton>
-              <IconButton label="Align centre" onClick={() => align('center')}>
-                <AlignCenterVertical size={16} />
-              </IconButton>
-              <IconButton label="Align right" onClick={() => align('right')}>
-                <AlignEndVertical size={16} />
-              </IconButton>
-              <IconButton label="Align top" onClick={() => align('top')}>
-                <AlignStartHorizontal size={16} />
-              </IconButton>
-              <IconButton label="Align middle" onClick={() => align('middle')}>
-                <AlignCenterHorizontal size={16} />
-              </IconButton>
-              <IconButton label="Align bottom" onClick={() => align('bottom')}>
-                <AlignEndHorizontal size={16} />
-              </IconButton>
-            </>
-          )}
-          <Separator vertical />
-          <IconButton label={settings.showGrid ? 'Hide grid' : 'Show grid'} active={settings.showGrid} disabled={readOnly} onClick={() => changeSettings((s) => ({ ...s, showGrid: !s.showGrid }))}>
-            <Grid3x3 size={16} />
-          </IconButton>
-          <IconButton label={settings.snapToGrid ? 'Snap to grid: on' : 'Snap to grid: off'} active={settings.snapToGrid} disabled={readOnly} onClick={() => changeSettings((s) => ({ ...s, snapToGrid: !s.snapToGrid }))}>
-            <Magnet size={16} />
-          </IconButton>
-          <IconButton label="Fit diagram to screen" onClick={() => rf.fitView({ padding: 0.2, duration: 300, maxZoom: 1.2 })}>
-            <Maximize size={16} />
-          </IconButton>
-          <Separator vertical />
-          <Select
-            aria-label="Line style for new connectors"
-            title="Line style for new connectors"
-            value={lineType}
-            disabled={readOnly}
-            onChange={(e) => changeSettings((s) => ({ ...s, connector: e.target.value as EdgeLineType }))}
-          >
-            <option value="smoothstep">New lines: Elbow</option>
-            <option value="step">New lines: Orthogonal</option>
-            <option value="straight">New lines: Straight</option>
-            <option value="default">New lines: Curved</option>
-          </Select>
-        </div>
-          <div className="shrink-0 border-l border-border px-2 py-1.5">
-            <Menu
-              align="end"
-              trigger={(p) => (
-                <Button size="sm" variant="primary" icon={<Download size={14} />} aria-label="Export" {...p}>
-                  <span className="hidden sm:inline">Export</span> <ChevronDown size={13} />
-                </Button>
-              )}
-              items={[
-                { label: 'PNG image (high resolution)', icon: <FileImage size={14} />, onSelect: () => void runExport('png') },
-                { label: 'SVG image', icon: <FileImage size={14} />, onSelect: () => void runExport('svg') },
-                { label: 'PDF', icon: <FileText size={14} />, onSelect: () => void runExport('pdf') },
-                { label: 'diagrams.net / draw.io (.drawio)', icon: <FileJson size={14} />, onSelect: () => void runExport('drawio') },
-              ]}
-            />
           </div>
         </div>
-
-        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-          <aside aria-label="Shapes" className="flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-surface p-2 md:w-[88px] md:flex-col md:overflow-y-auto md:border-b-0 md:border-r">
-            {SHAPE_CATALOG.map((s) => {
-              const d = shapeDefaults(s.shape);
-              const pw = 44;
-              const ph = Math.max(18, Math.min(34, (d.height / d.width) * pw));
-              return (
-                <button
-                  key={s.shape}
-                  type="button"
-                  draggable={!readOnly}
-                  disabled={readOnly}
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData(DRAG_MIME, s.shape);
-                    e.dataTransfer.effectAllowed = 'copy';
-                  }}
-                  onClick={() => addShape(s.shape)}
-                  title={`${s.name} — ${s.hint}. Click or drag onto the canvas.`}
-                  className="flex w-[68px] shrink-0 cursor-grab flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-[10.5px] leading-tight text-muted hover:bg-surface-2 hover:text-fg active:cursor-grabbing md:w-auto"
-                >
-                  <span className="flex h-9 items-center justify-center">
-                    {s.shape === 'text' ? (
-                      <span className="text-base font-semibold text-fg">Aa</span>
-                    ) : (
-                      <ShapeSvg className="block overflow-visible" shape={s.shape} width={pw} height={ph} fill={d.fill} stroke={d.stroke} strokeWidth={1.5} />
-                    )}
-                  </span>
-                  {s.name}
-                </button>
-              );
-            })}
-          </aside>
-
-          <div ref={wrapper} className="relative min-h-0 flex-1" onDragOver={(e) => e.dataTransfer.types.includes(DRAG_MIME) && e.preventDefault()} onDrop={onDrop}>
-            <ReactFlow<ShapeNode, Connector>
-              className="dcos-flow"
-              nodes={nodes}
-              edges={edges}
-              nodeTypes={nodeTypes}
-              edgeTypes={edgeTypes}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              onReconnect={onReconnect}
-              onNodeDragStart={snapshot}
-              onBeforeDelete={async () => {
-                snapshot();
-                return !readOnly;
-              }}
-              onNodeDoubleClick={(_, n) => editLabel(n.id)}
-              onPaneClick={() => setEditingId(null)}
-              onMoveEnd={(_, vp) => {
-                // Remembered and saved with the next real edit; moving the view is not an edit itself.
-                viewport.current = vp;
-              }}
-              nodesDraggable={!readOnly}
-              nodesConnectable={!readOnly}
-              edgesReconnectable={!readOnly}
-              elementsSelectable={!readOnly}
-              deleteKeyCode={readOnly ? null : ['Delete', 'Backspace']}
-              connectionMode={ConnectionMode.Loose}
-              connectionLineType={ConnectionLineType.SmoothStep}
-              snapToGrid={settings.snapToGrid}
-              snapGrid={[10, 10]}
-              defaultViewport={initial.viewport ?? undefined}
-              fitView={!initial.viewport}
-              fitViewOptions={{ padding: 0.2, maxZoom: 1.2 }}
-              minZoom={0.1}
-              maxZoom={4}
-              multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
-              elevateEdgesOnSelect
-              zoomOnDoubleClick={false}
-              colorMode="light"
-            >
-              {settings.showGrid && <Background variant={BackgroundVariant.Dots} gap={20} size={1.3} color="#c4c8d4" />}
-              <Controls showInteractive={false} position="bottom-left" />
-              <MiniMap<ShapeNode> pannable zoomable position="bottom-right" style={{ width: 150, height: 96 }} nodeColor={(n) => (n.data.fill === 'transparent' ? '#cbd5e1' : n.data.fill)} nodeStrokeColor="#94a3b8" />
-              {selectedNodes.length === 1 && selectedEdges.length === 0 && !editingId && !readOnly && (
-                <QuickConnect node={selectedNodes[0]} nodes={nodes} onCreate={(dir, shape) => quickCreate(dir, shape)} onDrop={quickDrop} />
-              )}
-              {inspector && (
-                // Phones: floating panel. Wider screens get the docked panel beside the canvas instead.
-                <Panel position="top-right" className="md:hidden">
-                  <div className={cn('max-h-[calc(100vh-220px)] w-60 overflow-y-auto rounded-xl border border-border bg-surface p-3.5 text-fg shadow-lg')} onKeyDown={(e) => e.stopPropagation()}>
-                    {inspector}
-                  </div>
-                </Panel>
-              )}
-              {nodes.length === 0 && !readOnly && (
-                <Panel position="top-center">
-                  <div className="mt-16 max-w-sm rounded-xl border border-dashed border-slate-300 bg-white/90 px-5 py-4 text-center text-sm text-slate-600 shadow-sm">
-                    <div className="font-semibold text-slate-900">Start your diagram</div>
-                    Click a shape on the left (or drag it here). Drag from a shape's edge dot to connect it. Double-click to type.
-                  </div>
-                </Panel>
-              )}
-            </ReactFlow>
-          </div>
-          {inspector && (
-            // Docked like diagrams.net's Format panel, so it never covers the drawing or the quick-connect arrows.
-            <aside aria-label="Format" className="hidden w-64 shrink-0 overflow-y-auto border-l border-border bg-surface p-3.5 text-fg md:block" onKeyDown={(e) => e.stopPropagation()}>
-              {inspector}
-            </aside>
-          )}
-        </div>
-      </div>
+        </ConnectActionsContext.Provider>
+      </MarkerScopeContext.Provider>
     </DiagramActionsContext.Provider>
   );
 }

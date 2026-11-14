@@ -2,6 +2,7 @@ import { useToast } from '@dcos/ui';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useDiagramHost } from '../components/DiagramDialogs';
+import { useOpenDiagramFile } from '../components/DiagramFiles';
 import { EditorFrame, MissingItem } from '../components/EditorFrame';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { setPreference, usePreferences } from '../lib/preferences';
@@ -23,6 +24,8 @@ function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string
   const toast = useToast();
   // @phase4:review — the comment author name and the remembered spell check setting, for documents.
   const prefs = usePreferences();
+  // @phase5:diagram-files — "Open file…" in the diagram editor's menu creates a new diagram from a file.
+  const diagramFile = useOpenDiagramFile();
   const documentPrefs = { authorName: prefs.authorName, spellcheck: prefs.spellCheck, onSpellcheckChange: (on: boolean) => setPreference('spellCheck', on) };
 
   // A diagram dialog writes into the editor it was opened from. Remounting that editor for another tab's save would
@@ -78,6 +81,7 @@ function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string
           onChange={editable.updateContent}
           diagramHost={module.kind === 'document' ? diagramHost : undefined}
           {...(module.kind === 'document' ? documentPrefs : {})}
+          {...(module.kind === 'diagram' ? { onOpenFile: () => void diagramFile.open() } : {})}
         />
       </ErrorBoundary>
       {dialogs}

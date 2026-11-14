@@ -17,6 +17,8 @@ export interface EditorProps {
   /** Whether spell checking starts on; the editor reports changes through onSpellcheckChange. */
   spellcheck?: boolean;
   onSpellcheckChange?: (on: boolean) => void;
+  // @phase5:diagram-files — diagrams only: open a diagram file as a new diagram ("Open file…" in the editor menu).
+  onOpenFile?: () => void;
 }
 
 export interface TemplateOption {

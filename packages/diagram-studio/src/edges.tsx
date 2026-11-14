@@ -1,5 +1,6 @@
 import { BaseEdge, getBezierPath, getSmoothStepPath, getStraightPath, type EdgeProps, type EdgeTypes } from '@xyflow/react';
-import { memo } from 'react';
+import { createContext, memo, useContext } from 'react';
+import { ConnectorControls, ConnectorLabel, useConnectorGeometry } from './connect/ConnectorEdge';
 import { DEFAULT_CONNECTOR, edgeMarkers, type Connector, type EdgeLineType, type MarkerKind } from './types';
 
 /**
@@ -58,57 +59,75 @@ function Marker({ id, kind, color }: { id: string; kind: Exclude<MarkerKind, 'no
   );
 }
 
-function pathFor(type: EdgeLineType, p: EdgeProps): [string, number, number] {
-  const geo = { sourceX: p.sourceX, sourceY: p.sourceY, targetX: p.targetX, targetY: p.targetY, sourcePosition: p.sourcePosition, targetPosition: p.targetPosition };
-  const [path, x, y] =
-    type === 'straight'
-      ? getStraightPath(geo)
-      : type === 'step'
-        ? getSmoothStepPath({ ...geo, borderRadius: 0 })
-        : type === 'smoothstep'
-          ? getSmoothStepPath(geo)
-          : getBezierPath(geo);
-  return [path, x, y];
-}
+/** Computes a connector's SVG path and its label position from React Flow's endpoint geometry. */
+export type EdgePathFn = (p: EdgeProps) => [path: string, labelX: number, labelY: number];
+
+const geometry = (p: EdgeProps) => ({ sourceX: p.sourceX, sourceY: p.sourceY, targetX: p.targetX, targetY: p.targetY, sourcePosition: p.sourcePosition, targetPosition: p.targetPosition });
+const first3 = (r: [string, number, number, ...unknown[]]): [string, number, number] => [r[0], r[1], r[2]];
+
+/** One path function per line type. Stored connectors name their type, so existing keys never change meaning. */
+export const EDGE_PATHS: Record<EdgeLineType, EdgePathFn> = {
+  straight: (p) => first3(getStraightPath(geometry(p))),
+  step: (p) => first3(getSmoothStepPath({ ...geometry(p), borderRadius: 0 })),
+  smoothstep: (p) => first3(getSmoothStepPath(geometry(p))),
+  default: (p) => first3(getBezierPath(geometry(p))),
+  // @phase5:edges — path functions for new line types (and add the type to EdgeLineType).
+};
+
+/** Prefix for this editor's marker ids, so two editors on one page (a document and its diagram dialog) never clash. */
+export const MarkerScopeContext = createContext('dcos');
+
+const colorKey = (c: string) => c.replace(/[^a-zA-Z0-9]/g, (ch) => `_${ch.charCodeAt(0).toString(16)}`);
+/** The id of the shared definition of one end decoration in one colour. */
+export const markerId = (scope: string, kind: MarkerKind, color: string) => `${scope}-m-${kind}-${colorKey(color)}`;
+
+/**
+ * One shared `<marker>` per end decoration and colour used in the diagram, instead of one per connector end (TD-21).
+ * Rendered inside the canvas viewport (ViewportPortal), so image exports, which capture the viewport, include it.
+ */
+export const MarkerDefs = memo(function MarkerDefs({ edges }: { edges: Connector[] }) {
+  const scope = useContext(MarkerScopeContext);
+  const used = new Map<string, { kind: Exclude<MarkerKind, 'none'>; color: string }>();
+  for (const e of edges) {
+    const d = { ...DEFAULT_CONNECTOR, ...e.data };
+    const { start, end } = edgeMarkers(d);
+    for (const kind of [start, end]) if (kind !== 'none') used.set(markerId(scope, kind, d.color), { kind, color: d.color });
+  }
+  return (
+    <svg className="dcos-marker-defs" width={0} height={0} aria-hidden style={{ position: 'absolute', overflow: 'hidden' }}>
+      <defs>
+        {[...used].map(([id, m]) => (
+          <Marker key={id} id={id} kind={m.kind} color={m.color} />
+        ))}
+      </defs>
+    </svg>
+  );
+});
 
 function makeEdge(type: EdgeLineType) {
   return memo(function DcosEdge(props: EdgeProps<Connector>) {
     const d = { ...DEFAULT_CONNECTOR, ...props.data };
     const { start, end } = edgeMarkers(d);
-    const [path, labelX, labelY] = pathFor(type, props);
-    const startId = `dcos-m-${props.id}-s`;
-    const endId = `dcos-m-${props.id}-e`;
+    // @phase5:connect — ports, floating ends, bend points and the label position (connect/). Without them the line
+    // type's own path is drawn, exactly as before.
+    const geo = useConnectorGeometry(props, type, EDGE_PATHS[type] ?? EDGE_PATHS.default);
+    const scope = useContext(MarkerScopeContext);
     return (
       <>
-        <defs>
-          {start !== 'none' && <Marker id={startId} kind={start} color={d.color} />}
-          {end !== 'none' && <Marker id={endId} kind={end} color={d.color} />}
-        </defs>
         <BaseEdge
           id={props.id}
-          path={path}
+          path={geo.path}
           style={props.style}
-          markerStart={start !== 'none' ? `url(#${startId})` : undefined}
-          markerEnd={end !== 'none' ? `url(#${endId})` : undefined}
-          label={props.label}
-          labelX={labelX}
-          labelY={labelY}
-          labelStyle={props.labelStyle}
-          labelShowBg={props.labelShowBg}
-          labelBgStyle={props.labelBgStyle}
-          labelBgPadding={props.labelBgPadding}
-          labelBgBorderRadius={props.labelBgBorderRadius}
+          markerStart={start !== 'none' ? `url(#${markerId(scope, start, d.color)})` : undefined}
+          markerEnd={end !== 'none' ? `url(#${markerId(scope, end, d.color)})` : undefined}
           interactionWidth={20}
         />
+        <ConnectorLabel p={props} geo={geo} />
+        {props.selected && <ConnectorControls p={props} geo={geo} />}
       </>
     );
   });
 }
 
 /** Replaces React Flow's built-in edges under the same type names, so stored connectors keep their types. */
-export const edgeTypes: EdgeTypes = {
-  default: makeEdge('default'),
-  straight: makeEdge('straight'),
-  step: makeEdge('step'),
-  smoothstep: makeEdge('smoothstep'),
-};
+export const edgeTypes: EdgeTypes = Object.fromEntries((Object.keys(EDGE_PATHS) as EdgeLineType[]).map((type) => [type, makeEdge(type)]));

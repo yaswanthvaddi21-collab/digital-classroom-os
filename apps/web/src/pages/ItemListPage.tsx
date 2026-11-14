@@ -3,6 +3,7 @@ import { Button, Card, cn, Dialog, EmptyState, Input, Menu, Select, useToast } f
 import { Clock, FileInput, FolderOpen, Plus, Search, Star, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { chooseDrawioFile } from '../components/DiagramDialogs';
+import { NATIVE_DIAGRAM_ACCEPT, useOpenDiagramFile } from '../components/DiagramFiles';
 import { useMemo, useState, type ReactNode } from 'react';
 import { ImportReportDialog, useImportDocument } from '../components/ImportDocument';
 import { ItemRow } from '../components/ItemRow';
@@ -44,6 +45,7 @@ export function ItemListPage({ view }: { view: ListView }) {
   const copy = describe(view);
   const navigate = useNavigate();
   const importer = useImportDocument();
+  const diagramFile = useOpenDiagramFile();
 
   /** Creates a new diagram from a diagrams.net / draw.io file, and says what (if anything) did not carry over. */
   const importDrawio = async () => {
@@ -79,8 +81,9 @@ export function ItemListPage({ view }: { view: ListView }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
+      {/* @phase5:diagram-files — wraps rather than pushing buttons out of view when the row is full. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="relative flex-1 sm:min-w-48">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${copy.noun}`} className="pl-9" aria-label={`Search ${copy.noun}`} />
         </div>
@@ -94,6 +97,12 @@ export function ItemListPage({ view }: { view: ListView }) {
         {view.type === 'kind' && view.kind === 'diagram' && (
           <Button icon={<FileInput size={16} />} onClick={() => void importDrawio()}>
             Import diagrams.net
+          </Button>
+        )}
+        {view.type === 'kind' && view.kind === 'diagram' && (
+          // @phase5:diagram-files — Classroom OS's own editable diagram files (.dcosdiagram), opened as new diagrams.
+          <Button icon={<FileInput size={16} />} disabled={diagramFile.busy} title="Classroom OS diagram files (.dcosdiagram)" onClick={() => void diagramFile.open(NATIVE_DIAGRAM_ACCEPT)}>
+            Import diagram file
           </Button>
         )}
         {view.type === 'kind' && view.kind === 'document' && (

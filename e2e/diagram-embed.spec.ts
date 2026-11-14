@@ -97,6 +97,22 @@ test('insert, store, reopen, edit by double-click and export an embedded diagram
   expect((await downloadBytes(txt)).toString()).toContain('[Diagram: Flowchart]');
 });
 
+test('inside the document\'s diagram dialog the editor keeps its keyboard: duplicate, delete, undo', async ({ page }) => {
+  await createFromQuickStart(page, 'Assignment');
+  const dialog = await insertTemplate(page, 'Flowchart');
+  const nodes = dialog.locator('.react-flow__node');
+  const count = await nodes.count();
+  await dialog.locator('.react-flow__node', { hasText: 'Start' }).click();
+  await page.keyboard.press('ControlOrMeta+d');
+  await expect(nodes).toHaveCount(count + 1);
+  await page.keyboard.press('Delete');
+  await expect(nodes).toHaveCount(count);
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(nodes).toHaveCount(count + 1);
+  // The dialog's own Cancel still works afterwards (nothing is inserted).
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+});
+
 test('resizing keeps the aspect ratio, and cancelling inserts nothing', async ({ page }) => {
   const id = await createFromQuickStart(page, 'Assignment');
   let dialog = await insertTemplate(page, 'Tree diagram');

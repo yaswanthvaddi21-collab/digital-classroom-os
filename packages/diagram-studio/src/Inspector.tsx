@@ -1,5 +1,8 @@
 import { cn, Input, Select } from '@dcos/ui';
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
+import { CONNECT_EDGE_SECTIONS } from './connect/inspector';
+import { CANVAS_NODE_SECTIONS } from './editor/canvasSections';
+import { CONNECTOR_PRESET_SECTION } from './library/presets';
 import { edgeMarkers, MARKER_KINDS, type Connector, type ConnectorData, type EdgeLineType, type MarkerKind, type ShapeData, type ShapeNode } from './types';
 
 const MARKER_LABELS: Record<MarkerKind, string> = {
@@ -64,13 +67,32 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
-export function NodeInspector({ nodes, onPatch, onTextFocus }: { nodes: ShapeNode[]; onPatch: (patch: Partial<ShapeData>, opts: PatchOpts) => void; onTextFocus: TextFocus }) {
-  const d = nodes[0].data;
-  const set = (patch: Partial<ShapeData>) => onPatch(patch, { snapshot: true });
-  return (
-    <div className="grid gap-4">
-      <div className="text-sm font-semibold">{nodes.length > 1 ? `${nodes.length} shapes` : 'Shape'}</div>
-      {nodes.length === 1 && (
+/** What every node inspector section gets. */
+export interface NodeSectionProps {
+  nodes: ShapeNode[];
+  /** The first selected shape's data: what the controls show for a multiple selection. */
+  d: ShapeData;
+  /** A discrete change (its own undo step). */
+  set: (patch: Partial<ShapeData>) => void;
+  onPatch: (patch: Partial<ShapeData>, opts: PatchOpts) => void;
+  onTextFocus: TextFocus;
+}
+
+/** One block of the inspector. Returns null when it does not apply to the selection. */
+export interface InspectorSection<P> {
+  id: string;
+  render: (props: P) => ReactNode;
+}
+
+/** A group draws no fill or border (shapes.tsx), so those controls are left out when only groups are selected. */
+const drawsOutline = (nodes: ShapeNode[]) => nodes.some((n) => n.data.shape !== 'group');
+
+/** The Format panel for shapes, top to bottom. */
+export const NODE_INSPECTOR_SECTIONS: InspectorSection<NodeSectionProps>[] = [
+  {
+    id: 'text',
+    render: ({ nodes, d, onPatch, onTextFocus }) =>
+      nodes.length === 1 && (
         <Row label="Text">
           <textarea
             value={d.label}
@@ -82,23 +104,39 @@ export function NodeInspector({ nodes, onPatch, onTextFocus }: { nodes: ShapeNod
             className="w-full resize-none rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-accent/40"
           />
         </Row>
-      )}
-      <Row label="Fill">
-        <Swatches colors={FILLS} value={d.fill} onPick={(fill) => set({ fill })} />
-      </Row>
-      <Row label="Border">
-        <Swatches colors={STROKES} value={d.stroke} onPick={(stroke) => set({ stroke, strokeWidth: stroke === 'transparent' ? 0 : d.strokeWidth || 2 })} />
-        <div className="flex items-center gap-2">
-          <Select value={String(d.strokeWidth)} onChange={(e) => set({ strokeWidth: Number(e.target.value) })} aria-label="Border width" className="flex-1">
-            {[0, 1, 2, 3, 4, 6].map((w) => (
-              <option key={w} value={w}>
-                {w === 0 ? 'No border' : `${w}px`}
-              </option>
-            ))}
-          </Select>
-          <Toggle label="Dashed" checked={d.dashed} onChange={(dashed) => set({ dashed })} />
-        </div>
-      </Row>
+      ),
+  },
+  {
+    id: 'fill',
+    render: ({ nodes, d, set }) =>
+      drawsOutline(nodes) && (
+        <Row label="Fill">
+          <Swatches colors={FILLS} value={d.fill} onPick={(fill) => set({ fill })} />
+        </Row>
+      ),
+  },
+  {
+    id: 'border',
+    render: ({ nodes, d, set }) =>
+      drawsOutline(nodes) && (
+        <Row label="Border">
+          <Swatches colors={STROKES} value={d.stroke} onPick={(stroke) => set({ stroke, strokeWidth: stroke === 'transparent' ? 0 : d.strokeWidth || 2 })} />
+          <div className="flex items-center gap-2">
+            <Select value={String(d.strokeWidth)} onChange={(e) => set({ strokeWidth: Number(e.target.value) })} aria-label="Border width" className="flex-1">
+              {[0, 1, 2, 3, 4, 6].map((w) => (
+                <option key={w} value={w}>
+                  {w === 0 ? 'No border' : `${w}px`}
+                </option>
+              ))}
+            </Select>
+            <Toggle label="Dashed" checked={d.dashed} onChange={(dashed) => set({ dashed })} />
+          </div>
+        </Row>
+      ),
+  },
+  {
+    id: 'text-style',
+    render: ({ d, set }) => (
       <Row label="Text style">
         <Swatches colors={TEXT} value={d.textColor} onPick={(textColor) => set({ textColor })} />
         <div className="flex items-center gap-2">
@@ -112,6 +150,20 @@ export function NodeInspector({ nodes, onPatch, onTextFocus }: { nodes: ShapeNod
           <Toggle label="Bold" checked={d.bold} onChange={(bold) => set({ bold })} />
         </div>
       </Row>
+    ),
+  },
+  // @phase5:inspector — node sections (lock, layer, link, tooltip, properties, rotation …).
+  ...CANVAS_NODE_SECTIONS, // @phase5:canvas (G-CANVAS) — lock, layer, link, tooltip, properties (editor/canvasSections.tsx).
+];
+
+export function NodeInspector({ nodes, onPatch, onTextFocus }: { nodes: ShapeNode[]; onPatch: (patch: Partial<ShapeData>, opts: PatchOpts) => void; onTextFocus: TextFocus }) {
+  const props: NodeSectionProps = { nodes, d: nodes[0].data, set: (patch) => onPatch(patch, { snapshot: true }), onPatch, onTextFocus };
+  return (
+    <div className="grid gap-4">
+      <div className="text-sm font-semibold">{nodes.length > 1 ? `${nodes.length} shapes` : 'Shape'}</div>
+      {NODE_INSPECTOR_SECTIONS.map((section) => (
+        <Fragment key={section.id}>{section.render(props)}</Fragment>
+      ))}
     </div>
   );
 }
@@ -122,15 +174,24 @@ export interface EdgePatch {
   data?: Partial<ConnectorData>;
 }
 
-export function EdgeInspector({ edges, onPatch, onTextFocus }: { edges: Connector[]; onPatch: (patch: EdgePatch, opts: PatchOpts) => void; onTextFocus: TextFocus }) {
-  const e = edges[0];
-  const d = e.data!;
-  const markers = edgeMarkers(d);
-  const set = (patch: EdgePatch) => onPatch(patch, { snapshot: true });
-  return (
-    <div className="grid gap-4">
-      <div className="text-sm font-semibold">{edges.length > 1 ? `${edges.length} connectors` : 'Connector'}</div>
-      {edges.length === 1 && (
+/** What every connector inspector section gets. */
+export interface EdgeSectionProps {
+  edges: Connector[];
+  /** The first selected connector, its data and the markers it draws. */
+  e: Connector;
+  d: ConnectorData;
+  markers: { start: MarkerKind; end: MarkerKind };
+  set: (patch: EdgePatch) => void;
+  onPatch: (patch: EdgePatch, opts: PatchOpts) => void;
+  onTextFocus: TextFocus;
+}
+
+/** The Format panel for connectors, top to bottom. */
+export const EDGE_INSPECTOR_SECTIONS: InspectorSection<EdgeSectionProps>[] = [
+  {
+    id: 'label',
+    render: ({ edges, e, onPatch, onTextFocus }) =>
+      edges.length === 1 && (
         <Row label="Label">
           <Input
             value={typeof e.label === 'string' ? e.label : ''}
@@ -142,7 +203,11 @@ export function EdgeInspector({ edges, onPatch, onTextFocus }: { edges: Connecto
             className="h-8"
           />
         </Row>
-      )}
+      ),
+  },
+  {
+    id: 'line',
+    render: ({ e, d, set }) => (
       <Row label="Line">
         <div className="grid grid-cols-2 gap-2">
           <Select value={e.type ?? 'smoothstep'} onChange={(ev) => set({ type: ev.target.value as EdgeLineType })} aria-label="Line shape">
@@ -161,6 +226,11 @@ export function EdgeInspector({ edges, onPatch, onTextFocus }: { edges: Connecto
           <Toggle label="Dashed" checked={d.dashed} onChange={(dashed) => set({ data: { dashed } })} />
         </div>
       </Row>
+    ),
+  },
+  {
+    id: 'ends',
+    render: ({ markers, set }) => (
       <Row label="Ends">
         <div className="grid grid-cols-2 gap-2">
           <Select value={markers.start} onChange={(ev) => set({ data: { startMarker: ev.target.value as MarkerKind } })} aria-label="Start of connector">
@@ -179,9 +249,31 @@ export function EdgeInspector({ edges, onPatch, onTextFocus }: { edges: Connecto
           </Select>
         </div>
       </Row>
+    ),
+  },
+  {
+    id: 'colour',
+    render: ({ d, set }) => (
       <Row label="Colour">
         <Swatches colors={STROKES.filter((c) => c !== 'transparent')} value={d.color} onPick={(color) => set({ data: { color } })} />
       </Row>
+    ),
+  },
+  ...CONNECT_EDGE_SECTIONS, // @phase5:connect — connection points, bend points, label position (connect/inspector.tsx).
+  CONNECTOR_PRESET_SECTION, // @phase5:shapes (G-SHAPES) — BPMN and UML connector notations (library/presets.tsx).
+  // @phase5:inspector — connector sections (waypoints, label position, ports …).
+];
+
+export function EdgeInspector({ edges, onPatch, onTextFocus }: { edges: Connector[]; onPatch: (patch: EdgePatch, opts: PatchOpts) => void; onTextFocus: TextFocus }) {
+  const e = edges[0];
+  const d = e.data!;
+  const props: EdgeSectionProps = { edges, e, d, markers: edgeMarkers(d), set: (patch) => onPatch(patch, { snapshot: true }), onPatch, onTextFocus };
+  return (
+    <div className="grid gap-4">
+      <div className="text-sm font-semibold">{edges.length > 1 ? `${edges.length} connectors` : 'Connector'}</div>
+      {EDGE_INSPECTOR_SECTIONS.map((section) => (
+        <Fragment key={section.id}>{section.render(props)}</Fragment>
+      ))}
     </div>
   );
 }
