@@ -38,8 +38,12 @@ import type {
   WorkspaceItem,
 } from './types';
 
-/** IndexedDB schema version. v1 = items/versions/meta (frozen). v2 adds item_index, drafts, attachments. */
-export const SCHEMA_VERSION = 2;
+/**
+ * IndexedDB schema version. v1 = items/versions/meta (frozen). v2 adds item_index, drafts, attachments. v3 (Phase 7,
+ * ADR 0014) adds presentations and presentation_versions. Builds made for an older version cannot open a newer
+ * database at all (IndexedDB refuses with VersionError), so they fail closed and never touch data they do not know.
+ */
+export const SCHEMA_VERSION = 3;
 /** Minimum time between automatic version snapshots of one item. */
 export const AUTO_SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000;
 /**
@@ -62,6 +66,9 @@ interface DcosDB extends DBSchema {
   item_index: { key: string; value: ItemSummary; indexes: { by_kind: string } };
   drafts: { key: string; value: Draft };
   attachments: { key: string; value: StoredAttachment; indexes: { by_sha256: string } };
+  // ── v3 (Phase 7) ──
+  presentations: { key: string; value: WorkspaceItem };
+  presentation_versions: { key: string; value: ItemVersion; indexes: { by_item: string } };
 }
 
 /**
@@ -184,17 +191,51 @@ async function inTransaction<T>(tx: { abort(): void; done: Promise<void> }, body
   return result;
 }
 
-type ItemStore = 'documents' | 'diagrams';
-type VersionStore = 'document_versions' | 'diagram_versions';
+type ItemStore = 'documents' | 'diagrams' | 'presentations';
+type VersionStore = 'document_versions' | 'diagram_versions' | 'presentation_versions';
 type WriteTx = IDBPTransaction<DcosDB, StoreNames<DcosDB>[], 'readwrite'>;
 type UpgradeTx = IDBPTransaction<DcosDB, StoreNames<DcosDB>[], 'versionchange'>;
 
-/** Exhaustive: adding an ItemKind without stores is a compile error. */
-const STORES: Record<ItemKind, { items: ItemStore; versions: VersionStore }> = {
+/**
+ * The kind registry: every kind's item and version store. Exhaustive: adding an ItemKind without stores is a compile
+ * error. Every list of stores below is derived from it (or, for databases read as they are, from objectStoreNames), so
+ * no code path can forget a kind (audit storage-compat: five hard-coded lists before Phase 7).
+ */
+export const STORES: Readonly<Record<ItemKind, { items: ItemStore; versions: VersionStore }>> = {
   document: { items: 'documents', versions: 'document_versions' },
   diagram: { items: 'diagrams', versions: 'diagram_versions' },
+  presentation: { items: 'presentations', versions: 'presentation_versions' },
 };
+/** Every item store and every version store, in ITEM_KINDS order. */
+export const ITEM_STORE_NAMES: readonly ItemStore[] = ITEM_KINDS.map((k) => STORES[k].items);
+export const VERSION_STORE_NAMES: readonly VersionStore[] = ITEM_KINDS.map((k) => STORES[k].versions);
 const V1_STORES = ['documents', 'diagrams', 'document_versions', 'diagram_versions', 'meta'] as const;
+
+/**
+ * Reads every item and version store of the kind registry that `db` has (an older database or a safety copy has only
+ * some of them), plus `meta` and `attachments`, inside one read-only transaction.
+ */
+async function readItemStores(db: IDBPDatabase<unknown>) {
+  const present = (names: readonly string[]) => names.filter((s) => db.objectStoreNames.contains(s));
+  const items = present(ITEM_STORE_NAMES);
+  const versions = present(VERSION_STORE_NAMES);
+  const extra = present(['meta', 'attachments']);
+  const tx = db.transaction([...items, ...versions, ...extra], 'readonly');
+  const all = (names: string[]) => Promise.all(names.map((n) => tx.objectStore(n).getAll())).then((lists) => lists.flat());
+  const [itemRecords, versionRecords, meta, attachments] = await Promise.all([
+    all(items),
+    all(versions),
+    extra.includes('meta') ? tx.objectStore('meta').getAll() : Promise.resolve([]),
+    extra.includes('attachments') ? tx.objectStore('attachments').getAll() : Promise.resolve([]),
+  ]);
+  await tx.done;
+  return {
+    items: itemRecords as WorkspaceItem[],
+    versions: versionRecords as ItemVersion[],
+    attachments: attachments as StoredAttachment[],
+    deviceId: (meta as Array<{ key: string; value: string }>).find((m) => m.key === 'deviceId')?.value ?? 'unknown-device',
+  };
+}
 
 /**
  * Ordered schema migrations. Index i upgrades a database from version i to i + 1.
@@ -222,6 +263,13 @@ const MIGRATIONS: Array<(db: IDBPDatabase<DcosDB>, tx: UpgradeTx) => Promise<voi
         cursor = await cursor.continue();
       }
     }
+  },
+  // v2 → v3 (Phase 7, ADR 0014): presentations get their own stores, shaped like the document stores. Purely
+  // additive: no existing store, index or record is read, changed or removed. item_index, drafts and attachments are
+  // already shared by every kind, so nothing needs a backfill.
+  (db) => {
+    db.createObjectStore('presentations', { keyPath: 'id' });
+    db.createObjectStore('presentation_versions', { keyPath: 'id' }).createIndex('by_item', 'itemId');
   },
 ];
 
@@ -377,24 +425,22 @@ async function copyDatabase(from: string, to: string, fromVersion: number) {
 async function readBackupAt(name: string, version: number): Promise<BackupFile> {
   const db = await openDB(name, version);
   try {
-    const wanted = ['documents', 'diagrams', 'document_versions', 'diagram_versions', 'meta', 'attachments'];
-    const present = wanted.filter((s) => db.objectStoreNames.contains(s));
-    const tx = db.transaction(present, 'readonly');
-    const read = (s: string) => (present.includes(s) ? tx.objectStore(s).getAll() : Promise.resolve([]));
-    const [documents, diagrams, dv, gv, meta, attachments] = await Promise.all(wanted.map(read));
-    await tx.done;
+    // Every item and version store this database has, whatever its version (derived from the kind registry).
+    const { items, versions, attachments, deviceId } = await readItemStores(db);
     // Same rules as exportBackup: a v0.1.0 database holds only schema 1 content, so v0.1.0 can import this file.
     // Every attachment is kept here: this is the way out when an upgrade cannot run, so nothing is left behind.
-    return buildBackup(
-      [...documents, ...diagrams] as WorkspaceItem[],
-      [...dv, ...gv] as ItemVersion[],
-      attachments as StoredAttachment[],
-      (meta as Array<{ key: string; value: string }>).find((m) => m.key === 'deviceId')?.value ?? 'unknown-device',
-      false,
-    );
+    return buildBackup(items, versions, attachments, deviceId, false);
   } finally {
     db.close();
   }
+}
+
+/**
+ * The stores attachment clean-up searches for references: every object store of the database except 'attachments'.
+ * Exported for the test that proves every kind's item, version and draft store is among them.
+ */
+export function referenceStores(storeNames: Iterable<string>): Array<StoreNames<DcosDB>> {
+  return Array.from(storeNames).filter((s) => s !== 'attachments') as Array<StoreNames<DcosDB>>;
 }
 
 function deleteDatabase(name: string) {
@@ -511,7 +557,9 @@ export class IndexedDbAdapter implements StorageAdapter, UpgradeRecovery {
       // A failed upgrade (e.g. storage full while building the index) is rolled back by IndexedDB as a whole,
       // so the old database is unchanged: offer the same ways out as a failed copy instead of locking the app.
       if (upgrading) throw this.upgradeStopped(new UpgradeError('upgrade', current, err));
-      this.setStatus({ state: 'failed', message: err instanceof Error ? err.message : String(err) });
+      // A database made by a newer app version: IndexedDB refuses to open it, so nothing was read or changed.
+      const newerData = (err as { name?: unknown } | null)?.name === 'VersionError';
+      this.setStatus({ state: 'failed', message: err instanceof Error ? err.message : String(err), ...(newerData ? { newerData } : {}) });
       throw err;
     }
     if (upgrading) {
@@ -866,18 +914,17 @@ export class IndexedDbAdapter implements StorageAdapter, UpgradeRecovery {
     const db = await this.db();
     const deviceId = await this.deviceId();
     // One read-only transaction, so items, versions and attachments are from the same moment.
-    const tx = db.transaction(['documents', 'diagrams', 'document_versions', 'diagram_versions', 'attachments'], 'readonly');
-    const [documents, diagrams, documentVersions, diagramVersions, attachments] = await Promise.all([
-      tx.objectStore('documents').getAll(),
-      tx.objectStore('diagrams').getAll(),
-      tx.objectStore('document_versions').getAll(),
-      tx.objectStore('diagram_versions').getAll(),
+    // Every kind's stores come from the kind registry, so a new kind is never left out of backups.
+    const tx = db.transaction([...ITEM_STORE_NAMES, ...VERSION_STORE_NAMES, 'attachments'], 'readonly');
+    const [items, versions, attachments] = await Promise.all([
+      Promise.all(ITEM_STORE_NAMES.map((s) => tx.objectStore(s).getAll())).then((l) => l.flat()),
+      Promise.all(VERSION_STORE_NAMES.map((s) => tx.objectStore(s).getAll())).then((l) => l.flat()),
       tx.objectStore('attachments').getAll(),
     ]);
     await tx.done;
     // Versions go out with their images inline (same file layout as before), and only attachments the exported
     // items and versions refer to are included.
-    return buildBackup([...documents, ...diagrams], [...documentVersions, ...diagramVersions], attachments, deviceId, true);
+    return buildBackup(items, versions, attachments, deviceId, true);
   }
 
   async importBackup(raw: unknown): Promise<ImportReport> {
@@ -888,7 +935,7 @@ export class IndexedDbAdapter implements StorageAdapter, UpgradeRecovery {
     const db = await this.db();
     const report: ImportReport = { added: 0, skipped: 0, copied: 0, versionsAdded: 0, unsupported, attachmentsAdded: 0 };
     const idMap = new Map<string, string>();
-    const tx = db.transaction(['documents', 'diagrams', 'document_versions', 'diagram_versions', 'item_index', 'attachments'], 'readwrite');
+    const tx = db.transaction([...ITEM_STORE_NAMES, ...VERSION_STORE_NAMES, 'item_index', 'attachments'], 'readwrite');
     const index = tx.objectStore('item_index');
     // Attachments first: content refers to them by id, which is kept so references stay valid.
     // Bytes already stored under another id get an alias, so the import never fails on the unique hash index.
@@ -1035,22 +1082,15 @@ export class IndexedDbAdapter implements StorageAdapter, UpgradeRecovery {
   async exportSafetyCopy(name: string): Promise<BackupFile> {
     if (!name.startsWith(this.safetyPrefix)) throw new Error(`${name} is not a safety copy`);
     const copy = await openDB(name);
-    const read = (s: string) => (copy.objectStoreNames.contains(s) ? copy.getAll(s) : Promise.resolve([]));
-    let records: unknown[][];
+    let records: Awaited<ReturnType<typeof readItemStores>>;
     try {
-      records = await Promise.all(['documents', 'diagrams', 'document_versions', 'diagram_versions', 'meta', 'attachments'].map(read));
+      // Every item and version store the copy has (a copy made before v3 has no presentation stores).
+      records = await readItemStores(copy);
     } finally {
       copy.close();
     }
-    const [documents, diagrams, dv, gv, meta, attachments] = records;
     // Versions are rebuilt from the copy's own attachments, and the attachments its items refer to go with it.
-    return buildBackup(
-      [...documents, ...diagrams] as WorkspaceItem[],
-      [...dv, ...gv] as ItemVersion[],
-      attachments as StoredAttachment[],
-      (meta as Array<{ key: string; value: string }>).find((m) => m.key === 'deviceId')?.value ?? 'unknown-device',
-      true,
-    );
+    return buildBackup(records.items, records.versions, records.attachments, records.deviceId, true);
   }
 
   async cleanUpAttachments(opts: CleanUpOptions = {}): Promise<CleanUpReport> {
@@ -1062,21 +1102,19 @@ export class IndexedDbAdapter implements StorageAdapter, UpgradeRecovery {
     // One clean-up per database at a time across tabs. db() refuses while the database is closed for an upgrade.
     return withLock(`dcos-gc:${this.dbName}`, async () => {
       const db = await this.db();
-      const stores = ['documents', 'diagrams', 'document_versions', 'diagram_versions', 'drafts', 'attachments'] as const;
+      // Every store except the attachments themselves is searched for references: every kind's items and versions,
+      // drafts, and the rest. Scanning more than needed only keeps more, so a kind added later can never be missed.
+      const sources = referenceStores(db.objectStoreNames);
       // Reading what is referenced and deleting what is not happen in one transaction, so nothing saved in between
       // (a new reference, a new attachment) can be missed.
-      const tx = db.transaction([...stores], 'readwrite') as WriteTx;
+      const tx = db.transaction([...sources, 'attachments'], 'readwrite') as WriteTx;
       return inTransaction(tx, async () => {
-        const [documents, diagrams, dv, gv, drafts, stored] = await Promise.all([
-          tx.objectStore('documents').getAll(),
-          tx.objectStore('diagrams').getAll(),
-          tx.objectStore('document_versions').getAll(),
-          tx.objectStore('diagram_versions').getAll(),
-          tx.objectStore('drafts').getAll(),
+        const [records, stored] = await Promise.all([
+          Promise.all(sources.map((s) => tx.objectStore(s).getAll())).then((l) => l.flat() as Array<{ content?: unknown; blobRefs?: unknown }>),
           tx.objectStore('attachments').getAll(),
         ]);
         // Trashed items are items too: their attachments stay until they are purged.
-        const references = referencesOf([...documents, ...diagrams, ...dv, ...gv, ...drafts], extra);
+        const references = referencesOf(records, extra);
         const now = Date.now();
         const fresh = (a: StoredAttachment) => {
           const times = [a.createdAt, a.lastUsedAt].map((t) => (typeof t === 'string' ? Date.parse(t) : NaN)).filter(Number.isFinite);

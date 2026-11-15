@@ -7,13 +7,15 @@ import { Dashboard } from './pages/Dashboard';
 import { EditorPage } from './pages/EditorPage';
 import { ItemListPage } from './pages/ItemListPage';
 import { NotFound } from './pages/NotFound';
+import { PRESENTER_ROUTE, PresenterPage } from './pages/PresenterPage';
 import { SettingsLayout } from './pages/settings/SettingsLayout';
 import { AboutSettings, AppearanceSettings, BackupSettings, GeneralSettings, ShortcutSettings, StorageSettings } from './pages/settings/SettingsPages';
 
 /**
  * Hash routing works identically on the web, inside Tauri and inside Capacitor (file:// and custom schemes).
  * Routes that existed in v0.1.0 (#/, #/documents, #/diagrams, #/trash, #/settings and the editor routes)
- * must keep working; e2e/navigation.spec.ts checks them.
+ * must keep working; e2e/navigation.spec.ts checks them. Phase 7 adds #/presentations, #/presentations/:id and the
+ * presenter window, #/presentations/presenter/:session.
  */
 export function App() {
   return (
@@ -46,6 +48,9 @@ export function App() {
             {MODULE_LIST.map((m) => (
               <Route key={m.kind} path={`${m.route}/:id`} element={<EditorPage module={m} />} />
             ))}
+            {/* The slide show's presenter window: outside the app shell, with no editing session (no useEditableItem,
+                open tabs or editor frame). It gets the presentation from the show over a BroadcastChannel. */}
+            <Route path={PRESENTER_ROUTE} element={<PresenterPage />} />
           </Routes>
           </ErrorBoundary>
         </div>

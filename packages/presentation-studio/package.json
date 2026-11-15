@@ -1,0 +1,33 @@
+{
+  "name": "@dcos/presentation-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./templates": "./src/templates.ts"
+  },
+  "dependencies": {
+    "@dcos/ui": "*",
+    "@tiptap/core": "^3.0.0",
+    "@tiptap/extension-highlight": "^3.0.0",
+    "@tiptap/extension-subscript": "^3.0.0",
+    "@tiptap/extension-superscript": "^3.0.0",
+    "@tiptap/extension-text-align": "^3.0.0",
+    "@tiptap/extension-text-style": "^3.0.0",
+    "@tiptap/extensions": "^3.0.0",
+    "@tiptap/pm": "^3.0.0",
+    "@tiptap/react": "^3.0.0",
+    "@tiptap/starter-kit": "^3.0.0",
+    "fflate": "^0.8.3",
+    "jspdf": "^4.2.1",
+    "pptxgenjs": "4.0.1",
+    "svg2pdf.js": "2.8.1"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "sideEffects": false
+}

@@ -1,14 +1,14 @@
 import type { ItemKind } from '@dcos/local-storage';
 import { Button, Card, EmptyState } from '@dcos/ui';
-import { FileText, GitFork, HardDrive, Network, Plus, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { AlertTriangle, FileText, GitFork, HardDrive, Network, Plus, Presentation, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ItemRow } from '../components/ItemRow';
 import { NewItemDialog, useCreateItem } from '../components/NewItemDialog';
 import { relativeTime } from '../lib/format';
 import { usePreferences } from '../lib/preferences';
 import { requestPersistentStorage, useDataSafety, useItems } from '../lib/storage';
-import { MODULES } from '../modules';
+import { MODULE_LIST, MODULES } from '../modules';
 
 function greeting() {
   const h = new Date().getHours();
@@ -57,34 +57,51 @@ function DataSafetyCard({ itemCount }: { itemCount: number }) {
   );
 }
 
+/** “3 documents, 1 diagram and 2 presentations”, over every module. */
+export function storedSentence(counts: Partial<Record<ItemKind, number>>): string {
+  const parts = MODULE_LIST.map((m) => {
+    const n = counts[m.kind] ?? 0;
+    return `${n} ${(n === 1 ? m.label : m.plural).toLowerCase()}`;
+  });
+  return `${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0]}.`;
+}
+
+/** Quick start entries: each label is unique (tests click them by name) and names a template that exists. */
+export const QUICK_START: ReadonlyArray<{ kind: ItemKind; template: string; label: string; icon: ReactNode }> = [
+  { kind: 'document', template: 'assignment', label: 'Assignment', icon: <FileText size={18} /> },
+  { kind: 'document', template: 'lab-report', label: 'Lab report', icon: <FileText size={18} /> },
+  { kind: 'diagram', template: 'flowchart', label: 'Flowchart', icon: <GitFork size={18} /> },
+  { kind: 'diagram', template: 'tree', label: 'Tree diagram', icon: <Network size={18} /> },
+  // Phase 7 (DESIGN): the Lecture template, and the blank presentation that the e2e specs and upgrade test start from.
+  { kind: 'presentation', template: 'lecture', label: 'Lecture slides', icon: <Presentation size={18} /> },
+  { kind: 'presentation', template: 'blank', label: 'Blank presentation', icon: <Presentation size={18} /> },
+];
+
 export function Dashboard() {
-  const { items: recent, loading } = useItems();
+  const { items: recent, loading, error } = useItems();
   const [dialog, setDialog] = useState<ItemKind | null>(null);
   const create = useCreateItem();
   const favorites = useMemo(() => recent.filter((i) => i.favorite), [recent]);
-  const counts = useMemo(() => ({ document: recent.filter((i) => i.kind === 'document').length, diagram: recent.filter((i) => i.kind === 'diagram').length }), [recent]);
-
-  const quick = [
-    { kind: 'document' as const, template: 'assignment', label: 'Assignment', icon: <FileText size={18} /> },
-    { kind: 'document' as const, template: 'lab-report', label: 'Lab report', icon: <FileText size={18} /> },
-    { kind: 'diagram' as const, template: 'flowchart', label: 'Flowchart', icon: <GitFork size={18} /> },
-    { kind: 'diagram' as const, template: 'tree', label: 'Tree diagram', icon: <Network size={18} /> },
-  ];
+  const counts = useMemo(() => Object.fromEntries(MODULE_LIST.map((m) => [m.kind, recent.filter((i) => i.kind === m.kind).length])) as Record<ItemKind, number>, [recent]);
+  // A template a quick start entry names may be missing in a build; the entry is then left out, never a dead button.
+  const quick = QUICK_START.flatMap((q) => {
+    const template = MODULES[q.kind].templates.find((t) => t.id === q.template);
+    return template ? [{ ...q, template }] : [];
+  });
 
   return (
     <div className="flex flex-col gap-8">
       <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">{greeting()}</h2>
-          <p className="mt-1 text-sm text-muted">Write, draw and organise your academic work — even without internet.</p>
+          <p className="mt-1 text-sm text-muted">Write, draw, present and organise your academic work — even without internet.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="primary" icon={<Plus size={16} />} onClick={() => setDialog('document')}>
-            New document
-          </Button>
-          <Button icon={<Plus size={16} />} onClick={() => setDialog('diagram')}>
-            New diagram
-          </Button>
+        <div className="flex flex-wrap gap-2">
+          {MODULE_LIST.map((m, i) => (
+            <Button key={m.kind} variant={i === 0 ? 'primary' : undefined} icon={<Plus size={16} />} onClick={() => setDialog(m.kind)}>
+              New {m.label.toLowerCase()}
+            </Button>
+          ))}
         </div>
       </section>
 
@@ -92,14 +109,13 @@ export function Dashboard() {
         <h3 id="quick-start" className="flex items-center gap-2 text-sm font-semibold">
           <Sparkles size={15} className="text-accent" /> Quick start
         </h3>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           {quick.map((q) => {
-            const template = MODULES[q.kind].templates.find((t) => t.id === q.template)!;
             return (
               <button
                 key={q.label}
                 type="button"
-                onClick={() => create(q.kind, template)}
+                onClick={() => create(q.kind, q.template)}
                 className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3.5 text-left shadow-xs transition hover:border-accent hover:shadow-md focus-visible:outline-2 focus-visible:outline-accent"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">{q.icon}</span>
@@ -123,12 +139,21 @@ export function Dashboard() {
                 </Link>
               )}
             </div>
-            {!loading && recent.length === 0 ? (
+            {error ? (
+              // Never an empty dashboard when the files could not be read: that would look like lost work.
+              <div role="alert" className="m-2 flex gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm">
+                <AlertTriangle size={18} className="mt-0.5 shrink-0 text-warning" />
+                <div>
+                  <div className="font-medium">Your files could not be read</div>
+                  <p className="mt-0.5 text-muted">Nothing has been changed or removed. {error}</p>
+                </div>
+              </div>
+            ) : !loading && recent.length === 0 ? (
               <div className="p-2">
                 <EmptyState
                   icon={<FileText size={20} />}
                   title="Nothing here yet"
-                  description="Create your first document or diagram. It stays on this device and works offline."
+                  description="Create your first document, diagram or presentation. It stays on this device and works offline."
                   action={
                     <Button variant="primary" icon={<Plus size={16} />} onClick={() => setDialog('document')}>
                       New document
@@ -159,15 +184,15 @@ export function Dashboard() {
               favorites.slice(0, 6).map((item) => <ItemRow key={item.id} item={item} />)
             )}
           </Card>
-          <Card className="flex gap-3 p-4">
-            <HardDrive size={18} className="mt-0.5 shrink-0 text-accent" />
-            <div className="text-sm">
-              <div className="font-medium">Stored on this device</div>
-              <p className="mt-1 text-muted">
-                {counts.document} document{counts.document === 1 ? '' : 's'} and {counts.diagram} diagram{counts.diagram === 1 ? '' : 's'}.
-              </p>
-            </div>
-          </Card>
+          {!error && (
+            <Card className="flex gap-3 p-4">
+              <HardDrive size={18} className="mt-0.5 shrink-0 text-accent" />
+              <div className="text-sm">
+                <div className="font-medium">Stored on this device</div>
+                <p className="mt-1 text-muted">{storedSentence(counts)}</p>
+              </div>
+            </Card>
+          )}
         </aside>
       </div>
 

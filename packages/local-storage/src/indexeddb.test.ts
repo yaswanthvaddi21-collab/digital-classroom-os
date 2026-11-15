@@ -269,18 +269,38 @@ describe('backup and restore', () => {
   });
 
   it('counts records of unknown kinds instead of failing (newer app backups)', async () => {
+    // 'presentation' became a real kind in Phase 7 (ADR 0014); 'notebook' is still unknown to this build.
     const report = await store.importBackup({
       format: 'dcos-backup',
       schemaVersion: 1,
       exportedAt: '2026-01-01T00:00:00Z',
       deviceId: 'd',
       items: [
-        { id: 'p', kind: 'presentation', title: 'Slides', version: 1, content: {} },
+        { id: 'p', kind: 'notebook', title: 'Notes', version: 1, content: {} },
         { id: 'd', kind: 'diagram', title: 'D', version: 1, content: {} },
       ],
-      versions: [],
+      versions: [{ id: 'pv', itemId: 'p', kind: 'notebook', content: {} }],
     });
-    expect(report).toMatchObject({ added: 1, unsupported: 1 });
+    expect(report).toMatchObject({ added: 1, unsupported: 2 });
+  });
+
+  it('imports presentations, and refuses a presentation from a newer app', async () => {
+    const file = (content: unknown) => ({
+      format: 'dcos-backup', formatVersion: 2, schemaVersion: 1, exportedAt: '2026-01-01T00:00:00Z', deviceId: 'd',
+      items: [{ id: 'p', kind: 'presentation', title: 'Slides', version: 1, content }],
+      versions: [{ id: 'pv', itemId: 'p', kind: 'presentation', content }],
+    });
+    expect(await store.importBackup(file({ schemaVersion: 1, slides: [] }))).toMatchObject({ added: 1, versionsAdded: 1, unsupported: 0 });
+    expect((await store.get('presentation', 'p'))?.content).toEqual({ schemaVersion: 1, slides: [] });
+    expect(() => validateBackup(file({ schemaVersion: 2, slides: [] }))).toThrow(/newer/);
+  });
+
+  it('a backup holding a presentation is one the v0.1.0 importer refuses (unknown kind), as ADR 0014 records', async () => {
+    await store.create('presentation', { title: 'Slides', content: { schemaVersion: 1, slides: [] } });
+    const backup = await store.exportBackup();
+    expect(backup.schemaVersion).toBe(1);
+    // The v0.1.0 rule: kinds document|diagram only. Release 0.2 to Phase 6 skip and count the presentation instead.
+    expect(backup.items.every((i) => ['document', 'diagram'].includes(i.kind))).toBe(false);
   });
 
   it('writes backups that the v0.1.0 importer still accepts', async () => {

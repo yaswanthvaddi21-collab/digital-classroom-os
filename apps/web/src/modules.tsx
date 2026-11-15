@@ -2,14 +2,16 @@ import { diagramTemplates } from '@dcos/diagram-studio/templates';
 import { documentTemplates } from '@dcos/document-studio/templates';
 import type { DiagramHost } from '@dcos/document-studio';
 import type { ItemKind } from '@dcos/local-storage';
-import { FileText, GitFork, type LucideIcon } from 'lucide-react';
+import type { PresentationImageHost } from '@dcos/presentation-studio';
+import { presentationTemplates } from '@dcos/presentation-studio/templates';
+import { FileText, GitFork, Presentation, type LucideIcon } from 'lucide-react';
 import { useEffect, useState, type ComponentType } from 'react';
 
 export interface EditorProps {
   initialContent: unknown;
   title: string;
   onChange: (content: unknown) => void;
-  /** Documents only: enables embedded diagrams. */
+  /** Documents and (Phase 7) presentations: enables embedded diagrams. */
   diagramHost?: DiagramHost;
   // @phase4:review — documents only: per-device preferences (Settings → General).
   /** Name new comments are written under. */
@@ -19,6 +21,10 @@ export interface EditorProps {
   onSpellcheckChange?: (on: boolean) => void;
   // @phase5:diagram-files — diagrams only: open a diagram file as a new diagram ("Open file…" in the editor menu).
   onOpenFile?: () => void;
+  // Phase 7 CONTENT — presentations only: pictures stored as attachments (diagram previews go through diagramHost).
+  imageHost?: PresentationImageHost;
+  /** Presentations only (Phase 7 SHOW): the address of the slide show's presenter window for a session. */
+  presenterUrl?: (session: string) => string;
 }
 
 export interface TemplateOption {
@@ -63,6 +69,16 @@ export const MODULES: Record<ItemKind, ModuleDef> = {
     icon: GitFork,
     templates: diagramTemplates,
     loadEditor: () => import('@dcos/diagram-studio').then((m) => m.DiagramEditor as ComponentType<EditorProps>),
+  },
+  // Phase 7 (ADR 0014): route frozen from here on, like the others.
+  presentation: {
+    kind: 'presentation',
+    route: 'presentations',
+    label: 'Presentation',
+    plural: 'Presentations',
+    icon: Presentation,
+    templates: presentationTemplates,
+    loadEditor: () => import('@dcos/presentation-studio').then((m) => m.PresentationEditor as ComponentType<EditorProps>),
   },
 };
 

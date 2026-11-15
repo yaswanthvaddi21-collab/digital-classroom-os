@@ -67,4 +67,21 @@ Licences checked in each package's `package.json` and LICENSE file. `npm run lic
 
 No other dependency was added in Phase 5. html-to-image stays installed while `export.ts` exists (TD-42).
 
+## Added in Phase 7 (Presentation Studio, export)
+
+Licences checked in each package's `package.json` and LICENSE file. `npm run licenses` lists 142 production packages (117 MIT) with "Packages needing review: none" (143 and 118 before the `image-size` override of 2026-11-15, which also removed `queue`) ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).
+
+| Dependency | Version | Licence | Why | Notes |
+|---|---|---|---|---|
+| pptxgenjs | 4.0.1 (exact) | MIT | PowerPoint (.pptx) export: the package, slide layouts with placeholders, pictures, native tables, native editable charts (with their embedded workbook), preset shapes, backgrounds, speaker notes, hidden slides | The one new dependency approved for Phase 7. Declared by `@dcos/presentation-studio` only, pinned exact because the export post-processes its output (`export/pptxPost.ts` looks for exact patterns and throws if one is missing). Loaded with `import('pptxgenjs')` only when a PPTX is exported, so it is its own chunk. Pictures are always passed as `data` (never `path`), so it fetches nothing. No release for about 17 months: upgrade deliberately and re-run `packages/presentation-studio/src/export/*.test.ts`. Copyright Brent Ely |
+| ↳ jszip | 3.10.2 | MIT OR GPL-3.0-or-later | Through pptxgenjs (writes the zip) | Already installed through mammoth; used under MIT |
+| ↳ image-size | 2.1.0 (forced by the root `overrides`) | MIT | Through pptxgenjs, which declares `^1.2.1` | Never loaded: pptxgenjs's `browser` field maps it to `false`, none of its four builds (`dist/pptxgen.*.js`) imports it, and its only size lookup (`require('sizeof')`, Node only) sits in a commented-out function. Not in the web build. Raised from 1.2.1 on 2026-11-15 for two advisories (below); 2.x has no dependencies, so `queue` 6.0.2 (MIT, through image-size 1.x) is gone |
+| ↳ https | 1.0.0 | ISC | Through pptxgenjs | An empty placeholder package; mapped to `false` for browsers |
+| ↳ @types/node, undici-types | 22.x, 6.21.0 | MIT | pptxgenjs lists @types/node as a dependency | Type declarations only, no runtime code; they now count as production packages in the lock file |
+| jspdf, svg2pdf.js, fflate | 4.2.x, 2.8.1, 0.8.x | MIT | PDF export (one vector page per slide) and post-processing of the PPTX (transitions, animations, text) | Already installed (Diagram Studio); now also declared by `@dcos/presentation-studio`, with the same versions |
+
+No other dependency was added in Phase 7.
+
+**`npm audit --omit=dev`: 0 vulnerabilities (fixed 2026-11-15, TD-63).** Round 3 found 2 high-severity advisories in `image-size` 1.2.1 (GHSA-5p2g-fcmc-qvqq: the JXL and HEIF parsers can loop forever; GHSA-w3rx-r6r6-pgpr: the ICNS parser can), which `pptxgenjs` 4.0.1 depends on (`^1.2.1`; fixed from `image-size` 2.0.3). The root `package.json` now has `"overrides": { "image-size": "^2.0.4" }`, and `image-size` 2.1.0 is installed (`npm ls image-size` shows it as "overridden"). That version is outside pptxgenjs's declared range, which is safe here because pptxgenjs never loads it: its `browser` field maps `image-size` to `false`, no file in its `dist/` imports it, and the one size lookup in its source (`require('sizeof')`, Node only) is in a commented-out function; pictures are always handed to PptxGenJS as data with their size. The Phase 7 samples (docs/compatibility/phase7-2026-11-15/) were exported with the override installed. `npm audit fix --force` was not used (it would downgrade to pptxgenjs 4.0.0, not the approved version). Upgrading pptxgenjs later: check whether it still needs the override, and remove it when its own range reaches a fixed `image-size`. The CI gate (`npm audit --omit=dev --audit-level=high`) passes again.
+
 Planned later: PDF.js (Apache-2.0) for PDF Studio and Yjs (MIT) for collaboration. Both comply.

@@ -5,11 +5,13 @@ import { ITEM_KINDS, type Attachment, type BackupFile, type ItemKind, type ItemV
 /** Newest backup layout this build reads and writes. */
 export const BACKUP_FORMAT_VERSION = 2;
 /**
- * Newest content schema this build reads, per kind. Kept in step with document-studio's DOCUMENT_SCHEMA and
- * diagram-studio's DIAGRAM_SCHEMA (tests/integration/diagram-schema.test.ts checks this; local-storage does
- * not depend on the studios). Diagrams reached schema 3 in Phase 5 (ADR 0012), documents in Phase 6 (ADR 0013).
+ * Newest content schema this build reads, per kind. Kept in step with document-studio's DOCUMENT_SCHEMA,
+ * diagram-studio's DIAGRAM_SCHEMA and presentation-studio's PRESENTATION_SCHEMA (tests/integration/diagram-schema.test.ts
+ * checks this; local-storage does not depend on the studios). Diagrams reached schema 3 in Phase 5 (ADR 0012),
+ * documents in Phase 6 (ADR 0013); presentations start at 1 in Phase 7 (ADR 0014). Older builds (Release 0.2 to
+ * Phase 6) skip and count presentation records in a backup, because the kind is unknown to them.
  */
-export const MAX_CONTENT_SCHEMA_BY_KIND: Readonly<Record<ItemKind, number>> = { document: 3, diagram: 3 };
+export const MAX_CONTENT_SCHEMA_BY_KIND: Readonly<Record<ItemKind, number>> = { document: 3, diagram: 3, presentation: 1 };
 /** Newest content schema of any kind this build reads: the highest a backup's `schemaVersion` may be. */
 export const MAX_CONTENT_SCHEMA = Math.max(...Object.values(MAX_CONTENT_SCHEMA_BY_KIND));
 
@@ -28,7 +30,7 @@ function describeValue(v: unknown): string {
 }
 
 /**
- * Documents and diagrams always store their content as an object (every v0.1.0 and current file does).
+ * Documents, diagrams and presentations always store their content as an object (every v0.1.0 and current file does).
  * Anything else would open as a blank item, so the whole file is refused instead (audit STOR-R7).
  */
 function checkContent(where: string, kind: ItemKind, content: unknown) {

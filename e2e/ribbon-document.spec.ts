@@ -46,7 +46,8 @@ test('the ribbon has Word-style tabs; Simple shows the core, Advanced everything
   await wordCount.scrollIntoViewIfNeeded();
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await wordCount.click();
-  await expect(page.getByLabel('Word count', { exact: true })).toContainText('Words');
+  // (The dialog is named by its title since Phase 7 Round 3, so the counts are found inside it.)
+  await expect(page.getByRole('dialog', { name: 'Word count' }).getByLabel('Word count', { exact: true })).toContainText('Words');
 
   // The ribbon fits the screen: no horizontal page scroll (mobile widths included).
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);

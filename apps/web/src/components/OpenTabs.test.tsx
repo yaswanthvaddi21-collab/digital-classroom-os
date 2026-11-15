@@ -55,6 +55,18 @@ describe('open tabs store', () => {
     expect(getOpenTabs()).toEqual([{ kind: 'document', id: 'x' }]);
   });
 
+  it('keeps presentation tabs, also when another window changes the tabs (Phase 7)', () => {
+    openTab({ kind: 'presentation', id: 'p' });
+    openTab({ kind: 'document', id: 'd' });
+    window.dispatchEvent(new StorageEvent('storage', { key: 'dcos.openTabs' }));
+    expect(getOpenTabs()).toEqual([
+      { kind: 'presentation', id: 'p' },
+      { kind: 'document', id: 'd' },
+    ]);
+    expect(neighbourTab({ kind: 'document', id: 'd' }, 1)).toEqual({ kind: 'presentation', id: 'p' });
+    expect(closeTab({ kind: 'presentation', id: 'p' })).toEqual({ kind: 'document', id: 'd' });
+  });
+
   it('recognises the keyboard shortcut', () => {
     const base = { ctrlKey: true, altKey: true, metaKey: false, shiftKey: false };
     expect(isTabShortcut({ ...base, key: 'ArrowRight' })).toBe(1);

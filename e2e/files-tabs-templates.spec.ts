@@ -116,6 +116,10 @@ test('ODT export writes an OpenDocument file that imports back as the same docum
 
 test('open documents and diagrams show as tabs: switch with the keyboard, remembered after a reload, closable', async ({ page }) => {
   const first = await createFromQuickStart(page, 'Assignment');
+  // An item becomes an open tab once its editor shows it. Leaving at once (the URL changes before the editor has
+  // loaded) never opened it: a trace of a WebKit run under load (Phase 7 Round 3) showed the test going on 9 ms after
+  // the URL changed, before the document showed, so only one tab existed. Wait for the editor first.
+  await expect(page.locator('.ProseMirror')).toBeVisible();
   const diagram = await createFromQuickStart(page, 'Flowchart');
   const tabs = page.getByRole('navigation', { name: 'Open items' });
   await expect(tabs.getByRole('link')).toHaveCount(2);
@@ -144,7 +148,25 @@ test('open documents and diagrams show as tabs: switch with the keyboard, rememb
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 
   await page.goto('./#/settings/shortcuts');
-  await expect(page.getByText('Next / previous open document or diagram')).toBeVisible();
+  await expect(page.getByText('Next / previous open document, diagram or presentation')).toBeVisible();
+});
+
+// Phase 7: presentations are open items too.
+test('an open presentation shows as a tab beside a document, and is still there after a reload', async ({ page }) => {
+  const doc = await createFromQuickStart(page, 'Assignment');
+  await expect(page.locator('.ProseMirror')).toBeVisible(); // opened (see the test above)
+  const presentation = await createFromQuickStart(page, 'Blank presentation');
+  const tabs = page.getByRole('navigation', { name: 'Open items' });
+  await expect(tabs.getByRole('link')).toHaveCount(2);
+  await expect(tabs.getByRole('link', { name: 'Untitled presentation' })).toHaveAttribute('aria-current', 'page');
+  await page.reload();
+  await expect(tabs.getByRole('link')).toHaveCount(2);
+  await page.keyboard.press('Control+Alt+ArrowLeft');
+  await expect(page).toHaveURL(new RegExp(`#/documents/${doc}$`));
+  await expect(tabs.getByRole('link', { name: 'Assignment' })).toHaveAttribute('aria-current', 'page');
+  await tabs.getByRole('link', { name: 'Untitled presentation' }).click();
+  await expect(page).toHaveURL(new RegExp(`#/presentations/${presentation}$`));
+  await expect(page.getByRole('listbox', { name: 'Slides' })).toBeVisible();
 });
 
 // The current tab must stay in view once the other tabs' names have loaded (they widen the strip after it first shows).

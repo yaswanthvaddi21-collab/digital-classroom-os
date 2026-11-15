@@ -76,11 +76,12 @@ test('when another tab upgrades the database, open work is saved and editing sto
   await page.locator('.ProseMirror').getByText('Begin your answer here.', { exact: false }).click();
   await page.keyboard.type('Typed just before the upgrade. ');
 
-  // What a newer build does in another tab: open the same database at a higher version.
+  // What a newer build does in another tab: open the same database at a higher version (this build's is 3 since
+  // Phase 7, so the "newer build" opens it at 4).
   await page.evaluate(
     () =>
       new Promise<void>((resolve, reject) => {
-        const req = indexedDB.open('digital-classroom-os', 3);
+        const req = indexedDB.open('digital-classroom-os', 4);
         req.onsuccess = () => {
           req.result.close();
           resolve();

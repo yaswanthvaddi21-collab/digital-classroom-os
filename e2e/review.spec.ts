@@ -162,7 +162,8 @@ test('find has Match case and Whole words; the word count dialog counts the docu
 
   await selectWord(page, 'Begin your answer here.', 'Begin your answer');
   await review.getByRole('button', { name: 'Word count' }).click();
-  const list = page.getByLabel('Word count', { exact: true });
+  // (The dialog is named by its title since Phase 7 Round 3, so the counts list is found inside it.)
+  const list = page.getByRole('dialog', { name: 'Word count' }).getByLabel('Word count', { exact: true });
   await expect(list.getByLabel('Words in the selection')).toHaveText('3');
   await expect(list.getByLabel('Characters in the selection')).toHaveText('17');
   await expect(list.getByLabel('Paragraphs in the selection')).toHaveText('1');

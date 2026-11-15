@@ -219,7 +219,7 @@ function describe(view: ListView): { noun: string; icon: ReactNode; emptyTitle: 
       return { noun: m.plural.toLowerCase(), icon: <Icon size={20} />, emptyTitle: `No ${m.plural.toLowerCase()} yet`, emptyText: `Create a ${m.label.toLowerCase()} from a template or start blank.` };
     }
     case 'files':
-      return { noun: 'all files', icon: <FolderOpen size={20} />, emptyTitle: 'No files yet', emptyText: 'Documents and diagrams you create appear here.' };
+      return { noun: 'all files', icon: <FolderOpen size={20} />, emptyTitle: 'No files yet', emptyText: 'Documents, diagrams and presentations you create appear here.' };
     case 'recent':
       return { noun: 'recent files', icon: <Clock size={20} />, emptyTitle: 'Nothing recent', emptyText: 'Files you edit appear here, newest first.', hint: `The ${RECENT_LIMIT} most recently edited files.` };
     case 'favorites':
@@ -229,7 +229,7 @@ function describe(view: ListView): { noun: string; icon: ReactNode; emptyTitle: 
         noun: 'trash',
         icon: <Trash2 size={20} />,
         emptyTitle: 'Trash is empty',
-        emptyText: 'Deleted documents and diagrams will appear here.',
+        emptyText: 'Deleted documents, diagrams and presentations will appear here.',
         hint: 'Items in the trash can be restored. Deleting forever removes the item and its version history.',
       };
   }

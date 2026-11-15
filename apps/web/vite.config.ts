@@ -26,7 +26,7 @@ export default defineConfig({
       manifest: {
         name: 'Digital Classroom OS',
         short_name: 'Classroom OS',
-        description: 'Offline-first documents, diagrams and classroom tools.',
+        description: 'Offline-first documents, diagrams, presentations and classroom tools.',
         theme_color: '#4f46e5',
         background_color: '#f7f7f8',
         display: 'standalone',
@@ -34,6 +34,8 @@ export default defineConfig({
         icons: [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }],
       },
       workbox: {
+        // Phase 7 EXPORT: PptxGenJS is its own lazily loaded chunk (pptxgen.es-*.js, about 273 kB, 95 kB gzip), precached
+        // like the other chunks for offline export; well under the per-file limit below (checked with a build, 2026-11-14).
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         navigateFallback: 'index.html',

@@ -1,8 +1,8 @@
 # Digital Classroom OS
 
-Offline-first academic workspace: documents and diagrams today, with notebooks, assignments and classroom sharing to follow. Everything is saved on the device and works without internet.
+Offline-first academic workspace: documents, diagrams and presentations today, with notebooks, assignments and classroom sharing to follow. Everything is saved on the device and works without internet.
 
-**Status:** Phase 0 (foundation) and the Phase 1 Document Studio and Diagram Studio foundations are built. Release 0.2 added data-safety fixes, automated browser tests, editable diagrams inside documents, diagrams.net import/export and draw.io-style quick connect. Phases 2–4 of v0.2.0 added Git and backup safety, storage hardening, and the Document Studio features below; Phase 5 (in progress, not yet committed) adds the Diagram Studio features below. See [tests/acceptance/CHECKLIST.md](tests/acceptance/CHECKLIST.md).
+**Status:** Phase 0 (foundation) and the Phase 1 Document Studio and Diagram Studio foundations are built. Release 0.2 added data-safety fixes, automated browser tests, editable diagrams inside documents, diagrams.net import/export and draw.io-style quick connect. Phases 2–4 of v0.2.0 added Git and backup safety, storage hardening, and the Document Studio features below; Phase 5 added the Diagram Studio features below and Phase 6 document and diagram integration; Phase 7 (in the working tree, not yet committed or deployed) adds Presentation Studio. The public GitHub repository and its GitHub Pages deployment exist since 2026-11-15 and serve the Phase 6 app (`468ab89`, [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). See [tests/acceptance/CHECKLIST.md](tests/acceptance/CHECKLIST.md).
 
 ## Run it
 
@@ -22,7 +22,7 @@ Other commands: `npm test`, `npm run test:e2e` (Playwright), `npm run typecheck`
 - *Advanced mode adds:* fonts and custom font sizes, sub/superscript, paragraph spacing and indents with a Paragraph dialog and a ruler, bullet glyphs and number formats, equations (LaTeX with a live preview), shapes, text boxes, page breaks, a live table of contents; the Layout tab (A3, A4, A5, Letter, Legal; orientation; margins; section breaks with their own orientation, columns and page numbering; header and footer in left/centre/right parts with a different first page; page number format, start and position); and the Review tab (comments with replies and resolve, under the name set in Settings; find & replace with match case and whole words; word count; spell check that is remembered; document language).
 - *Diagram tab:* insert an editable diagram (from a template, from My Diagrams or from a diagrams.net file). Double-click to edit it, resize with the aspect ratio kept, download it as PNG or .drawio.
 - Export to **DOCX**, **ODT**, **PDF** (print → Save as PDF, real text) and **TXT**; import **DOCX** and **ODT** files as new documents. Anything an export writes approximately (for example shapes as pictures in DOCX) or an import leaves out is reported. Exported DOCX files were opened in Apple Pages (16 samples) and Word for Mac (2 of 16); LibreOffice is untested. Results and known differences: [docs/DOCUMENT_COMPATIBILITY.md](docs/DOCUMENT_COMPATIBILITY.md) §8.
-- Open documents and diagrams appear as tabs above the editor.
+- Open documents, diagrams and presentations appear as tabs above the editor.
 
 **Diagram Studio**: flowcharts, trees, mind maps (tree or radial; Arrange also lays a mind map out radially or on two sides), org charts, hierarchy, process, timeline, Venn, network, BPMN, UML class, sequence, activity, state and use case, and ER templates.
 - Shape library with categories and search: basic, UML, ER, BPMN (pools and lanes that hold their shapes, events, tasks, gateways, data) and original network icons; connector notations for BPMN and UML.
@@ -31,6 +31,8 @@ Other commands: `npm test`, `npm run test:e2e` (Playwright), `npm run typecheck`
 - Quick connect like diagrams.net: blue arrows around the selected shape add a connected shape (click), connect to another shape (drag) or pick a shape from a palette (hover, long press, or arrow keys); Alt+Shift+Arrow from the keyboard. Touch is tested in mobile Chromium only.
 - Undo/redo, duplicate, Tab/Enter to grow trees with auto-arrange, timeline "Add event".
 - Export to **PNG** (1×–3×, transparent or white), vector **SVG**, vector **PDF** with real text (page size, fit or tile), **diagrams.net (.drawio)** and the app's own **.dcosdiagram** file; import .drawio and .dcosdiagram files as new diagrams. What an export or import leaves out or changes is named in a message; known approximations (for example label fonts in SVG and PDF) are listed in [docs/DIAGRAM_EXPORTS.md](docs/DIAGRAM_EXPORTS.md). Rotation, opacity, fonts, alignment and pictures are kept from imported files but cannot be set in the editor. Exported .drawio files have not yet been opened in diagrams.net itself, and import was tested only with hand-written sample files, not files saved by diagrams.net.
+
+**Presentation Studio** (Phase 7, not yet committed or deployed): five templates, themes, 16:9 and 4:3 slides, backgrounds, layouts and a master view; text, pictures, shapes, tables, charts and diagrams with smart guides and speaker notes; a slide show with transitions, entrance animations and a presenter view; export to **PowerPoint (.pptx)** and vector **PDF** (with or without speaker notes), with approximations named in a message. The exports have not been opened in PowerPoint, Keynote or LibreOffice yet; samples: [docs/compatibility/phase7-2026-11-15/](docs/compatibility/phase7-2026-11-15/README.md). See [packages/presentation-studio/README.md](packages/presentation-studio/README.md).
 
 **Workspace**: dashboard, file lists with search and sort, favourites, trash with restore, version history (Ctrl/⌘+S saves a version), conflict-safe autosave with retries and recovered drafts, safety copies before database upgrades, backup export/restore (idempotent, never overwrites newer work), light/dark/system theme, phone layout, and an installable PWA that works offline.
 
@@ -44,6 +46,7 @@ packages/ui                 design system
 packages/local-storage      StorageAdapter + IndexedDB
 packages/document-studio    Tiptap editor + exporters
 packages/diagram-studio     React Flow editor, shape library, vector exporters, .drawio/.dcosdiagram
+packages/presentation-studio  slide editor, slide show and presenter view, PPTX/PDF exporters
 packages/<others>           later-phase modules (placeholders)
 backend/            FastAPI classroom host (Phase 3)
 docs/               PRD, architecture, database, API, security, testing, deployment, dependencies

@@ -24,7 +24,7 @@ export async function readStore<T = Record<string, unknown>>(page: Page, store: 
 export async function createFromQuickStart(page: Page, label: string) {
   await page.goto('./#/');
   await page.getByRole('button', { name: label, exact: true }).click();
-  await expect(page).toHaveURL(/#\/(documents|diagrams)\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/#\/(documents|diagrams|presentations)\/[0-9a-f-]{36}$/);
   return page.url().split('/').pop()!;
 }
 

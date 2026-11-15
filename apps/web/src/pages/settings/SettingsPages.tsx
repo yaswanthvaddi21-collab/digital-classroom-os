@@ -55,7 +55,7 @@ export function GeneralSettings() {
 
 export function AppearanceSettings() {
   return (
-    <Section title="Theme" description="Choose light, dark, or follow your device setting. Documents and diagrams always print on white paper.">
+    <Section title="Theme" description="Choose light, dark, or follow your device setting. Documents and diagrams always print on white paper. Slides always keep their own backgrounds.">
       <ThemeSwitcher />
     </Section>
   );
@@ -194,7 +194,7 @@ export function StorageSettings() {
 
       <Section
         title="Free up space"
-        description="Removes stored images that no document, diagram, saved version or draft uses any more. Images used in the last day are kept, in case a page that is still open needs them."
+        description="Removes stored images that no document, diagram, presentation, saved version or draft uses any more. Images used in the last day are kept, in case a page that is still open needs them."
       >
         <div className="flex flex-col items-start gap-2 md:items-end">
           <Button size="sm" icon={<Eraser size={14} />} disabled={cleaning} onClick={() => void freeUpSpace()}>
@@ -270,7 +270,7 @@ export function BackupSettings() {
         title="Back up everything"
         description={
           <>
-            Saves every document, diagram and version on this device into one file. Keep it somewhere else, like a USB drive or cloud folder.
+            Saves every document, diagram, presentation and version on this device into one file. Keep it somewhere else, like a USB drive or cloud folder.
             <div className="mt-2 text-xs">{safety.lastBackupAt ? `Last backup exported ${relativeTime(safety.lastBackupAt)}.` : 'No backup has been exported on this device yet.'}</div>
           </>
         }
@@ -311,7 +311,7 @@ const SHORTCUTS: Array<{ area: string; items: Array<[string, string]> }> = [
       [`${mod} Z`, 'Undo'],
       [`${mod} Shift Z`, 'Redo'],
       // G-FILES: the open-items tabs above the editor (Control+Option on a Mac, where ⌘+Option switches browser tabs).
-      [mod === '⌘' ? 'Control Option → / ←' : 'Ctrl Alt → / ←', 'Next / previous open document or diagram'],
+      [mod === '⌘' ? 'Control Option → / ←' : 'Ctrl Alt → / ←', 'Next / previous open document, diagram or presentation'],
     ],
   },
   {
@@ -339,6 +339,50 @@ const SHORTCUTS: Array<{ area: string; items: Array<[string, string]> }> = [
       [`${mod} D`, 'Duplicate'],
       [`${mod} C / ${mod} V`, 'Copy / paste'],
       [`${mod} A`, 'Select all shapes'],
+    ],
+  },
+  {
+    area: 'Presentations (in the slide list)',
+    items: [
+      ['↑ / ↓', 'Previous / next slide (← / → on a phone)'],
+      ['Home / End', 'First / last slide'],
+      ['Shift ↑ / ↓', 'Select more slides'],
+      ['Alt ↑ / ↓', 'Move the selected slides up / down'],
+      [`${mod} D`, 'Duplicate the selected slides'],
+      ['Delete', 'Delete the selected slides'],
+      ['Shift F10', 'Slide menu (move, hide, duplicate, play from this slide…)'],
+      ['F5 / Shift F5', 'Slide show from the beginning / from the current slide'],
+      ['Alt F5', 'Slide show with the presenter view'],
+    ],
+  },
+  {
+    // Phase 7 SHOW: the slide show and the presenter window (packages/presentation-studio/src/show/keys.ts).
+    area: 'Presentations (during the slide show)',
+    items: [
+      ['→ ↓ Space Page Down N, or click', 'Next animation or slide'],
+      ['← ↑ Page Up Backspace P', 'Previous animation or slide'],
+      ['Home / End', 'First / last slide'],
+      ['Number, then Enter', 'Go to that slide'],
+      ['B or .', 'Black screen (press again to come back)'],
+      ['W or ,', 'White screen (press again to come back)'],
+      ['F', 'Full screen on or off'],
+      ['Escape', 'End the slide show'],
+      ['Swipe left / right, or tap', 'Next / previous on a touch screen (a tap on the left third goes back)'],
+      ['Reduced motion', 'With “reduce motion” on in your system settings, transitions and animations play as cuts'],
+    ],
+  },
+  {
+    area: 'Presentations (on the slide)',
+    items: [
+      ['Tab / Shift Tab', 'Next / previous object'],
+      ['Arrow keys', 'Move the selection (Shift: 10 pixels)'],
+      ['Enter or F2', 'Edit the text of the selected text box'],
+      ['Escape', 'Stop editing the text, then clear the selection'],
+      [`${mod} C / X / V`, 'Copy / cut / paste objects, also to another slide or presentation'],
+      [`${mod} D`, 'Duplicate'],
+      [`${mod} ] / [`, 'Bring forward / send backward (with Shift: to front / to back)'],
+      ['Shift while dragging', 'Move in a straight line, keep proportions, or turn in 15° steps'],
+      ['Alt while dragging', 'Move or resize without snapping to the guides'],
     ],
   },
 ];
@@ -369,9 +413,9 @@ export function AboutSettings() {
   return (
     <Card className="p-5 text-sm">
       <h3 className="font-semibold">Digital Classroom OS</h3>
-      <p className="mt-1 text-muted">Version {__APP_VERSION__}. Offline-first documents and diagrams. Everything you make is stored on this device.</p>
+      <p className="mt-1 text-muted">Version {__APP_VERSION__}. Offline-first documents, diagrams and presentations. Everything you make is stored on this device.</p>
       <p className="mt-3 text-muted">
-        Built with free and open-source software, including React, Tiptap and ProseMirror, React Flow, docx and jsPDF (all MIT-licensed) and the Inter
+        Built with free and open-source software, including React, Tiptap and ProseMirror, React Flow, docx, jsPDF and PptxGenJS (all MIT-licensed) and the Inter
         typeface (SIL Open Font License). The full list of components and licences is in the project's third-party notices.
       </p>
     </Card>

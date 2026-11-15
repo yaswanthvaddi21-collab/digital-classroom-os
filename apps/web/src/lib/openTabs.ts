@@ -1,8 +1,8 @@
-import type { ItemKind } from '@dcos/local-storage';
+import { ITEM_KINDS, type ItemKind } from '@dcos/local-storage';
 import { useSyncExternalStore } from 'react';
 
 /**
- * The open items (documents and diagrams) shown as tabs above the editor. Kept per device in localStorage, like
+ * The open items (documents, diagrams and presentations) shown as tabs above the editor. Kept per device in localStorage, like
  * preferences; never part of the items themselves. The order is the order they were opened in.
  */
 export interface OpenTab {
@@ -14,7 +14,8 @@ const KEY = 'dcos.openTabs';
 /** At most this many tabs: opening another closes the one used least recently (never the current one). */
 export const MAX_OPEN_TABS = 12;
 const listeners = new Set<() => void>();
-const KINDS: readonly string[] = ['document', 'diagram'];
+/** Every kind the app knows (a tab of a kind from a newer version is dropped, as before). */
+const KINDS: readonly string[] = ITEM_KINDS;
 
 function read(): OpenTab[] {
   try {

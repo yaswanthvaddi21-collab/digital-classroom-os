@@ -10,7 +10,10 @@ import { createFromQuickStart, downloadBytes, readStore, waitSaved } from './hel
 
 type Item = { id: string; kind: string; title: string; content: unknown; favorite: boolean; deletedAt: string | null; restoredFrom?: unknown };
 type Version = { id: string; itemId: string; reason: string };
-type Dump = Record<'documents' | 'diagrams' | 'document_versions' | 'diagram_versions' | 'item_index' | 'attachments', Array<Record<string, unknown>>>;
+type Dump = Record<
+  'documents' | 'diagrams' | 'presentations' | 'document_versions' | 'diagram_versions' | 'presentation_versions' | 'item_index' | 'attachments',
+  Array<Record<string, unknown>>
+>;
 
 /** A small valid PNG (solid colour), built here so the test needs no binary fixture. */
 function makePng(width: number, height: number, rgb: [number, number, number]) {
@@ -36,7 +39,8 @@ async function dump(page: Page): Promise<Dump> {
   return page.evaluate(
     () =>
       new Promise<Dump>((resolve, reject) => {
-        const names = ['documents', 'diagrams', 'document_versions', 'diagram_versions', 'item_index', 'attachments'] as const;
+        // Phase 7: database version 3 adds the presentation stores.
+        const names = ['documents', 'diagrams', 'presentations', 'document_versions', 'diagram_versions', 'presentation_versions', 'item_index', 'attachments'] as const;
         const open = indexedDB.open('digital-classroom-os');
         open.onerror = () => reject(open.error);
         open.onsuccess = () => {
@@ -148,6 +152,11 @@ test('a backup exported in one browser profile restores completely into an empty
     .poll(async () => JSON.stringify((await readStore<Item>(page, 'diagrams')).find((d) => d.id === diagramId)?.content), { timeout: 10_000 })
     .toContain('Print the odd number');
 
+  // A presentation (Phase 7): created from quick start, shown read-only from its stored slides.
+  const presentationId = await createFromQuickStart(page, 'Blank presentation');
+  await expect(page.getByRole('listbox', { name: 'Slides' }).getByRole('option')).toHaveCount(1);
+  await expect.poll(async () => (await readStore<Item>(page, 'presentations')).map((p) => p.id)).toEqual([presentationId]);
+
   // One item to the trash, one favourite.
   const trashedId = await createFromQuickStart(page, 'Lab report');
   await waitSaved(page);
@@ -168,17 +177,18 @@ test('a backup exported in one browser profile restores completely into an empty
   // ── Export from Settings ───────────────────────────────────────────────────────────────────
   await page.goto('./#/settings/backup');
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export backup' }).click()]);
-  await expect(page.getByText(/Backup exported: 3 items, \d+ versions\. Check that your browser saved the file\./)).toBeVisible();
+  await expect(page.getByText(/Backup exported: 4 items, \d+ versions\. Check that your browser saved the file\./)).toBeVisible();
   // The app records the export, not a confirmed saved file (STOR-R9).
   await expect(page.getByText('Last backup exported just now.')).toBeVisible();
   const bytes = await downloadBytes(download);
   const backup = JSON.parse(bytes.toString('utf8'));
   expect(backup).toMatchObject({ format: 'dcos-backup', formatVersion: 2, schemaVersion: 2 });
-  expect(backup.items).toHaveLength(original.documents.length + original.diagrams.length);
-  expect(backup.versions).toHaveLength(original.document_versions.length + original.diagram_versions.length);
+  expect(original.presentations).toHaveLength(1);
+  expect(backup.items).toHaveLength(original.documents.length + original.diagrams.length + original.presentations.length);
+  expect(backup.versions).toHaveLength(original.document_versions.length + original.diagram_versions.length + original.presentation_versions.length);
   expect(backup.attachments).toHaveLength(original.attachments.length);
   const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
-  expect([...backup.items].sort(byId)).toEqual([...original.documents, ...original.diagrams].sort(byId as never));
+  expect([...backup.items].sort(byId)).toEqual([...original.documents, ...original.diagrams, ...original.presentations].sort(byId as never));
 
   // ── Profile 2: an empty browser profile ────────────────────────────────────────────────────
   const fresh = await browser.newContext({ baseURL, viewport: page.viewportSize() });
@@ -190,7 +200,7 @@ test('a backup exported in one browser profile restores completely into an empty
     await restoreFile(page2, download.suggestedFilename(), bytes);
     // The Restore section describes what the rest of this test proves (STOR-R6).
     await expect(page2.getByText('If you have changed an item since the backup was made, the backed-up version is added once')).toBeVisible();
-    await expect(page2.getByText('Backup restored: 3 added, 0 already present')).toBeVisible();
+    await expect(page2.getByText('Backup restored: 4 added, 0 already present')).toBeVisible();
     const restored = await dump(page2);
     // Every item, title, content, favourite and trash state, version and attachment, exactly as in profile 1.
     expect(restored).toEqual(original);
@@ -214,9 +224,13 @@ test('a backup exported in one browser profile restores completely into an empty
     await expect(page2.locator('.react-flow__node', { hasText: 'Print the odd number' })).toBeVisible();
     await expect(page2.locator('.react-flow__node')).toHaveCount(6);
 
+    // The presentation opens with its slide.
+    await page2.goto(`./#/presentations/${presentationId}`);
+    await expect(page2.getByRole('listbox', { name: 'Slides' }).getByRole('option')).toHaveCount(1);
+
     // ── Restoring the same file again adds nothing ───────────────────────────────────────────
     await restoreFile(page2, 'again.json', bytes);
-    await expect(page2.getByText('Backup restored: 0 added, 3 already present')).toBeVisible();
+    await expect(page2.getByText('Backup restored: 0 added, 4 already present')).toBeVisible();
     expect(await dump(page2)).toEqual(original);
 
     // ── After a local edit, the backed-up version comes back once, as a separate copy ─────────
@@ -232,7 +246,7 @@ test('a backup exported in one browser profile restores completely into an empty
     const editedDoc = edited.documents.find((d) => d.id === docId)!;
 
     await restoreFile(page2, 'after-edit.json', bytes);
-    await expect(page2.getByText('Backup restored: 0 added, 2 already present, 1 restored as copies (your current versions were kept)')).toBeVisible();
+    await expect(page2.getByText('Backup restored: 0 added, 3 already present, 1 restored as copies (your current versions were kept)')).toBeVisible();
     const withCopy = await dump(page2);
     expect(withCopy.documents).toHaveLength(edited.documents.length + 1);
     expect(withCopy.documents.find((d) => d.id === docId)).toEqual(editedDoc);
@@ -254,7 +268,7 @@ test('a backup exported in one browser profile restores completely into an empty
 
     // And only once: restoring yet again adds nothing more.
     await restoreFile(page2, 'once-more.json', bytes);
-    await expect(page2.getByText('Backup restored: 0 added, 3 already present')).toBeVisible();
+    await expect(page2.getByText('Backup restored: 0 added, 4 already present')).toBeVisible();
     expect(await dump(page2)).toEqual(withCopy);
 
     // ── Broken or newer files are refused with a reason, and change nothing ──────────────────

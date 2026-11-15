@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import {
   forwardRef,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -162,9 +163,14 @@ export function Dialog({ open, onClose, title, description, children, footer, si
     if (!open && el.open) el.close();
   }, [open]);
   const widths = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl' };
+  // Named by its title (and described by its description), so assistive technology announces what opened (Round 3).
+  const titleId = useId();
+  const descriptionId = useId();
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
       onClose={onClose}
       onClick={(e) => e.target === ref.current && onClose()}
       className={cn('m-auto w-[calc(100%-2rem)] rounded-2xl border border-border bg-surface p-0 text-fg shadow-2xl backdrop:bg-black/40 backdrop:backdrop-blur-[2px]', widths[size])}
@@ -173,8 +179,14 @@ export function Dialog({ open, onClose, title, description, children, footer, si
         <div className="flex max-h-[85vh] flex-col">
           <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
             <div>
-              <h2 className="text-base font-semibold">{title}</h2>
-              {description && <p className="mt-0.5 text-sm text-muted">{description}</p>}
+              <h2 id={titleId} className="text-base font-semibold">
+                {title}
+              </h2>
+              {description && (
+                <p id={descriptionId} className="mt-0.5 text-sm text-muted">
+                  {description}
+                </p>
+              )}
             </div>
             <IconButton label="Close" onClick={onClose}>
               <X size={16} />
@@ -197,41 +209,77 @@ export interface MenuItem {
   hint?: string;
 }
 
-/** Small dropdown menu. Closes on outside click, Esc, or selection. */
 /**
  * Places a dropdown under its trigger using viewport coordinates, so scrolling toolbars (overflow: auto) cannot
- * clip it. Closes when anything scrolls or the window resizes, since the anchor has moved.
+ * clip it. When something scrolls, the dropdown follows its trigger (a phone's ribbon may scroll as a menu opens),
+ * and closes once the trigger has left the screen; a window resize closes it.
+ *
+ * Given the dropdown element (`dropdown`), it also keeps the dropdown on screen (Phase 7 Round 3, menu-height): it is
+ * capped to the room below the trigger and scrolls inside itself, or, when it does not fit below and there is more
+ * room above, it opens above the trigger instead. A dropdown that fits below looks exactly as before.
  */
-export function useAnchoredDropdown(open: boolean, setOpen: (open: boolean) => void, anchor: React.RefObject<HTMLElement | null>, align: 'start' | 'end') {
+export function useAnchoredDropdown(
+  open: boolean,
+  setOpen: (open: boolean) => void,
+  anchor: React.RefObject<HTMLElement | null>,
+  align: 'start' | 'end',
+  dropdown?: React.RefObject<HTMLElement | null>,
+) {
   // Fixed and hidden from the first render: an in-flow dropdown would stretch the anchor we are about to measure.
   const hidden: React.CSSProperties = { position: 'fixed', top: 0, left: 0, visibility: 'hidden' };
   const [style, setStyle] = useState<React.CSSProperties>(hidden);
+  const GAP = 4;
+  const MARGIN = 8;
+  const vertical = (r: DOMRect): React.CSSProperties => {
+    const el = dropdown?.current;
+    if (!el) return { top: r.bottom + GAP };
+    // Its full height, whatever cap it has now (scrollHeight ignores max-height; the rest is its border).
+    const natural = el.scrollHeight + (el.offsetHeight - el.clientHeight);
+    const below = window.innerHeight - r.bottom - GAP - MARGIN;
+    const above = r.top - GAP - MARGIN;
+    if (natural <= below || below >= above) return { top: r.bottom + GAP, maxHeight: Math.max(below, 80), overflowY: 'auto' };
+    return { top: r.top - GAP - Math.min(natural, above), maxHeight: above, overflowY: 'auto' };
+  };
+  const place = (r: DOMRect): React.CSSProperties =>
+    align === 'end'
+      ? { position: 'fixed', ...vertical(r), right: Math.max(8, window.innerWidth - r.right) }
+      : { position: 'fixed', ...vertical(r), left: Math.max(8, Math.min(r.left, window.innerWidth - 220)) };
+  const same = (a: React.CSSProperties, b: React.CSSProperties) => {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof React.CSSProperties>;
+    return [...keys].every((k) => a[k] === b[k]);
+  };
   useLayoutEffect(() => {
     if (!open) setStyle(hidden);
     if (!open || !anchor.current) return;
-    const r = anchor.current.getBoundingClientRect();
-    setStyle(
-      align === 'end'
-        ? { position: 'fixed', top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) }
-        : { position: 'fixed', top: r.bottom + 4, left: Math.max(8, Math.min(r.left, window.innerWidth - 220)) },
-    );
+    setStyle(place(anchor.current.getBoundingClientRect()));
   }, [open, anchor, align]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!open) return;
-    const close = (e: Event) => {
-      if (e.type === 'scroll' && anchor.current && (e.target as Node)?.contains?.(anchor.current) === false) return;
-      setOpen(false);
+    const onResize = () => setOpen(false);
+    const onScroll = (e: Event) => {
+      const a = anchor.current;
+      if (!a || !a.isConnected) return setOpen(false);
+      // A scroll that cannot have moved the trigger (inside the dropdown itself, say) changes nothing.
+      if ((e.target as Node)?.contains?.(a) === false) return;
+      const r = a.getBoundingClientRect();
+      const onScreen = r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
+      if (!onScreen) return setOpen(false);
+      setStyle((s) => {
+        const next = place(r);
+        return same(s, next) ? s : next;
+      });
     };
-    window.addEventListener('resize', close);
-    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('scroll', onScroll, true);
     return () => {
-      window.removeEventListener('resize', close);
-      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('scroll', onScroll, true);
     };
-  }, [open, setOpen, anchor]);
+  }, [open, setOpen, anchor]); // eslint-disable-line react-hooks/exhaustive-deps
   return style;
 }
 
+/** Small dropdown menu. Closes on outside click, Esc, or selection. */
 export function Menu({ trigger, items, align = 'start' }: { trigger: (props: { onClick: () => void; 'aria-expanded': boolean }) => ReactNode; items: MenuItem[]; align?: 'start' | 'end' }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -253,19 +301,35 @@ export function Menu({ trigger, items, align = 'start' }: { trigger: (props: { o
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
-    enabled()[0]?.focus({ preventScroll: true });
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+  const position = useAnchoredDropdown(open, setOpen, ref, align, list);
+  // A long menu scrolls inside itself (see useAnchoredDropdown), so the item that takes focus is scrolled into view
+  // within the menu only: preventScroll keeps the page and the ribbon still, which would otherwise close the menu.
+  const focusItem = (el: HTMLButtonElement | undefined) => {
+    const box = list.current;
+    if (!el || !box) return;
+    el.focus({ preventScroll: true });
+    const pad = 4; // the menu's own padding (p-1), so the first and last items keep their margin
+    if (el.offsetTop - pad < box.scrollTop) box.scrollTop = Math.max(0, el.offsetTop - pad);
+    else if (el.offsetTop + el.offsetHeight + pad > box.scrollTop + box.clientHeight) box.scrollTop = el.offsetTop + el.offsetHeight + pad - box.clientHeight;
+  };
+  // Focus goes to the first item once the menu is placed: browsers ignore focus() on an element that is still
+  // visibility: hidden (the dropdown's first, unplaced render), which left keyboard users on the trigger (Round 3).
+  const placed = open && position.visibility !== 'hidden';
+  useEffect(() => {
+    if (placed) focusItem(enabled()[0]);
+  }, [placed]); // eslint-disable-line react-hooks/exhaustive-deps
   const onMenuKey = (e: ReactKeyboardEvent) => {
     const all = enabled();
     if (!all.length) return;
     const at = all.indexOf(document.activeElement as HTMLButtonElement);
     const go = (i: number) => {
       e.preventDefault();
-      all[(i + all.length) % all.length].focus({ preventScroll: true });
+      focusItem(all[(i + all.length) % all.length]);
     };
     if (e.key === 'ArrowDown') go(at + 1);
     else if (e.key === 'ArrowUp') go(at < 0 ? all.length - 1 : at - 1);
@@ -273,7 +337,6 @@ export function Menu({ trigger, items, align = 'start' }: { trigger: (props: { o
     else if (e.key === 'End') go(all.length - 1);
     else if (e.key === 'Tab') setOpen(false);
   };
-  const position = useAnchoredDropdown(open, setOpen, ref, align);
   return (
     <div ref={ref} className="relative inline-block">
       {trigger({ onClick: () => setOpen((o) => !o), 'aria-expanded': open })}

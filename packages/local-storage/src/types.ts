@@ -1,7 +1,10 @@
-/** Kinds of workspace items persisted by the local store. Each kind has its own store and version store. */
-export type ItemKind = 'document' | 'diagram';
+/**
+ * Kinds of workspace items persisted by the local store. Each kind has its own store and version store.
+ * 'presentation' arrived with database version 3 (Phase 7, ADR 0014). New kinds are appended, never reordered.
+ */
+export type ItemKind = 'document' | 'diagram' | 'presentation';
 
-export const ITEM_KINDS: readonly ItemKind[] = ['document', 'diagram'];
+export const ITEM_KINDS: readonly ItemKind[] = ['document', 'diagram', 'presentation'];
 
 export interface WorkspaceItem<C = unknown> {
   id: string;
@@ -214,7 +217,11 @@ export type UpgradeStatus =
   | { state: 'copying'; fromVersion: number }
   | { state: 'opening' }
   | { state: 'ready' }
-  | { state: 'failed'; message: string }
+  /**
+   * The database could not be opened. `newerData` is set when it was made by a newer version of the app (IndexedDB
+   * VersionError): nothing was read or changed, and only a newer version can open it.
+   */
+  | { state: 'failed'; message: string; newerData?: boolean }
   /** The upgrade did not happen; `step` says whether the copy or the upgrade itself failed. Nothing was changed. */
   | { state: 'needs-backup'; step: 'copy' | 'upgrade'; fromVersion: number; reason: 'quota' | 'error'; message: string };
 

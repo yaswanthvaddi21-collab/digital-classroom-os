@@ -27,8 +27,8 @@ export interface NavSection {
 }
 
 /**
- * The sidebar. Only working destinations appear here; a module gets its entry the day it works.
- * (Presentations, Notebook, PDF Studio and the Academic section arrive with Releases 0.5 and 0.7.)
+ * The sidebar. Only working destinations appear here; a module gets its entry the day it works (every module in
+ * MODULE_LIST has one). Modules that do not exist yet have no entry.
  */
 export const NAV: NavSection[] = [
   {

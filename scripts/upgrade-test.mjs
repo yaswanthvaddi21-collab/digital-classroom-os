@@ -17,6 +17,12 @@
  *    re-import into a fresh profile.
  * 5. Observes going back to v0.1.0 on the same origin (downgrade) and then forward again, and checks that no
  *    data was damaged.
+ * 6. Phase 7 (ADR 0014): builds the Phase 6 app (git 650cf63, database version 2) the same way, creates Phase 6 data
+ *    through its UI in a fresh profile (a document with an embedded diagram, so a stored preview attachment, and a
+ *    manual version; an edited diagram; a kept draft and an attachment alias written the way Phase 6 writes them),
+ *    upgrades it with the current build (database version 3: nothing changed, the two presentation stores added, a
+ *    verified "-backup-v2" safety copy), adds a presentation, and then goes back to the Phase 6 build: it cannot open
+ *    the database (VersionError) and no database changes.
  *
  * Exits non-zero when any check fails. Never touches the real browser profile or the dev server on :5173.
  *
@@ -39,6 +45,8 @@ import { deflateSync } from 'node:zlib';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TAG = 'v0.1.0-baseline';
+/** The Phase 6 commit (database version 2), the last build before presentations. */
+const PHASE6_REF = '650cf63';
 const CACHE = resolve(process.env.UPGRADE_TEST_CACHE || join(tmpdir(), 'dcos-upgrade-test'));
 const PORT = Number(process.env.UPGRADE_TEST_PORT || 4180);
 const ORIGIN = `http://127.0.0.1:${PORT}`;
@@ -49,6 +57,12 @@ const SAFETY_COPY = `${DB}-backup-v1`;
 const V1_STORES = ['documents', 'diagrams', 'document_versions', 'diagram_versions', 'meta'];
 const ITEM_STORES = ['documents', 'diagrams', 'document_versions', 'diagram_versions'];
 const PNG = makePng(24, 16);
+/** The database version the current build upgrades to, read from its source so this test follows it. */
+const SCHEMA_VERSION = Number(/export const SCHEMA_VERSION = (\d+);/.exec(readFileSync(join(ROOT, 'packages/local-storage/src/indexeddb.ts'), 'utf8'))?.[1]);
+if (!Number.isInteger(SCHEMA_VERSION)) throw new Error('Could not read SCHEMA_VERSION from packages/local-storage/src/indexeddb.ts');
+/** Every item and version store of the current build (Phase 7 adds the presentation stores). */
+const CURRENT_ITEM_STORES = ['documents', 'diagrams', 'presentations'];
+const CURRENT_VERSION_STORES = ['document_versions', 'diagram_versions', 'presentation_versions'];
 
 /** A small solid-colour PNG, encoded here so the test needs no image files. */
 function makePng(width, height) {
@@ -111,15 +125,20 @@ async function attempt(name, fn) {
 const sh = (cmd, args, cwd = ROOT) => execFileSync(cmd, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
 const shLoud = (cmd, args, cwd) => execFileSync(cmd, args, { cwd, stdio: 'inherit' });
 
-function buildV010() {
-  const commit = sh('git', ['rev-parse', `${TAG}^{commit}`]);
-  const dist = join(CACHE, 'v0.1.0-dist');
-  const stampFile = join(CACHE, 'v0.1.0-dist.commit');
+const buildV010 = () => buildBaseline(TAG, 'v0.1.0', 'v0.1.0-dist', 'v010');
+const buildPhase6 = () => buildBaseline(PHASE6_REF, 'Phase 6', 'phase6-dist', 'phase6');
+
+/** Builds an older version from git in a temporary worktree (cached by commit), as a user had it. */
+function buildBaseline(ref, label, distName, srcName) {
+  const TAG = ref;
+  const commit = sh('git', ['rev-parse', `${ref}^{commit}`]);
+  const dist = join(CACHE, distName);
+  const stampFile = join(CACHE, `${distName}.commit`);
   if (existsSync(join(dist, 'index.html')) && existsSync(stampFile) && readFileSync(stampFile, 'utf8').trim() === commit) {
-    log(`v0.1.0 build reused from ${dist}`);
+    log(`${label} build reused from ${dist}`);
     return dist;
   }
-  const src = join(CACHE, 'v010');
+  const src = join(CACHE, srcName);
   const isWorktree = existsSync(join(src, '.git'));
   if (isWorktree) {
     if (sh('git', ['rev-parse', 'HEAD'], src) !== commit) throw new Error(`${src} is not at ${TAG}; remove it and run again`);
@@ -130,10 +149,10 @@ function buildV010() {
   }
   try {
     if (!existsSync(join(src, 'node_modules'))) {
-      log('npm ci (v0.1.0 lockfile)');
-      shLoud('npm', ['ci', '--no-audit', '--no-fund'], src);
+      log(`npm ci (${label} lockfile)`);
+      shLoud('npm', ['ci', '--no-audit', '--no-fund', '--prefer-offline'], src);
     }
-    log('npm run build (v0.1.0)');
+    log(`npm run build (${label})`);
     shLoud('npm', ['run', 'build'], src);
     rmSync(dist, { recursive: true, force: true });
     cpSync(join(src, 'apps/web/dist'), dist, { recursive: true });
@@ -288,6 +307,9 @@ async function idb(page, op) {
 const record = async (page, store, id) => (await idb(page, { db: DB, store, id }))[DB]?.stores[store]?.[0] ?? null;
 const allOf = async (page, store) => (await idb(page, { db: DB, store }))[DB]?.stores[store] ?? [];
 const dbVersion = async (page) => (await idb(page, { op: 'list' })).find((d) => d.name === DB)?.version ?? 0;
+/** Every item (or version) record of every kind; stores a build does not have read as empty. */
+const allItemsOf = async (page) => (await Promise.all(CURRENT_ITEM_STORES.map((s) => allOf(page, s)))).flat();
+const allVersionsOf = async (page) => (await Promise.all(CURRENT_VERSION_STORES.map((s) => allOf(page, s)))).flat();
 
 async function swState(page) {
   return page.evaluate(async () => {
@@ -307,6 +329,7 @@ async function whichApp(page) {
   const scripts = await page.evaluate(() => Array.from(document.scripts, (s) => s.src));
   if (scripts.some((s) => s.endsWith(ENTRY.v010))) return 'v0.1.0';
   if (scripts.some((s) => s.endsWith(ENTRY.current))) return 'current';
+  if (ENTRY.phase6 && scripts.some((s) => s.endsWith(ENTRY.phase6))) return 'phase6';
   return `unknown (${scripts.join(', ')})`;
 }
 const bodyText = async (page) => (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ').trim();
@@ -449,7 +472,7 @@ async function checkStoredData(page, before) {
   const after = await idb(page, {});
   const old = before[DB];
   const now = after[DB];
-  check('database is at version 2 after the upgrade', now?.version === 2, `version ${now?.version}`);
+  check(`database is at version ${SCHEMA_VERSION} after the upgrade`, now?.version === SCHEMA_VERSION, `version ${now?.version}`);
   for (const s of ITEM_STORES) check(`every v0.1.0 record in "${s}" is unchanged`, sameRecords(old.stores[s], now?.stores[s]), `${old.stores[s].length} records`);
   const metaNow = byId(now?.stores.meta ?? []);
   check('every v0.1.0 meta record is unchanged', old.stores.meta.every((m) => isDeepStrictEqual(m, metaNow.get(m.key))));
@@ -560,8 +583,8 @@ async function checkBackupRoundTrip(page) {
   const file = join(RUN, 'upgraded-backup.json');
   const backup = await attempt('backup export from the upgraded app', () => exportBackup(page, file));
   if (!backup) return;
-  const items = [...(await allOf(page, 'documents')), ...(await allOf(page, 'diagrams'))];
-  const versions = [...(await allOf(page, 'document_versions')), ...(await allOf(page, 'diagram_versions'))];
+  const items = await allItemsOf(page);
+  const versions = await allVersionsOf(page);
   check('backup export from the upgraded app', backup.format === 'dcos-backup' && sameRecords(items, backup.items) && sameRecords(versions, backup.versions), `${backup.items.length} items, ${backup.versions.length} versions, schemaVersion ${backup.schemaVersion}`);
   observe(`the upgraded app's backup has schemaVersion ${backup.schemaVersion}${backup.schemaVersion > 1 ? ' (diagrams edited in the current app are content schema 2, so v0.1.0 refuses this particular file)' : ''}`);
 
@@ -573,8 +596,8 @@ async function checkBackupRoundTrip(page) {
     await gotoHash(p, '/settings/backup');
     await p.locator('input[type=file][accept="application/json,.json"]').setInputFiles(file);
     await p.getByText(/Backup restored/).first().waitFor({ timeout: 20_000 });
-    const restored = [...(await allOf(p, 'documents')), ...(await allOf(p, 'diagrams'))];
-    const restoredVersions = [...(await allOf(p, 'document_versions')), ...(await allOf(p, 'diagram_versions'))];
+    const restored = await allItemsOf(p);
+    const restoredVersions = await allVersionsOf(p);
     check('the backup re-imports into a fresh profile with every item identical', sameRecords(backup.items, restored) && sameRecords(backup.versions, restoredVersions), `${restored.length} items, ${restoredVersions.length} versions`);
   } catch (err) {
     check('the backup re-imports into a fresh profile with every item identical', false, String(err.message).split('\n')[0]);
@@ -667,7 +690,7 @@ async function checkLowSpace(profileDir, before) {
     const meta = byId(after[DB]?.stores.meta ?? []);
     check(
       'low space: after "Update without the on-device copy" the app opens, upgraded, with every record unchanged',
-      after[DB]?.version === 2 && ITEM_STORES.every((s) => sameRecords(before[DB].stores[s], after[DB].stores[s])) && items.every((i) => index.has(i.id)),
+      after[DB]?.version === SCHEMA_VERSION && ITEM_STORES.every((s) => sameRecords(before[DB].stores[s], after[DB].stores[s])) && items.every((i) => index.has(i.id)),
       `${index.size} index rows`,
     );
     check('low space: the downloaded file is recorded as the safety backup, and no on-device copy was made', /^file@/.test(meta.get('upgradeSafetyBackup')?.value ?? '') && !after[SAFETY_COPY]);
@@ -690,7 +713,177 @@ async function importIntoFresh(file, route) {
     await gotoHash(p, route);
     await p.locator('input[type=file][accept="application/json,.json"]').setInputFiles(file);
     await p.getByText(/Backup restored/).first().waitFor({ timeout: 20_000 });
-    return { items: [...(await allOf(p, 'documents')), ...(await allOf(p, 'diagrams'))], versions: [...(await allOf(p, 'document_versions')), ...(await allOf(p, 'diagram_versions'))] };
+    return { items: await allItemsOf(p), versions: await allVersionsOf(p) };
+  } finally {
+    await ctx.close();
+  }
+}
+
+// ── Phase 6 (database version 2) → the current build (Phase 7, ADR 0014) ─────────────────────────────
+
+const SAFETY_COPY_V2 = `${DB}-backup-v2`;
+
+/** Phase 6 data, made through the Phase 6 UI, plus a kept draft and an attachment alias written as Phase 6 writes them. */
+async function createPhase6Data(page) {
+  const quick = async (label, kind) => {
+    await gotoHash(page, '/');
+    await page.getByRole('button', { name: label, exact: true }).click();
+    await page.waitForURL(new RegExp(`#/${kind}s/[0-9a-f-]{36}$`));
+    return page.url().split('/').pop();
+  };
+  // A document with typed text and an embedded diagram (its preview is a stored attachment), then a manual version.
+  const docId = await quick('Assignment', 'document');
+  const editor = page.locator('.ProseMirror');
+  await editor.getByText('Begin your answer here.', { exact: false }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' PHASE6-DOC typed in Phase 6.');
+  await page.getByRole('tab', { name: 'Diagram' }).click();
+  await page.getByRole('button', { name: /new diagram/i }).click();
+  await page.getByRole('menuitem', { name: 'Flowchart', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'New diagram' });
+  await dialog.locator('.react-flow__node').first().waitFor({ timeout: 15_000 });
+  await dialog.getByRole('button', { name: 'Insert into document' }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  await editor.locator('.dcos-diagram img').first().waitFor({ timeout: 15_000 });
+  await until(async () => {
+    const r = await record(page, 'documents', docId);
+    return contains(r, 'PHASE6-DOC') && contains(r, '"previewId"');
+  }, 'the Phase 6 document to save');
+  await page.keyboard.press('Control+s');
+  await until(async () => (await manualVersionsOf(page, 'document_versions', docId)).length > 0, 'the Phase 6 manual version');
+  log('Phase 6 document with an embedded diagram and a manual version');
+
+  // An edited diagram.
+  const diagramId = await quick('Flowchart', 'diagram');
+  await page.locator('.react-flow__node', { hasText: 'Print "Odd"' }).dblclick();
+  const shapeText = page.getByRole('textbox', { name: 'Shape text' });
+  await shapeText.fill('PHASE6-DIA edited');
+  await shapeText.press('Enter');
+  await until(async () => contains(await record(page, 'diagrams', diagramId), 'PHASE6-DIA'), 'the Phase 6 diagram to save');
+  log('Phase 6 diagram edited');
+
+  // A kept draft referring to the preview, and a second id (alias) for the preview's bytes, as Phase 6 stores them.
+  const previewId = JSON.stringify(await record(page, 'documents', docId)).match(/"previewId":"([^"]+)"/)?.[1];
+  await page.evaluate(
+    async ({ db, docId, previewId }) => {
+      const open = await new Promise((ok, fail) => {
+        const r = indexedDB.open(db);
+        r.onsuccess = () => ok(r.result);
+        r.onerror = () => fail(r.error);
+      });
+      const tx = open.transaction(['drafts', 'attachments'], 'readwrite');
+      tx.objectStore('drafts').put({ key: `document:${docId}:upgrade-test`, kind: 'document', itemId: docId, session: 'upgrade-test', baseVersion: 1, title: 'Kept draft', content: { schemaVersion: 3, doc: { type: 'doc', content: [{ type: 'diagram', attrs: { previewId } }] } }, savedAt: new Date().toISOString() });
+      tx.objectStore('attachments').put({ id: 'upgrade-test-alias', aliasOf: previewId, createdAt: new Date().toISOString() });
+      await new Promise((ok, fail) => ((tx.oncomplete = ok), (tx.onerror = () => fail(tx.error))));
+      open.close();
+    },
+    { db: DB, docId, previewId },
+  );
+  log('a kept draft and an attachment alias added');
+  return { docId, diagramId };
+}
+
+async function checkPhase6Upgrade(phase6Dist, currentDist) {
+  const profile = mkdtempSync(join(RUN, 'profile-phase6-'));
+  profiles.push(profile);
+  await stopServing();
+  await serve(phase6Dist, 'Phase 6');
+  let ctx = await launch(profile);
+  let page = await pageOf(ctx);
+  let created;
+  let before;
+  try {
+    await page.goto(`${ORIGIN}/`);
+    check('Phase 6 is running', (await whichApp(page)) === 'phase6');
+    // Phase 6 registers its service worker with registerType 'prompt' (no clientsClaim, unlike v0.1.0's autoUpdate):
+    // the first page stays uncontrolled, so wait until the worker is active and reload, as a returning user would.
+    await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+    await page.reload();
+    await until(() => page.evaluate(() => !!navigator.serviceWorker.controller), 'the Phase 6 service worker to take control', 30_000);
+    created = await createPhase6Data(page);
+    before = await idb(page, {});
+    writeFileSync(join(RUN, 'phase6-data.json'), JSON.stringify(before, null, 1));
+    const counts = Object.fromEntries(Object.entries(before[DB].stores).map(([st, r]) => [st, r.length]));
+    log(`Phase 6 data: ${JSON.stringify(counts)}`);
+    check('Phase 6 data recorded at database version 2, with attachments, an alias, a draft and versions', before[DB].version === 2 && counts.attachments >= 2 && counts.drafts >= 1 && counts.document_versions >= 2 && !before[SAFETY_COPY_V2]);
+  } finally {
+    await ctx.close();
+  }
+
+  phase('Phase 6 → current: serve the current build on the same origin and reopen the Phase 6 profile');
+  await stopServing();
+  await serve(currentDist, 'current');
+  const drive = await driveTo('current', profile, 'after switching from Phase 6 to the current build');
+  ({ ctx, page } = drive);
+  check('Phase 6 → current: the current app eventually runs', !drive.stuck);
+  if (drive.stuck) return void (await ctx.close());
+  await until(async () => (await dbVersion(page)) === SCHEMA_VERSION, 'the database upgrade from version 2', 30_000);
+  const after = await idb(page, {});
+  const old = before[DB];
+  const now = after[DB];
+  check(`Phase 6 → current: the database is at version ${SCHEMA_VERSION}`, now?.version === SCHEMA_VERSION, `version ${now?.version}`);
+  for (const st of Object.keys(old.stores).filter((x) => x !== 'meta')) {
+    check(`Phase 6 → current: every Phase 6 record in "${st}" is unchanged`, sameRecords(old.stores[st], now?.stores[st]), `${old.stores[st].length} records`);
+    check(`Phase 6 → current: store "${st}" keeps its layout`, isDeepStrictEqual(old.layout[st], now?.layout[st]));
+  }
+  const metaNow = byId(now?.stores.meta ?? []);
+  check('Phase 6 → current: every Phase 6 meta record is unchanged', old.stores.meta.every((m) => isDeepStrictEqual(m, metaNow.get(m.key))));
+  check('Phase 6 → current: the upgrade is recorded (meta migratedFrom = 2@…)', /^2@/.test(metaNow.get('migratedFrom')?.value ?? ''));
+  const added = Object.keys(now?.stores ?? {}).filter((x) => !(x in old.stores)).sort();
+  check('Phase 6 → current: only the presentation stores were added, empty, shaped like the document stores', isDeepStrictEqual(added, ['presentation_versions', 'presentations']) && now.stores.presentations.length === 0 && now.stores.presentation_versions.length === 0 && isDeepStrictEqual(now.layout.presentation_versions, now.layout.document_versions), added.join(', '));
+  const copy = after[SAFETY_COPY_V2];
+  check(`Phase 6 → current: safety copy "${SAFETY_COPY_V2}" exists`, !!copy);
+  if (copy) {
+    check('Phase 6 → current: the safety copy holds every Phase 6 record', Object.keys(old.stores).every((st) => sameRecords(old.stores[st], copy.stores[st])));
+    const info = copy.stores.__copy?.[0];
+    check('Phase 6 → current: the safety copy records where it came from', info?.fromVersion === 2 && info?.source === DB);
+  }
+  await attempt('Phase 6 → current: the Phase 6 document opens with its text and its diagram', async () => {
+    await gotoHash(page, `/documents/${created.docId}`);
+    const body = page.locator('.ProseMirror');
+    await body.waitFor({ timeout: 15_000 });
+    await until(async () => (await body.innerText()).includes('PHASE6-DOC'), 'the Phase 6 text');
+    await page.locator('.dcos-diagram img').first().waitFor({ timeout: 15_000 });
+    check('Phase 6 → current: the Phase 6 document opens with its text and its diagram', (await page.getByText('Opened read-only').count()) === 0);
+  });
+  await attempt('Phase 6 → current: a presentation can be created after the upgrade', async () => {
+    await gotoHash(page, '/');
+    await page.getByRole('button', { name: 'Blank presentation', exact: true }).click();
+    await page.waitForURL(/#\/presentations\/[0-9a-f-]{36}$/);
+    const id = page.url().split('/').pop();
+    await page.getByRole('listbox', { name: 'Slides' }).waitFor({ timeout: 15_000 });
+    await until(async () => (await record(page, 'presentations', id)) !== null, 'the presentation to be stored');
+    check('Phase 6 → current: a presentation can be created after the upgrade', true);
+  });
+  await sleep(1500);
+  const beforeDowngrade = await idb(page, {});
+  writeFileSync(join(RUN, 'phase6-upgraded-data.json'), JSON.stringify(beforeDowngrade, null, 1));
+  await ctx.close();
+
+  phase('Going back to Phase 6 (observed): serve the Phase 6 build again on the same origin');
+  await stopServing();
+  await serve(phase6Dist, 'Phase 6');
+  const back = await driveTo('phase6', profile, 'after switching the server back to Phase 6');
+  ({ ctx, page } = back);
+  try {
+    if (back.stuck) observe('Phase 6 downgrade: the Phase 6 app never ran; the current app stayed in charge (served by its service worker)');
+    else {
+      await sleep(2500);
+      observe(`Phase 6 downgrade: the Phase 6 dashboard shows: "${(await bodyText(page)).slice(0, 300)}"`);
+      const refused = await page.evaluate(
+        (db) =>
+          new Promise((ok) => {
+            const r = indexedDB.open(db, 2);
+            r.onsuccess = () => (r.result.close(), ok('opened'));
+            r.onerror = () => ok(r.error?.name ?? 'error');
+          }),
+        DB,
+      );
+      check('Phase 6 downgrade: opening the database at version 2 (as Phase 6 does) is refused with VersionError', refused === 'VersionError', String(refused));
+    }
+    const afterDowngrade = await idb(page, {});
+    const damaged = Object.keys(beforeDowngrade).filter((name) => !isDeepStrictEqual(beforeDowngrade[name], afterDowngrade[name]));
+    check('Phase 6 downgrade: no database changed (the Phase 6 build fails closed)', damaged.length === 0, damaged.length ? `changed: ${damaged.join(', ')}` : '');
   } finally {
     await ctx.close();
   }
@@ -732,9 +925,10 @@ let exitCode = 1;
 try {
   phase('Builds');
   const v010Dist = buildV010();
+  const phase6Dist = buildPhase6();
   const currentDist = buildCurrent();
-  ENTRY = { v010: entryOf(v010Dist), current: entryOf(currentDist) };
-  if (ENTRY.v010 === ENTRY.current) throw new Error('The two builds have the same entry script; cannot tell them apart');
+  ENTRY = { v010: entryOf(v010Dist), current: entryOf(currentDist), phase6: entryOf(phase6Dist) };
+  if (new Set(Object.values(ENTRY)).size !== 3) throw new Error('Two builds have the same entry script; cannot tell them apart');
 
   const profile = mkdtempSync(join(RUN, 'profile-'));
   profiles.push(profile);
@@ -765,7 +959,7 @@ try {
   ({ ctx, page } = drive);
   check('the current app eventually runs after the switch', !drive.stuck);
   if (drive.stuck) throw new Error('The current app never ran; stopping');
-  await until(async () => (await dbVersion(page)) === 2, 'the database upgrade', 30_000);
+  await until(async () => (await dbVersion(page)) === SCHEMA_VERSION, 'the database upgrade', 30_000);
   await page.waitForSelector('#root > *');
 
   phase('After the upgrade: stored data');
@@ -821,6 +1015,9 @@ try {
     const intoOld = await importIntoFresh(recoveryFile, '/settings').catch((err) => ({ err }));
     check('the recovery backup imports into v0.1.0 (fresh profile)', !intoOld.err && sameRecords(items, intoOld.items) && sameRecords(versions, intoOld.versions), intoOld.err ? String(intoOld.err.message).split('\n')[0] : `${intoOld.items.length} items, ${intoOld.versions.length} versions`);
   }
+
+  phase('Phase 6 (database version 2) → the current build (Phase 7, ADR 0014)');
+  await checkPhase6Upgrade(phase6Dist, currentDist);
 
   exitCode = checks.every((c) => c.ok) ? 0 : 1;
 } catch (err) {

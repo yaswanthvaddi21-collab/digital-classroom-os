@@ -12,6 +12,7 @@
     "@dcos/diagram-studio": "*",
     "@dcos/document-studio": "*",
     "@dcos/local-storage": "*",
+    "@dcos/presentation-studio": "*",
     "@dcos/ui": "*",
     "@fontsource-variable/inter": "^5.1.0",
     "lucide-react": "^0.460.0",

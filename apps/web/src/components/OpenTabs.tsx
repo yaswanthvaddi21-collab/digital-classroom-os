@@ -14,7 +14,7 @@ export function isTabShortcut(e: Pick<KeyboardEvent, 'ctrlKey' | 'altKey' | 'met
 }
 
 /**
- * The open items (documents and diagrams) as tabs in the editor header: switch with a click or Ctrl+Alt+→/←, close
+ * The open items (documents, diagrams and presentations) as tabs in the editor header: switch with a click or Ctrl+Alt+→/←, close
  * with ×. Remembered on this device. Shown once two or more items are open.
  */
 export function OpenTabs({ kind, id, title }: { kind: ItemKind; id: string; title: string }) {

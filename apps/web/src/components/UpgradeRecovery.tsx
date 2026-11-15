@@ -2,6 +2,7 @@ import type { UpgradeRecovery, UpgradeStatus } from '@dcos/local-storage';
 import { Button, Card, downloadBlob } from '@dcos/ui';
 import { Download, Loader2, RefreshCw, ShieldAlert } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import { protectExistingData, upgradeRecovery, useStorageEvents, useUpgradeStatus } from '../lib/storage';
 
 const stamp = () => new Date().toISOString().slice(0, 10);
@@ -12,13 +13,15 @@ interface GateProps {
   /** Injected in tests; the app uses the storage adapter's own recovery actions. */
   recovery?: UpgradeRecovery | null;
   download?: (blob: Blob, fileName: string) => void;
+  /** Injected in tests; the app reloads the page. */
+  reload?: () => void;
 }
 
 /**
  * Shows the app only once its data is safe to use. While the safety copy before a database update is being
  * made it says so, and if that copy cannot be made it shows the recovery screen instead of the app (audit STOR-R5).
  */
-export function UpgradeGate({ children, recovery = upgradeRecovery, download = downloadBlob }: GateProps) {
+export function UpgradeGate({ children, recovery = upgradeRecovery, download = downloadBlob, reload = () => window.location.reload() }: GateProps) {
   const status = useUpgradeStatus(recovery);
   // Once the recovery screen is up it stays up (with what the user already did) while "Try again" or the
   // update runs, until the database is open or fails for another reason.
@@ -27,6 +30,8 @@ export function UpgradeGate({ children, recovery = upgradeRecovery, download = d
   if ((status.state === 'ready' || status.state === 'failed') && held) setHeld(null);
   if (held && recovery) return <UpgradeRecoveryScreen status={held} recovery={recovery} download={download} />;
   if (status.state === 'checking') return null;
+  // Phase 7 (ADR 0014): the data on this device was made by a newer version. Say so, instead of an app that looks empty.
+  if (status.state === 'failed' && status.newerData) return <NewerDataScreen reload={reload} />;
   if (status.state === 'copying')
     return (
       <Screen>
@@ -36,6 +41,64 @@ export function UpgradeGate({ children, recovery = upgradeRecovery, download = d
       </Screen>
     );
   return <>{children}</>;
+}
+
+/**
+ * Shown when IndexedDB refuses to open the database because a newer version of the app has upgraded it.
+ * This screen replaces the whole app, so SystemBanners and its "Update now" are not shown. A plain reload keeps
+ * serving this build while a newer service worker waits, so when one is waiting the screen offers to switch to it
+ * (the same `updateServiceWorker(true)` as "Update now"; nothing is being edited here, so there is nothing to save first).
+ */
+export function NewerDataScreen({ reload }: { reload: () => void }) {
+  const {
+    needRefresh: [updateWaiting],
+    updateServiceWorker,
+  } = useRegisterSW();
+  const [updating, setUpdating] = useState(false);
+  return (
+    <Screen>
+      <Card className="flex w-full max-w-xl flex-col gap-4 p-6" role="alertdialog" aria-modal="true" aria-labelledby="newer-data-title" aria-describedby="newer-data-text">
+        <div className="flex items-start gap-3">
+          <ShieldAlert size={22} className="mt-0.5 shrink-0 text-warning" />
+          <div className="flex flex-col gap-2">
+            <h1 id="newer-data-title" className="text-lg font-semibold">
+              Your data was saved by a newer version of Classroom OS
+            </h1>
+            <div id="newer-data-text" className="flex flex-col gap-2 text-sm text-muted">
+              <p>This version of the app cannot open it, so it has not read, changed or removed anything. Your work is still on this device.</p>
+              {updateWaiting ? (
+                <p>The newest version is already on this device. Choose Update now to switch to it.</p>
+              ) : (
+                <p>
+                  Reload to get the newest version. If this screen comes back, close every Classroom OS tab and window, then open Classroom OS
+                  again.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {updateWaiting ? (
+            <Button
+              variant="primary"
+              icon={<RefreshCw size={15} />}
+              disabled={updating}
+              onClick={() => {
+                setUpdating(true);
+                void updateServiceWorker(true).catch(() => setUpdating(false));
+              }}
+            >
+              {updating ? 'Updating…' : 'Update now'}
+            </Button>
+          ) : (
+            <Button variant="primary" icon={<RefreshCw size={15} />} onClick={reload}>
+              Reload
+            </Button>
+          )}
+        </div>
+      </Card>
+    </Screen>
+  );
 }
 
 function Screen({ children }: { children: ReactNode }) {
@@ -112,7 +175,7 @@ export function UpgradeRecoveryScreen({
                   {status.reason === 'quota' ? " because there isn't enough free space on this device" : ' (a full device is a common cause)'}. The change was undone completely.
                 </p>
               )}
-              <p className="font-medium text-fg">Your documents and diagrams are safe and unchanged.</p>
+              <p className="font-medium text-fg">Your documents, diagrams and presentations are safe and unchanged.</p>
               {status.reason !== 'quota' && <p className="break-words font-mono text-xs">{status.message}</p>}
             </div>
           </div>
@@ -121,7 +184,7 @@ export function UpgradeRecoveryScreen({
         <section className="flex flex-col gap-2 border-t border-border pt-4">
           <h2 className="text-sm font-semibold">Download a backup of everything</h2>
           <p className="text-sm text-muted">
-            Saves every document, diagram and version into one file. You can restore it in Settings, Backup, in this or any later version of Classroom OS{status.fromVersion === 1 ? ', and in version 0.1.0' : ''}.
+            Saves every document, diagram, presentation and version into one file. You can restore it in Settings, Backup, in this or any later version of Classroom OS{status.fromVersion === 1 ? ', and in version 0.1.0' : ''}.
           </p>
           <div>
             <Button variant="primary" icon={<Download size={15} />} disabled={busy !== null} onClick={() => void downloadBackup()}>

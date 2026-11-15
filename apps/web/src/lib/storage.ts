@@ -395,8 +395,16 @@ export interface DiagramDialogBase {
   title: string;
 }
 
+/**
+ * Phase 7 (ADR 0014): the kind of item a dialog draft belongs to. Left out for documents (Phase 6 drafts, stored and
+ * read exactly as before); 'presentation' for a diagram dialog opened from a presentation.
+ */
+export type DiagramDialogOwnerKind = 'presentation';
+
 export interface DiagramDialogDraft {
+  /** The id of the item the draft belongs to (a document unless ownerKind says otherwise). */
   docId: string;
+  ownerKind?: DiagramDialogOwnerKind;
   session: string;
   /** The embedded diagram the dialog was opened on; null for a new diagram. */
   base: DiagramDialogBase | null;
@@ -406,7 +414,11 @@ export interface DiagramDialogDraft {
   savedAt: string;
 }
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
-const dialogLocalKey = (docId: string, session: string) => `${DIAGRAM_DIALOG_LOCAL_PREFIX}${docId}:${session}`;
+/** The localStorage key of a dialog draft. Presentations' keys carry their kind, so a document never lists them. */
+const dialogLocalKey = (docId: string, session: string, ownerKind?: DiagramDialogOwnerKind) =>
+  `${DIAGRAM_DIALOG_LOCAL_PREFIX}${ownerKind ? `${ownerKind}:` : ''}${docId}:${session}`;
+/** The owner part of a localStorage key, as localDialogEntries reports it. */
+const localOwner = (docId: string, ownerKind?: DiagramDialogOwnerKind) => (ownerKind ? `${ownerKind}:${docId}` : docId);
 
 /** The note at the top of a stored dialog draft (what a build before Phase 6 shows when it recovers one as a copy). */
 export const DIAGRAM_DIALOG_DRAFT_NOTE = 'Unsaved changes to a diagram, kept from the diagram editor.';
@@ -436,8 +448,37 @@ function dialogBody(d: Omit<DiagramDialogDraft, 'savedAt'>) {
   };
 }
 
+/**
+ * A presentation's dialog draft as stored (Phase 7): a plain record, not a document. Only builds with presentations
+ * (database version 3) can open a profile that holds one, so no older build ever reads it (ADR 0014).
+ */
+const PRESENTATION_DIALOG_BODY = 'dcos-diagram-dialog-draft';
+function presentationDialogBody(d: Omit<DiagramDialogDraft, 'savedAt'>) {
+  return { format: PRESENTATION_DIALOG_BODY, version: 1, note: DIAGRAM_DIALOG_DRAFT_NOTE, base: d.base, source: d.source, title: d.title };
+}
+const bodyFor = (d: Omit<DiagramDialogDraft, 'savedAt'>) => (d.ownerKind === 'presentation' ? presentationDialogBody(d) : dialogBody(d));
+
+function readPresentationDialogDraft(id: string, session: string, body: unknown, savedAt: unknown): DiagramDialogDraft | null {
+  if (!isDiagramDialogSession(session) || !isRecord(body) || body.format !== PRESENTATION_DIALOG_BODY || body.version !== 1) return null;
+  if (!isRecord(body.source) || typeof body.title !== 'string') return null;
+  let base: DiagramDialogBase | null = null;
+  if (body.base !== null && body.base !== undefined) {
+    const a = body.base;
+    if (!isRecord(a) || !isRecord(a.source)) return null;
+    base = {
+      source: a.source,
+      previewId: typeof a.previewId === 'string' ? a.previewId : null,
+      naturalWidth: typeof a.naturalWidth === 'number' ? a.naturalWidth : 400,
+      naturalHeight: typeof a.naturalHeight === 'number' ? a.naturalHeight : 300,
+      title: typeof a.title === 'string' ? a.title : '',
+    };
+  }
+  return { docId: id, ownerKind: 'presentation', session, base, source: body.source, title: body.title, savedAt: typeof savedAt === 'string' ? savedAt : '' };
+}
+
 /** A stored dialog draft, or null when it is not one this version can use. */
-function readDialogDraft(docId: string, session: string, body: unknown, savedAt: unknown): DiagramDialogDraft | null {
+function readDialogDraft(docId: string, session: string, body: unknown, savedAt: unknown, ownerKind?: DiagramDialogOwnerKind): DiagramDialogDraft | null {
+  if (ownerKind === 'presentation') return readPresentationDialogDraft(docId, session, body, savedAt);
   if (!isDiagramDialogSession(session) || !isRecord(body) || !isRecord(body.doc) || !Array.isArray(body.doc.content)) return null;
   const blocks = body.doc.content as unknown[];
   const first = blocks[0];
@@ -491,9 +532,9 @@ export function diagramDialogDraftTexts(): string[] {
 /** Keeps a dialog draft in localStorage, synchronously (page hiding or closing). False when it could not be kept. */
 export function keepDiagramDialogDraftLocally(d: Omit<DiagramDialogDraft, 'savedAt'>): boolean {
   try {
-    const raw = JSON.stringify({ ...dialogBody(d), savedAt: new Date().toISOString() });
+    const raw = JSON.stringify({ ...bodyFor(d), savedAt: new Date().toISOString() });
     if (raw.length > EMERGENCY_DRAFT_MAX_CHARS) return false;
-    localStorage.setItem(dialogLocalKey(d.docId, d.session), raw);
+    localStorage.setItem(dialogLocalKey(d.docId, d.session, d.ownerKind), raw);
     return true;
   } catch {
     return false;
@@ -505,20 +546,21 @@ export async function saveDiagramDialogDraft(d: Omit<DiagramDialogDraft, 'savedA
   if (!isDiagramDialogSession(d.session)) throw new Error(`Not a diagram dialog session: ${d.session}`);
   try {
     if (databaseClosed) throw new Error('The database was closed by another tab.');
-    await storage.saveDraft({ kind: 'document', itemId: d.docId, session: d.session, baseVersion: 0, content: dialogBody(d) });
+    // Phase 7: filed under the item the dialog belongs to (a document, or a presentation with its own body).
+    await storage.saveDraft({ kind: d.ownerKind ?? 'document', itemId: d.docId, session: d.session, baseVersion: 0, content: bodyFor(d) });
   } catch (err) {
     if (!keepDiagramDialogDraftLocally(d)) throw err;
   }
 }
 
 /** Removes a dialog's draft wherever it is kept. */
-export async function deleteDiagramDialogDraft(docId: string, session: string): Promise<void> {
+export async function deleteDiagramDialogDraft(docId: string, session: string, ownerKind?: DiagramDialogOwnerKind): Promise<void> {
   try {
-    localStorage.removeItem(dialogLocalKey(docId, session));
+    localStorage.removeItem(dialogLocalKey(docId, session, ownerKind));
   } catch {
     // Nothing kept there.
   }
-  if (!databaseClosed) await storage.deleteDraft('document', docId, session);
+  if (!databaseClosed) await storage.deleteDraft(ownerKind ?? 'document', docId, session);
 }
 
 /** Marks a dialog session as open in this tab until the returned function is called (Web Locks, when available). */
@@ -545,7 +587,7 @@ async function openDialogSessions(): Promise<Set<string>> {
  * The dialog drafts of a document that are waiting to be recovered, newest first: from the database and from
  * localStorage (the newer copy of each), leaving out dialogs still open in this or another tab.
  */
-export async function listDiagramDialogDrafts(docId: string): Promise<DiagramDialogDraft[]> {
+export async function listDiagramDialogDrafts(docId: string, ownerKind?: DiagramDialogOwnerKind): Promise<DiagramDialogDraft[]> {
   const found = new Map<string, DiagramDialogDraft>();
   const keep = (d: DiagramDialogDraft | null) => {
     if (!d) return;
@@ -553,12 +595,12 @@ export async function listDiagramDialogDrafts(docId: string): Promise<DiagramDia
     if (!known || known.savedAt < d.savedAt) found.set(d.session, d);
   };
   if (!databaseClosed) {
-    for (const d of await storage.listDrafts({ kind: 'document', itemId: docId }).catch(() => [])) keep(readDialogDraft(docId, d.session, d.content, d.savedAt));
+    for (const d of await storage.listDrafts({ kind: ownerKind ?? 'document', itemId: docId }).catch(() => [])) keep(readDialogDraft(docId, d.session, d.content, d.savedAt, ownerKind));
   }
-  for (const e of localDialogEntries(docId)) {
+  for (const e of localDialogEntries(localOwner(docId, ownerKind))) {
     try {
       const parsed: unknown = JSON.parse(e.raw);
-      keep(readDialogDraft(docId, e.session, parsed, isRecord(parsed) ? parsed.savedAt : ''));
+      keep(readDialogDraft(docId, e.session, parsed, isRecord(parsed) ? parsed.savedAt : '', ownerKind));
     } catch {
       // Unreadable copy: left in place, never offered.
     }

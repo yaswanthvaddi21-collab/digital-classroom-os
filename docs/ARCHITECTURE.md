@@ -1,6 +1,6 @@
 # Architecture
 
-Companion to [PRD.md](PRD.md). Describes what exists today (Phase 0, Phase 1 foundations, Release 0.2 stabilisation, the diagram integration, and Phases 2–6) and where later phases plug in.
+Companion to [PRD.md](PRD.md). Describes what exists today (Phase 0, Phase 1 foundations, Release 0.2 stabilisation, the diagram integration, and Phases 2–7; Phase 7 is not committed or deployed yet) and where later phases plug in.
 
 ## Shape of the system
 
@@ -12,6 +12,7 @@ apps/android (Capacitor)┘                                                (Phas
         ├── @dcos/ui               design tokens, components, theme, toasts
         ├── @dcos/document-studio  Tiptap editor, templates, DOCX / ODT / PDF / TXT export, DOCX / ODT import
         ├── @dcos/diagram-studio   React Flow editor, shape library, layouts, vector SVG / PDF and PNG export, .drawio and .dcosdiagram files
+        ├── @dcos/presentation-studio  slide editor, themes and masters, slide show and presenter view, PPTX (PptxGenJS) / PDF export
         └── @dcos/local-storage    StorageAdapter interface + IndexedDB implementation
 
 backend/ (FastAPI)  classroom host for LAN sharing — Phase 3. Never needed for editing.
@@ -95,7 +96,7 @@ Each exporter is a set of registries that features add to. The DOCX, TXT and `PR
 - **Images** are embedded as data URLs, downscaled to 1600 px, and WebP is converted (Word can't show WebP). Pasted web pictures are fetched once (no cookies or referrer) and stored the same way, or kept and marked when the site refuses. Moving images out of document content (TD-2) was not done in Phase 4; version history stores large images once ([ADR 0005](adr/0005-version-history.md)).
 - **Links:** `links.ts` allows only the schemes Tiptap's link mark accepts; the link box adds `https://` to scheme-less addresses and `mailto:` to e-mail addresses, and refuses the rest with a message.
 - **Templates:** `templates.ts`, nine templates, all content schema 1.
-- **Open-items tabs (app):** `apps/web/src/lib/openTabs.ts` and `components/OpenTabs.tsx` keep up to 12 open documents and diagrams per device in localStorage and show them as tabs in the editor header (Ctrl+Alt+←/→).
+- **Open-items tabs (app):** `apps/web/src/lib/openTabs.ts` and `components/OpenTabs.tsx` keep up to 12 open documents, diagrams and presentations per device in localStorage and show them as tabs in the editor header (Ctrl+Alt+←/→).
 
 ## Diagram Studio
 
@@ -118,16 +119,28 @@ Phase 5 split the editor into registries and pure modules; format decisions are 
 - **Layouts:** `layoutTree()` (TB or LR) for trees with Tab/Enter auto-arrange; radial and two-sided mind maps and even timeline spacing from Arrange (`library/`). Layouts never move locked shapes and leave bend points where they are. Arrange timeline and Add event remove plain straight lines (no label, arrows or bends) between dates that are no longer neighbours, as old axis pieces, and say how many in a toast (`layoutTimeline().removed`, `noteRemovedAxis`); undo brings them back.
 - **Canvas:** always light paper, in both themes, so exports match the screen. Full screen through the Fullscreen API, with toasts shown inside the editor while full screen (`editor/fullscreenToasts.tsx`).
 
+## Presentation Studio
+
+Phase 7, [ADR 0014](adr/0014-presentation-studio.md) (decisions 1–16). `packages/presentation-studio/src`, importing only `@dcos/ui`; the app supplies a diagram host and an image host (`hosts.ts`).
+
+- **Model** (`types.ts`, schema 1; `compat.ts` the frozen vocabulary; `migrate.ts`, `safety.ts` protected view): a size (16:9 or 4:3, 960 px wide), a theme (eleven OOXML colour slots, heading and body fonts), masters and layouts with placeholders and decorations, slides with elements (text, image, shape, table, chart, diagram), notes, a transition, hidden flag; elements carry an optional entrance animation. Pictures and diagram previews are attachments referenced by id.
+- **Rendering** (`render/SlideView.tsx`): one renderer for thumbnails, the canvas's unselected objects, the slide show and the read-only view; charts are drawn by a hand-written renderer (`elements/chart.ts`) whose primitives also feed the PDF.
+- **Editor** (`PresentationEditor.tsx`, `editor/`, `ui/`): slide list, canvas with smart guides (`editor/guides.ts`), one Tiptap instance on the text box being edited, notes pane, ribbon tabs filled by the groups below, one undo history of content snapshots (`editor/useEditorModel.ts`).
+- **Design** (`design/`): themes, slide size, backgrounds, change layout, master view (placeholders follow master and layout changes field by field unless changed), templates.
+- **Content** (`elements/`): pictures, shapes (23 PPTX presets), tables, charts with a data grid, diagrams through the app's diagram editor, the inspector, placeholder fill.
+- **Show** (`show/`): the slide show as a modal dialog over the editor (Fullscreen API, keys, clicks, swipes), transitions and builds with the Web Animations API (`show/sequence.ts` orders builds and is shared with the PPTX timing), the presenter window over a `BroadcastChannel` (`show/channel.ts`; handshake, then state and commands both ways, with a liveness ping) on the app route `#/presentations/presenter/:session`.
+- **Export** (`export/`, loaded on first use): PPTX = PptxGenJS 4.0.1 + `pptxPost.ts` (fflate) for text bodies, gradients, crops, background fit, transitions and timing; PDF = `slideSvg.ts` + svg2pdf.js + jsPDF, one vector page per visible slide, optional notes pages. Every approximation is named in the toast (`report.ts`).
+
 ## Web shell
 
 - `useEditableItem` (in `apps/web/src/lib/storage.ts`) owns load, debounced autosave through a serialised save queue with retries, flush-on-hide, drafts after failed saves, cross-tab updates, explicit version save and conflict state. Editors only report content through `onChange`.
 - Editors are loaded with a plain dynamic import (`useModuleEditor`), not `React.lazy`, because Suspense re-mounts broke Tiptap's view. Each editor sits inside an error boundary that keeps the rest of the app usable.
-- Routes cover Dashboard, Documents, Diagrams, Files, Recent, Favourites, Trash and Settings (General, Appearance, Storage, Backup, Shortcuts, About), plus a not-found page. The PWA asks before applying an update.
+- Routes cover Dashboard, Documents, Diagrams, Presentations (and the presenter window route, outside the app shell), Files, Recent, Favourites, Trash and Settings (General, Appearance, Storage, Backup, Shortcuts, About), plus a not-found page. The PWA asks before applying an update.
 - Theme: `ThemeProvider` (light, dark or system). Tokens are CSS variables in `index.css`, exposed to Tailwind via `@theme inline`. An inline script applies the theme before first paint.
 - PWA: `vite-plugin-pwa` precaches the whole app shell, so the app loads offline after the first visit.
 
 ## Later phases
 
-- **Phase 2:** notebook, subjects, accounts. New stores via a new IndexedDB migration (append to `MIGRATIONS`).
+- **Later:** notebook, subjects, accounts. New stores via a new IndexedDB migration (append to `MIGRATIONS`).
 - **Phase 3:** classroom host = FastAPI on the teacher's device. Students pair by code and LAN address. Sharing is explicit: selected items are sent as `sync_operations`, and receivers keep independent copies.
 - **Phase 4:** Yjs for live collaboration as a separate service, never required for ordinary editing. Tiptap has first-party Yjs bindings.

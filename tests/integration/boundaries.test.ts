@@ -2,7 +2,7 @@
  * Package boundaries (audit ARCH-1): feature packages depend only on the design system, never on storage or the
  * app, so each module can be reused by the desktop and Android shells and swapped independently.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -12,6 +12,8 @@ const ALLOWED: Record<string, string[]> = {
   'local-storage': [],
   'document-studio': ['@dcos/ui'],
   'diagram-studio': ['@dcos/ui'],
+  // Phase 7 (ADR 0014): like the other studios, only the design system; storage and diagrams come through hosts.
+  'presentation-studio': ['@dcos/ui'],
 };
 
 function files(dir: string): string[] {
@@ -22,6 +24,11 @@ function files(dir: string): string[] {
 }
 
 describe('package boundaries', () => {
+  it('checks every package that has source code (a new package cannot go unchecked)', () => {
+    const packages = readdirSync(join(ROOT, 'packages')).filter((p) => statSync(join(ROOT, 'packages', p)).isDirectory() && existsSync(join(ROOT, 'packages', p, 'src')));
+    expect(packages.sort()).toEqual(Object.keys(ALLOWED).sort());
+  });
+
   for (const [pkg, allowed] of Object.entries(ALLOWED)) {
     it(`${pkg} imports only ${allowed.join(', ') || 'no other @dcos package'}`, () => {
       const offenders: string[] = [];

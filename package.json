@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Offline-first academic productivity platform: documents, diagrams and classroom tools.",
+  "description": "Offline-first academic productivity platform: documents, diagrams, presentations and classroom tools.",
   "workspaces": [
     "apps/web",
     "packages/ui",
     "packages/local-storage",
     "packages/document-studio",
-    "packages/diagram-studio"
+    "packages/diagram-studio",
+    "packages/presentation-studio"
   ],
   "scripts": {
     "dev": "npm run dev -w @dcos/web",
@@ -42,5 +43,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "overrides": {
+    "image-size": "^2.0.4"
   }
 }

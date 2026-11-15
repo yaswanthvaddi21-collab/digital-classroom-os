@@ -4,7 +4,7 @@
 
 UUID ids · `createdAt`/`updatedAt` ISO timestamps · owner device id · version numbers · soft delete (`deletedAt`) · migrations · transactional writes · backup and restore. Each device has its own database; shared records move only through explicit sync operations.
 
-## Implemented now (IndexedDB, schema v2)
+## Implemented now (IndexedDB, schema v3)
 
 Database `digital-classroom-os`:
 
@@ -17,12 +17,16 @@ Database `digital-classroom-os`:
 | `meta` | v1 | `key` | — | `deviceId`, `lastBackupAt`, other small settings |
 | `item_index` | v2 | `id` | `by_kind` → `kind` | Lightweight list rows (title, dates, favourite, trash) so lists don't load full content |
 | `drafts` | v2 | `key` | — | Unsaved edits kept after a save failed, one per editor session (key `kind:itemId:session`; drafts from before Phase 3 use `kind:itemId`). Offered back when the item reopens and listed in Settings → Storage ([ADR 0004](adr/0004-autosave-and-drafts.md)) |
-| `attachments` | v2 | `id` | `by_sha256` (unique) | Binary files, deduplicated by hash. Today: PNG previews of diagrams embedded in documents. When a backup brings bytes this device already has under another id, an alias record `{ id, aliasOf }` is stored instead; `getAttachment` follows it |
+| `attachments` | v2 | `id` | `by_sha256` (unique) | Binary files, deduplicated by hash: PNG previews of diagrams embedded in documents and on slides, and (Phase 7) pictures and picture backgrounds of presentations. When a backup brings bytes this device already has under another id, an alias record `{ id, aliasOf }` is stored instead; `getAttachment` follows it |
+| `presentations` | v3 | `id` | — | `WorkspaceItem<PresentationContent>` (Phase 7, [ADR 0014](adr/0014-presentation-studio.md)) |
+| `presentation_versions` | v3 | `id` | `by_item` → `itemId` | `ItemVersion` snapshots of presentations |
 
-`diagram_versions` extends the PRD's entity list so diagrams get the same history guarantees as documents. The v1 stores are frozen: v2 only adds stores.
+`diagram_versions` extends the PRD's entity list so diagrams get the same history guarantees as documents. The v1 stores are frozen: v2 and v3 only add stores.
+
+**Version 3 (Phase 7, owner's decision 2026-11-14).** `MIGRATIONS[2]` only creates `presentations` and `presentation_versions`, shaped like the document stores; no existing store, index or record is read or changed, and it runs only after the verified safety copy (`digital-classroom-os-backup-v2` for a Phase 6 profile, `-backup-v1` for v0.1.0) or a backup file made on the recovery screen. Every store list (attachment clean-up, backup export and import, the pre-upgrade backup, the safety-copy export) comes from the kind registry `STORES` or from the database's own store names, so a kind cannot be skipped. **Builds before Phase 7 cannot open a version-3 database:** IndexedDB refuses them with `VersionError`, and they fail closed (they read, clean up, import and delete nothing); this build shows "Your data was saved by a newer version of Classroom OS" with Update now or Reload when it meets a database made by a newer build. Checked by `packages/local-storage/src/kinds.test.ts` and by `npm run test:upgrade` against the real Phase 6 build (`650cf63`).
 
 ```ts
-WorkspaceItem { id, kind: 'document'|'diagram', title, content, version, createdAt, updatedAt,
+WorkspaceItem { id, kind: 'document'|'diagram'|'presentation', title, content, version, createdAt, updatedAt,
                 deletedAt|null, ownerDeviceId, favorite, templateId|null, lastSnapshotAt|null, restoredFrom? }
 ItemVersion   { id, itemId, kind, version, title, content, createdAt, reason: 'create'|'manual'|'auto'|'restore', blobRefs? }
 Attachment    { id, sha256, mimeType, sizeBytes, createdAt, lastUsedAt?, data: ArrayBuffer }   // or an alias { id, aliasOf, createdAt, lastUsedAt? }
@@ -36,7 +40,7 @@ Attachment    { id, sha256, mimeType, sizeBytes, createdAt, lastUsedAt?, data: A
 
 **Migrations:** `MIGRATIONS[i](db, tx)` upgrades version *i* → *i+1* inside IndexedDB's `upgrade` transaction, and backfills new stores from existing data. Before any upgrade, the adapter copies the whole old database to `digital-classroom-os-backup-v<old>` and verifies the copy. A later attempt never replaces or removes an earlier complete copy; it writes `-2`, `-3`, …. If the copy can't be made (e.g. the device is full), nothing is upgraded: the app shows a recovery screen that can download a backup read-only from the old database, try again, or upgrade without the on-device copy only once that file has been downloaded. An error inside a migration aborts the whole upgrade transaction, so the database stays at its old version (see [BACKUP_AND_RECOVERY.md](BACKUP_AND_RECOVERY.md)). Settings → Storage lists these safety copies and can export one as a backup file or delete it. Shipped migrations are never edited. Tests open a real v0.1.0 database (fixtures in `tests/fixtures/v0.1.0`) and check that it upgrades without loss.
 
-**Content schemas** are versioned separately from the database: documents are schema 1, or 2 when they use anything v0.1.0 could not store (an embedded diagram or any Phase 4 feature, judged against the frozen v0.1.0 vocabulary in `compat.ts`; see [DOCUMENT_COMPATIBILITY.md](DOCUMENT_COMPATIBILITY.md) §2), so documents that use none of these still open in v0.1.0; diagrams are schema 2. Content from a newer app opens read-only rather than being rewritten.
+**Content schemas** are versioned separately from the database: documents are schema 1, or 2 when they use anything v0.1.0 could not store (an embedded diagram or any Phase 4 feature, judged against the frozen v0.1.0 vocabulary in `compat.ts`; see [DOCUMENT_COMPATIBILITY.md](DOCUMENT_COMPATIBILITY.md) §2), so documents that use none of these still open in v0.1.0; diagrams are schema 2; presentations are schema 1 (the frozen vocabulary in `packages/presentation-studio/src/compat.ts`). Content from a newer app opens read-only rather than being rewritten.
 
 **Backup file (format 2):** `{ format: 'dcos-backup', formatVersion: 2, schemaVersion, exportedAt, deviceId, items[], versions[], attachments[] }`, with attachments as base64. `schemaVersion` is the highest content schema in the file, not the database version. Import validates every record first and imports nothing if the file is malformed, including any item or version whose content isn't an object. Unknown ids are added, identical items are skipped, and divergent items are added as "(restored)" copies, never overwriting local work. Copies remember `restoredFrom`, so importing the same file twice adds nothing. Items needing a newer app are left out and counted. Each imported item's history is pruned to the usual 50 versions under the same protection rules, in the same transaction. Import hashes attachment bytes itself, so a missing or wrong `sha256` in the file can't cause a collision.
 

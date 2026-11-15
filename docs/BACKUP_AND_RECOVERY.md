@@ -19,7 +19,7 @@ Everything you make is stored **in this browser on this device**, in its local d
 ### 1.2 Making a backup
 
 1. Open **Settings → Backup**.
-2. Click **Export backup**. One file is saved, `classroom-os-backup-<date>.json`. It holds every document, diagram, saved version, image of an embedded diagram, favourite and item in the trash.
+2. Click **Export backup**. One file is saved, `classroom-os-backup-<date>.json`. It holds every document, diagram, presentation, saved version, picture (including diagram previews and the pictures and picture backgrounds of slides), favourite and item in the trash.
 3. **Check that your browser actually saved the file.** Browsers can't tell the app whether you cancelled the save, so "Last backup exported …" means the export started, not that the file is safe.
 4. Copy the file off the device.
 
@@ -41,7 +41,9 @@ Restoring the same file twice does not add duplicates. Version history is kept, 
 
 **Moving to a new device or browser:** export on the old one, then restore on the new one.
 
-**Backups from version 0.1.0** restore into this version unchanged. Backups made by this version restore into 0.1.0 only if they contain no embedded diagrams. A document with a diagram needs the newer version, and 0.1.0 refuses that file instead of damaging anything.
+**Backups from version 0.1.0** restore into this version unchanged. Backups made by this version restore into 0.1.0 only if they contain no embedded diagrams and no presentations; 0.1.0 refuses any other file instead of damaging anything.
+
+**Presentations (Phase 7)** are in the same backup file as documents and diagrams. A build from before Phase 7 (Release 0.2 to Phase 6) restores such a file's documents and diagrams, leaves the presentations out and says how many it left out; restore the file in this version to get them.
 
 ### 1.4 Getting earlier work back
 
@@ -71,6 +73,8 @@ Some updates change the layout of the local database. Before changing anything, 
 **When an update arrives:** the app works offline, so a new version is downloaded in the background. Existing users of 0.1.0 get the new version once **every Classroom OS tab is closed** and the app is opened again; reloading a tab isn't enough. From this version on, a banner offers **Update now**, and it saves open work before reloading.
 
 **Going back to an older version is not supported.** If 0.1.0 is somehow loaded again after the upgrade, it can't open the upgraded database: its lists stay on "Loading…". Nothing is damaged, and opening the current version again shows everything. To use 0.1.0 again, restore a backup there that it can read (see 1.3).
+
+**The Phase 7 update (presentations) changes the database to version 3.** It makes the safety copy first, as above, then only adds two stores for presentations. After it, **every earlier build of Classroom OS refuses to open this browser's data**: it fails closed, so it reads, cleans up and deletes nothing, and opening the current version again shows everything. If an older tab or an old cached copy meets newer data, this version's screen *"Your data was saved by a newer version of Classroom OS"* offers **Update now** when the newer version is already downloaded, otherwise **Reload** (and if the screen comes back, close every Classroom OS tab and window, then open it again).
 
 ---
 
@@ -108,7 +112,7 @@ The `.tar.gz` holds the working tree exactly as it was, including uncommitted fi
 - **Migrations only add.** `MIGRATIONS[i](db, tx)` upgrades version *i* → *i + 1* inside IndexedDB's upgrade transaction. Never delete or rewrite a store or record. Never edit a migration that has shipped.
 - **Copy before upgrading.** The adapter makes and verifies a full copy (`<db>-backup-v<old>`) before every upgrade. A later attempt never replaces or removes an earlier complete copy; it uses `-2`, `-3`, …. If the copy can't be made, the app shows the recovery screen (§1.5) and does not upgrade.
 - **All or nothing.** An error inside a migration aborts the whole upgrade transaction, so the database stays at the old version.
-- **Versioned content.** Document and diagram content carry their own `schemaVersion`. Content from a newer app opens read-only and is never saved over.
+- **Versioned content.** Document, diagram and presentation content carry their own `schemaVersion`. Content from a newer app opens read-only and is never saved over.
 - **Tests required:**
   - unit tests with fake-indexeddb against the frozen v0.1.0 fixtures (`tests/fixtures/v0.1.0`)
   - the real-browser upgrade test (§2.4)
@@ -118,12 +122,12 @@ The `.tar.gz` holds the working tree exactly as it was, including uncommitted fi
 
 | What | Command | What it proves |
 |---|---|---|
-| Storage unit tests | `npx vitest run packages/local-storage tests/integration` | Transactions, conflicts, versions and pruning, drafts, backup validation, idempotent import, the v1 → v2 migration with its safety copy, the recovery paths when the copy or the upgrade fails |
-| Backup round trip in real browsers | `npx playwright test e2e/backup-restore.spec.ts --project=chromium --project=webkit` | Data created through the UI is exported, restored into an empty browser profile and checked to be identical: items, versions, favourites, trash, attachments, images and diagram previews. Also checks that restoring again adds nothing, that a changed item comes back as one copy, and that damaged or newer files are refused without changes |
-| Upgrade from v0.1.0 in a real browser | `npm run test:upgrade` | Builds v0.1.0 from tag `v0.1.0-baseline` and creates data through its UI. It then upgrades the same Chromium profile to the current build on the same origin and checks that every record is identical, the safety copy is complete, everything opens and backups work. It also observes a downgrade and runs the low-space recovery flow |
+| Storage unit tests | `npx vitest run packages/local-storage tests/integration` | Transactions, conflicts, versions and pruning, drafts, backup validation, idempotent import, the v1 → v2 and v2 → v3 migrations with their safety copies, every per-kind operation for documents, diagrams and presentations (`kinds.test.ts`), a version-3 database refused at version 2 with nothing changed, the recovery paths when the copy or the upgrade fails |
+| Backup round trip in real browsers | `npx playwright test e2e/backup-restore.spec.ts --project=chromium --project=webkit` | Data created through the UI is exported, restored into an empty browser profile and checked to be identical: items (presentations too), versions, favourites, trash, attachments, images and diagram previews. `e2e/presentation-cross-feature.spec.ts` does the same for a presentation using every feature and exports it from the restored profile. Also checks that restoring again adds nothing, that a changed item comes back as one copy, and that damaged or newer files are refused without changes |
+| Upgrade from v0.1.0 in a real browser | `npm run test:upgrade` | Builds v0.1.0 from tag `v0.1.0-baseline` and creates data through its UI. It then upgrades the same Chromium profile to the current build on the same origin and checks that every record is identical, the safety copy is complete, everything opens and backups work. It also observes a downgrade and runs the low-space recovery flow. Since Phase 7 it also builds the Phase 6 app (`650cf63`), creates data through its UI, upgrades that profile to version 3 and checks that every record and store layout is unchanged, the `-backup-v2` copy is complete, the Phase 6 document opens and a presentation can be created; going back to Phase 6 is refused with `VersionError` and changes nothing |
 
 `npm run test:upgrade` notes:
-- **First run:** it runs `npm ci` and a build for v0.1.0 in a temporary git worktree, which it then removes.
-- **Caching:** set `UPGRADE_TEST_CACHE` to keep the built v0.1.0 between runs. The port is `UPGRADE_TEST_PORT` (default 4180); 5173 is refused, to protect the dev server's data.
+- **First run:** it runs `npm ci` and a build for v0.1.0, and for the Phase 6 commit `650cf63`, each in a temporary git worktree, which it then removes.
+- **Caching:** set `UPGRADE_TEST_CACHE` to keep the built v0.1.0 and Phase 6 between runs. The port is `UPGRADE_TEST_PORT` (default 4180); 5173 is refused, to protect the dev server's data.
 - **What it touches:** it uses temporary browser profiles only and rewrites `apps/web/dist`.
 - **Low space is simulated:** the low-space part makes IndexedDB writes fail in a throwaway profile, because Chromium's quota override has no effect under Playwright. A real "disk full" has not been reproduced.

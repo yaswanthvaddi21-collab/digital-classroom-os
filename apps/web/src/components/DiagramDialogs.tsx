@@ -16,6 +16,7 @@ import {
   storage,
   type DiagramDialogBase,
   type DiagramDialogDraft,
+  type DiagramDialogOwnerKind,
 } from '../lib/storage';
 import { MODULES } from '../modules';
 
@@ -44,6 +45,43 @@ interface EditRequest {
   resolve: (result: EmbeddedDiagram | null) => void;
 }
 
+/**
+ * Phase 7 (ADR 0014): the item a diagram dialog belongs to. Its unsaved edits are kept as drafts of that item and the
+ * dialog's words name where the diagram goes. Documents keep exactly their Phase 6 behaviour and words.
+ */
+export interface DiagramDialogOwner {
+  kind: 'document' | 'presentation';
+  id: string;
+}
+
+const WORDS = {
+  document: {
+    discardNew: 'Discard this new diagram? It has not been added to your document.',
+    hintNew: 'This diagram will be placed in your document.',
+    hintEdit: 'Changes appear in your document when you save.',
+    insert: 'Insert into document',
+    where: 'document',
+    kept: 'Your diagram changes were kept. Choose “Recover diagram edits” to put them into the document.',
+    library: 'A copy is placed in the document; the original diagram stays unchanged.',
+    focus: '.ProseMirror[contenteditable="true"]',
+  },
+  presentation: {
+    discardNew: 'Discard this new diagram? It has not been added to your presentation.',
+    hintNew: 'This diagram will be placed on your slide.',
+    hintEdit: 'Changes appear on your slide when you save.',
+    insert: 'Insert on slide',
+    where: 'presentation',
+    kept: 'Your diagram changes were kept. Choose “Recover diagram edits” to put them into the presentation.',
+    library: 'A copy is placed on the slide; the original diagram stays unchanged.',
+    focus: '[data-presentation-editor] [role="listbox"][aria-label^="Objects on slide"]',
+  },
+} as const;
+type Words = (typeof WORDS)[keyof typeof WORDS];
+const ownerKindOf = (owner: DiagramDialogOwner | undefined): DiagramDialogOwnerKind | undefined => (owner?.kind === 'presentation' ? 'presentation' : undefined);
+// Documents call the storage helpers exactly as in Phase 6 (no owner argument).
+const dropKeptDraft = (id: string, session: string, kind?: DiagramDialogOwnerKind) => (kind ? deleteDiagramDialogDraft(id, session, kind) : deleteDiagramDialogDraft(id, session));
+const listKeptDrafts = (id: string, kind?: DiagramDialogOwnerKind) => (kind ? listDiagramDialogDrafts(id, kind) : listDiagramDialogDrafts(id));
+
 /** How long the dialog waits after the last change before keeping its edits as a draft. */
 export const DIALOG_DRAFT_DELAY_MS = 1000;
 
@@ -62,13 +100,16 @@ const baseOf = (d: EmbeddedDiagram): DiagramDialogBase => ({
  * With `docId` (the document being edited), unsaved edits in the dialog are kept as drafts of that document, and
  * `recover` reopens such a draft; it resolves with the saved diagram, which the caller puts into the document.
  */
-export function useDiagramHost(options: { docId?: string } = {}): {
+// Phase 7 (ADR 0014): or with `owner` { kind: 'presentation', id }, the drafts are filed under that presentation (as a
+// plain record, not a document) and the dialog speaks of slides. `docId` keeps today's document behaviour exactly.
+export function useDiagramHost(options: { docId?: string; owner?: DiagramDialogOwner } = {}): {
   host: DiagramHost;
   dialogs: React.ReactNode;
   active: boolean;
   recover: (draft: DiagramDialogDraft) => Promise<EmbeddedDiagram | null>;
 } {
-  const { docId } = options;
+  const owner: DiagramDialogOwner | undefined = options.owner ?? (options.docId ? { kind: 'document', id: options.docId } : undefined);
+  const words = WORDS[owner?.kind ?? 'document'];
   const toast = useToast();
   const [editing, setEditing] = useState<EditRequest | null>(null);
   const [picking, setPicking] = useState<((r: DiagramStart | null) => void) | null>(null);
@@ -145,7 +186,7 @@ export function useDiagramHost(options: { docId?: string } = {}): {
       {editing && (
         <DiagramEditDialog
           request={editing}
-          docId={docId}
+          owner={owner}
           onDone={(result, settle) => {
             if (result && settle) unsettled.current.set(result, settle);
             editing.resolve(result);
@@ -155,6 +196,7 @@ export function useDiagramHost(options: { docId?: string } = {}): {
       )}
       {picking && (
         <LibraryPicker
+          description={words.library}
           onDone={(result) => {
             picking(result);
             setPicking(null);
@@ -177,16 +219,18 @@ const announceDiagramDraftsChanged = () => window.dispatchEvent(new Event(DRAFTS
  * Puts focus back in the document once it is on the page (it may be remounting), unless the user has put it somewhere
  * else meanwhile. For when the element a dialog was opened from no longer exists.
  */
-function focusDocumentSoon(tries = 30) {
-  const step = (left: number) => {
+export function focusDocumentSoon(selector: string = WORDS.document.focus, tries = 30) {
+  const step = (left: number, focused: HTMLElement | null) => {
     const active = document.activeElement;
     // Somewhere the user put it (not the page itself, nor inside the dialog that is closing).
     if (active && active !== document.body && active.isConnected && !active.closest('dialog:not([open])')) return;
-    const doc = document.querySelector<HTMLElement>('.ProseMirror[contenteditable="true"]');
-    if (doc) doc.focus({ preventScroll: true });
-    else if (left > 0) setTimeout(() => step(left - 1), 50);
+    // Focus that was put back and then lost again: the editor was remounted under it (a presentation is re-opened with
+    // the recovered diagram), so look again for the new one.
+    const doc = document.querySelector<HTMLElement>(selector);
+    if (doc && doc !== focused) doc.focus({ preventScroll: true });
+    if (left > 0) setTimeout(() => step(left - 1, doc ?? null), 50);
   };
-  setTimeout(() => step(tries), 0);
+  setTimeout(() => step(tries, null), 0);
 }
 
 /** Whether the main pointer is a finger: focusing a text field then brings up the soft keyboard. */
@@ -196,15 +240,18 @@ const messageOf = (err: unknown) => (err instanceof Error ? err.message : String
 
 function DiagramEditDialog({
   request,
-  docId,
+  owner,
   onDone,
 }: {
   request: EditRequest;
-  docId?: string;
+  owner?: DiagramDialogOwner;
   /** `settle`, when given, is told whether the saved diagram got into the document (see DiagramHost.settle). */
   onDone: (r: EmbeddedDiagram | null, settle?: (applied: boolean) => void) => void;
 }) {
   const toast = useToast();
+  const docId = owner?.id;
+  const ownerKind = ownerKindOf(owner);
+  const words: Words = WORDS[owner?.kind ?? 'document'];
   const ref = useRef<HTMLDialogElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const api = useRef<DiagramEditorApi>(null);
@@ -235,8 +282,8 @@ function DiagramEditDialog({
   const snapshot = useCallback((): Omit<DiagramDialogDraft, 'savedAt'> | null => {
     const editor = api.current;
     if (!docId || !editor || editor.isReadOnly()) return null;
-    return { docId, session, base, source: editor.getContent(), title: latest.current.title };
-  }, [docId, session, base]);
+    return { docId, ...(ownerKind ? { ownerKind } : {}), session, base, source: editor.getContent(), title: latest.current.title };
+  }, [docId, ownerKind, session, base]);
   const writeDraft = useCallback(() => {
     if (draftTimer.current) clearTimeout(draftTimer.current);
     draftTimer.current = null;
@@ -264,8 +311,8 @@ function DiagramEditDialog({
     if (!docId) return;
     // After a write still in flight, so it cannot bring the draft back.
     await draftWrite.current;
-    await deleteDiagramDialogDraft(docId, session).catch(() => undefined);
-  }, [docId, session]);
+    await dropKeptDraft(docId, session, ownerKind).catch(() => undefined);
+  }, [docId, ownerKind, session]);
 
   // Other tabs do not offer this draft while the dialog is open.
   useEffect(() => (docId ? holdDiagramDialogSession(session) : undefined), [docId, session]);
@@ -321,9 +368,9 @@ function DiagramEditDialog({
       if (back && back !== active && lost) back.focus({ preventScroll: true });
       // Recovered edits: the offer's button is gone and the editor is remounted with them, so focus goes to the
       // document once it is back. (Document Studio puts focus back itself after its own edits and inserts.)
-      else if (!back && lost && recovered) focusDocumentSoon();
+      else if (!back && lost && recovered) focusDocumentSoon(words.focus);
     },
-    [onDone, opener, recovered],
+    [onDone, opener, recovered, words],
   );
   const apiRef = useCallback((a: DiagramEditorApi | null) => {
     api.current = a;
@@ -351,12 +398,12 @@ function DiagramEditDialog({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cancel = useCallback(() => {
-    const question = isNew ? 'Discard this new diagram? It has not been added to your document.' : 'Discard your changes to this diagram?';
+    const question = isNew ? words.discardNew : 'Discard your changes to this diagram?';
     if (dirty && !confirm(question)) return false;
     void dropDraft();
     finish(null);
     return true;
-  }, [dirty, isNew, finish, dropDraft]);
+  }, [dirty, isNew, finish, dropDraft, words]);
 
   const save = async () => {
     const editor = api.current;
@@ -382,15 +429,15 @@ function DiagramEditDialog({
         // dialog was open), they stay offered by "Recover diagram edits" instead of being lost (Round 3).
         if (draftTimer.current) clearTimeout(draftTimer.current);
         await draftWrite.current;
-        await saveDiagramDialogDraft({ docId, session, base, source: content, title: result.title }).catch(() => undefined);
+        await saveDiagramDialogDraft({ docId, ...(ownerKind ? { ownerKind } : {}), session, base, source: content, title: result.title }).catch(() => undefined);
         if (!recovered) {
           settle = (applied) => {
             if (applied) {
-              void deleteDiagramDialogDraft(docId, session).catch(() => undefined);
+              void dropKeptDraft(docId, session, ownerKind).catch(() => undefined);
               return;
             }
             announceDiagramDraftsChanged();
-            toast('Your diagram changes were kept. Choose “Recover diagram edits” to put them into the document.', 'info');
+            toast(words.kept, 'info');
           };
         }
       } else {
@@ -407,8 +454,8 @@ function DiagramEditDialog({
   const hint = readOnly
     ? "This diagram was made with a newer version of Classroom OS and can't be changed here."
     : isNew
-      ? 'This diagram will be placed in your document.'
-      : 'Changes appear in your document when you save.';
+      ? words.hintNew
+      : words.hintEdit;
   return (
     <dialog
       ref={ref}
@@ -436,7 +483,7 @@ function DiagramEditDialog({
               Cancel
             </Button>
             <Button size="sm" variant="primary" onClick={save} disabled={saving || !studio || readOnly} icon={saving ? <Loader2 size={14} className="animate-spin" /> : undefined}>
-              {isNew ? 'Insert into document' : 'Save changes'}
+              {isNew ? words.insert : 'Save changes'}
             </Button>
           </div>
         </header>
@@ -450,8 +497,8 @@ function DiagramEditDialog({
           <div role="status" className="flex items-center gap-2 border-b border-accent/20 bg-accent-soft px-4 py-2 text-xs">
             <LifeBuoy size={14} className="shrink-0 text-accent" />
             <span>
-              Recovered unsaved changes{recovered.savedAt ? ` from ${relativeTime(recovered.savedAt)}` : ''}. {isNew ? 'Insert the diagram' : 'Save them'} to put them in your
-              document.
+              Recovered unsaved changes{recovered.savedAt ? ` from ${relativeTime(recovered.savedAt)}` : ''}. {isNew ? 'Insert the diagram' : 'Save them'} to put them in your{' '}
+              {words.where}.
             </span>
           </div>
         )}
@@ -480,13 +527,13 @@ function DiagramEditDialog({
   );
 }
 
-function LibraryPicker({ onDone }: { onDone: (r: DiagramStart | null) => void }) {
+function LibraryPicker({ onDone, description }: { onDone: (r: DiagramStart | null) => void; description: string }) {
   const [items, setItems] = useState<ItemSummary[] | null>(null);
   useEffect(() => {
     storage.list('diagram').then(setItems);
   }, []);
   return (
-    <Dialog open onClose={() => onDone(null)} title="Insert from my diagrams" description="A copy is placed in the document; the original diagram stays unchanged.">
+    <Dialog open onClose={() => onDone(null)} title="Insert from my diagrams" description={description}>
       {!items ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : items.length === 0 ? (
@@ -523,11 +570,14 @@ function LibraryPicker({ onDone }: { onDone: (r: DiagramStart | null) => void })
  */
 export function RecoverDiagramEdits({
   docId,
+  ownerKind,
   busy,
   recover,
   apply,
 }: {
   docId: string;
+  /** Phase 7: 'presentation' for a presentation's kept dialog edits (left out for documents). */
+  ownerKind?: DiagramDialogOwnerKind;
   busy: boolean;
   recover: (draft: DiagramDialogDraft) => Promise<EmbeddedDiagram | null>;
   /** Changes the stored document and shows the result (useEditableItem's applyChange). */
@@ -538,7 +588,8 @@ export function RecoverDiagramEdits({
   const [working, setWorking] = useState(false);
   // "Later": hidden until the document is opened again (or more edits are kept in this tab).
   const [later, setLater] = useState(false);
-  const refresh = useCallback(() => listDiagramDialogDrafts(docId).then(setDrafts, () => setDrafts([])), [docId]);
+  const refresh = useCallback(() => listKeptDrafts(docId, ownerKind).then(setDrafts, () => setDrafts([])), [docId, ownerKind]);
+  const where = ownerKind === 'presentation' ? 'presentation' : 'document';
   useEffect(() => {
     void refresh();
     // Edits kept just now in this tab (a saved dialog whose diagram could not be put into the document).
@@ -557,7 +608,7 @@ export function RecoverDiagramEdits({
     setWorking(true);
     try {
       // Read it again: another tab may have recovered or discarded it (or kept newer edits) since it was listed.
-      const draft = (await listDiagramDialogDrafts(docId).catch(() => [] as DiagramDialogDraft[])).find((d) => d.session === listed.session);
+      const draft = (await listKeptDrafts(docId, ownerKind).catch(() => [] as DiagramDialogDraft[])).find((d) => d.session === listed.session);
       if (!draft) {
         toast('These diagram edits were already recovered or discarded, in another tab or window.', 'info');
         return;
@@ -565,24 +616,40 @@ export function RecoverDiagramEdits({
       const result = await recover(draft);
       // Cancelled: the dialog removed the draft if the user agreed to discard it, else it is still offered.
       if (!result) return;
-      const { applyRecoveredDiagram } = await import('../lib/diagramRecovery');
       let placed: 'replaced' | 'appended' = 'replaced';
-      await apply((content) => {
-        const r = applyRecoveredDiagram(content, draft.base, result);
-        placed = r.placed;
-        return r.content;
-      });
-      await deleteDiagramDialogDraft(docId, draft.session).catch(() => undefined);
+      if (ownerKind === 'presentation') {
+        // Phase 7: over the diagram it was opened on, or (when that is gone) on the last slide.
+        const { applyRecoveredPresentationDiagram } = await import('@dcos/presentation-studio');
+        await apply((content) => {
+          const r = applyRecoveredPresentationDiagram(content, draft.base, result);
+          placed = r.placed;
+          return r.content;
+        });
+      } else {
+        const { applyRecoveredDiagram } = await import('../lib/diagramRecovery');
+        await apply((content) => {
+          const r = applyRecoveredDiagram(content, draft.base, result);
+          placed = r.placed;
+          return r.content;
+        });
+      }
+      await dropKeptDraft(docId, draft.session, ownerKind).catch(() => undefined);
       toast(
-        placed === 'replaced'
-          ? 'Recovered diagram edits saved in the document.'
-          : draft.base
-            ? 'The diagram you were editing is no longer in the document, so the recovered diagram was added at the end.'
-            : 'The recovered diagram was added at the end of the document.',
+        ownerKind === 'presentation'
+          ? placed === 'replaced'
+            ? 'Recovered diagram edits saved in the presentation.'
+            : draft.base
+              ? 'The diagram you were editing is no longer in the presentation, so the recovered diagram was added to the last slide.'
+              : 'The recovered diagram was added to the last slide.'
+          : placed === 'replaced'
+            ? 'Recovered diagram edits saved in the document.'
+            : draft.base
+              ? 'The diagram you were editing is no longer in the document, so the recovered diagram was added at the end.'
+              : 'The recovered diagram was added at the end of the document.',
         'success',
       );
     } catch (err) {
-      toast(`The recovered diagram could not be put into the document. ${messageOf(err)} Your diagram edits are still kept.`, 'error');
+      toast(`The recovered diagram could not be put into the ${where}. ${messageOf(err)} Your diagram edits are still kept.`, 'error');
     } finally {
       setWorking(false);
       await refresh();
@@ -591,7 +658,7 @@ export function RecoverDiagramEdits({
 
   const onDiscard = async () => {
     if (!confirm('Discard these unsaved diagram changes? This cannot be undone.')) return;
-    await deleteDiagramDialogDraft(docId, listed.session).catch((err) => toast(`Could not discard them. ${messageOf(err)}`, 'error'));
+    await dropKeptDraft(docId, listed.session, ownerKind).catch((err) => toast(`Could not discard them. ${messageOf(err)}`, 'error'));
     await refresh();
   };
 
@@ -616,7 +683,7 @@ export function RecoverDiagramEdits({
         <Button size="sm" disabled={working} onClick={() => void onDiscard()}>
           Discard
         </Button>
-        <Button size="sm" variant="ghost" disabled={working} onClick={() => setLater(true)} title="Hide this until the document is opened again; the edits stay kept">
+        <Button size="sm" variant="ghost" disabled={working} onClick={() => setLater(true)} title={`Hide this until the ${where} is opened again; the edits stay kept`}>
           Later
         </Button>
       </div>

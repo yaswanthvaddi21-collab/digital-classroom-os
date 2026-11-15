@@ -1,6 +1,11 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  resolve: {
+    // vite-plugin-pwa's virtual module exists only in the app build; unit tests get a stand-in (tests/stubs).
+    alias: { 'virtual:pwa-register/react': fileURLToPath(new URL('./tests/stubs/pwa-register-react.ts', import.meta.url)) },
+  },
   test: {
     include: ['apps/*/src/**/*.test.{ts,tsx}', 'packages/*/src/**/*.test.{ts,tsx}', 'tests/**/*.test.{ts,tsx}'],
     exclude: ['**/node_modules/**', 'e2e/**', 'tests/fixtures/**/*.gen.ts'],
@@ -17,6 +22,10 @@ export default defineConfig({
         'packages/local-storage/src/**': { lines: 85 },
         'packages/document-studio/src/migrate.ts': { lines: 90 },
         'packages/diagram-studio/src/types.ts': { lines: 85 },
+        // Phase 7 (ADR 0014): the presentation schema rule and protected view.
+        'packages/presentation-studio/src/migrate.ts': { lines: 90 },
+        'packages/presentation-studio/src/compat.ts': { lines: 90 },
+        'packages/presentation-studio/src/safety.ts': { lines: 90 },
       },
     },
   },

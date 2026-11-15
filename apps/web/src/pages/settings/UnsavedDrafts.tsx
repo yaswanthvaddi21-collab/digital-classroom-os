@@ -59,7 +59,7 @@ export function UnsavedDrafts() {
         Unsaved drafts
       </h3>
       <p className="mt-1 max-w-xl text-sm text-muted">
-        Edits that could not be saved when they were made are kept here until you open, save or discard them, also when the document or diagram they
+        Edits that could not be saved when they were made are kept here until you open, save or discard them, also when the document, diagram or presentation they
         belong to was deleted.
       </p>
       {error ? (
@@ -117,7 +117,7 @@ export function UnsavedDrafts() {
       )}
       {drafts && drafts.length > 0 && (
         <p className="mt-3 flex items-center gap-1.5 text-xs text-muted">
-          <LifeBuoy size={13} /> Opening a document or diagram also offers its drafts for recovery there.
+          <LifeBuoy size={13} /> Opening a document, diagram or presentation also offers its drafts for recovery there.
         </p>
       )}
     </Card>

@@ -6,8 +6,10 @@ import { useOpenDiagramFile } from '../components/DiagramFiles';
 import { EditorFrame, MissingItem } from '../components/EditorFrame';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { setPreference, usePreferences } from '../lib/preferences';
+import { presentationImageHost } from '../lib/presentationHosts';
 import { useEditableItem } from '../lib/storage';
 import { useModuleEditor, type EditorProps, type ModuleDef } from '../modules';
+import { presenterUrl } from './PresenterPage';
 
 /** Opens one item of any module. Routes stay `#/<module.route>/:id` (frozen since v0.1.0). */
 export function EditorPage({ module }: { module: ModuleDef }) {
@@ -19,8 +21,12 @@ export function EditorPage({ module }: { module: ModuleDef }) {
 
 function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string; reload: () => void }) {
   const editable = useEditableItem<unknown>(module.kind, id);
-  // Phase 6: a document's diagram dialog keeps unsaved edits as drafts of that document.
-  const { host: diagramHost, dialogs, active: diagramDialogOpen, recover: recoverDiagramDraft } = useDiagramHost({ docId: module.kind === 'document' ? id : undefined });
+  // Phase 6: a document's diagram dialog keeps unsaved edits as drafts of that document. Phase 7 (ADR 0014):
+  // presentations get the diagram host too, their dialog drafts filed under the presentation.
+  const usesDiagrams = module.kind === 'document' || module.kind === 'presentation';
+  const { host: diagramHost, dialogs, active: diagramDialogOpen, recover: recoverDiagramDraft } = useDiagramHost(
+    module.kind === 'presentation' ? { owner: { kind: 'presentation', id } } : { docId: module.kind === 'document' ? id : undefined },
+  );
   const { item, status, saveNow, holdExternalUpdates } = editable;
   const toast = useToast();
   // @phase4:review — the comment author name and the remembered spell check setting, for documents.
@@ -81,14 +87,18 @@ function EditorPageInner({ module, id, reload }: { module: ModuleDef; id: string
           initialContent={item.content}
           title={editable.title}
           onChange={editable.updateContent}
-          diagramHost={module.kind === 'document' ? diagramHost : undefined}
+          diagramHost={usesDiagrams ? diagramHost : undefined}
           {...(module.kind === 'document' ? documentPrefs : {})}
           {...(module.kind === 'diagram' ? { onOpenFile: () => void diagramFile.open() } : {})}
+          {...(module.kind === 'presentation' ? { imageHost: presentationImageHost, presenterUrl } : {})}
         />
       </ErrorBoundary>
       {dialogs}
       {module.kind === 'document' && (
         <RecoverDiagramEdits docId={id} busy={diagramDialogOpen} recover={recoverDiagramDraft} apply={editable.applyChange} />
+      )}
+      {module.kind === 'presentation' && (
+        <RecoverDiagramEdits docId={id} ownerKind="presentation" busy={diagramDialogOpen} recover={recoverDiagramDraft} apply={editable.applyChange} />
       )}
     </EditorFrame>
   );

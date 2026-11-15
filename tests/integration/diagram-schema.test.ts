@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { MAX_CONTENT_SCHEMA, MAX_CONTENT_SCHEMA_BY_KIND, type BackupFile, type WorkspaceItem } from '@dcos/local-storage';
 import { DIAGRAM_SCHEMA, deserializeDiagram, schema3Reason, serializeDiagram, type DiagramContent } from '@dcos/diagram-studio';
 import { DOCUMENT_SCHEMA } from '@dcos/document-studio';
+import { PRESENTATION_SCHEMA } from '@dcos/presentation-studio';
 
 const DIR = join(__dirname, '..', 'fixtures', 'v0.1.0');
 const load = <T>(rel: string): T => JSON.parse(readFileSync(join(DIR, rel), 'utf8'));
@@ -75,8 +76,8 @@ describe('diagrams the Phase 4 build wrote', () => {
 });
 
 describe('backups accept what this build writes', () => {
-  it('the backup limits match the newest document and diagram schemas', () => {
-    expect(MAX_CONTENT_SCHEMA_BY_KIND).toEqual({ document: DOCUMENT_SCHEMA, diagram: DIAGRAM_SCHEMA });
-    expect(MAX_CONTENT_SCHEMA).toBe(Math.max(DOCUMENT_SCHEMA, DIAGRAM_SCHEMA));
+  it('the backup limits match the newest document, diagram and presentation schemas', () => {
+    expect(MAX_CONTENT_SCHEMA_BY_KIND).toEqual({ document: DOCUMENT_SCHEMA, diagram: DIAGRAM_SCHEMA, presentation: PRESENTATION_SCHEMA });
+    expect(MAX_CONTENT_SCHEMA).toBe(Math.max(DOCUMENT_SCHEMA, DIAGRAM_SCHEMA, PRESENTATION_SCHEMA));
   });
 });

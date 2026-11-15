@@ -12,6 +12,12 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { UpgradeGate } from './UpgradeRecovery';
 
+// The service-worker state the newer-data screen reads (vite-plugin-pwa's virtual module, absent outside a Vite build).
+const sw = vi.hoisted(() => ({ waiting: false, update: vi.fn<(reload?: boolean) => Promise<void>>(() => Promise.resolve()) }));
+vi.mock('virtual:pwa-register/react', () => ({
+  useRegisterSW: () => ({ needRefresh: [sw.waiting, () => {}], offlineReady: [false, () => {}], updateServiceWorker: sw.update }),
+}));
+
 let n = 0;
 const fixture = (): BackupFile => JSON.parse(readFileSync(join(__dirname, '../../../../tests/fixtures/v0.1.0/backup-v1.json'), 'utf8'));
 const diskFull = () => Promise.reject(new DOMException('The quota has been exceeded.', 'QuotaExceededError'));
@@ -115,6 +121,75 @@ describe('UpgradeGate (audit STOR-R5)', () => {
     expect(await screen.findByText('The app')).toBeTruthy();
     expect((await adapter.info()).safetyCopies).toEqual([`${name}-backup-v1`]);
     for (const item of backup.items) expect(await adapter.get(item.kind, item.id)).toEqual(item);
+    await adapter.close();
+  });
+});
+
+describe('UpgradeGate on data from a newer version (Phase 7, ADR 0014)', () => {
+  it('says the data is from a newer version instead of showing an empty app, changes nothing, and Reload reloads', async () => {
+    sw.waiting = false;
+    sw.update.mockClear();
+    const name = `recovery-ui-newer-${++n}`;
+    const newer = await openDB(name, SCHEMA_VERSION + 1, {
+      upgrade(d) {
+        d.createObjectStore('documents', { keyPath: 'id' }).put({ id: 'kept', kind: 'document' });
+      },
+    });
+    newer.close();
+    const adapter = new IndexedDbAdapter(name);
+    const reload = vi.fn();
+    render(
+      <UpgradeGate recovery={adapter} reload={reload}>
+        <p>The app</p>
+      </UpgradeGate>,
+    );
+    expect(await screen.findByRole('alertdialog', { name: 'Your data was saved by a newer version of Classroom OS' })).toBeTruthy();
+    expect(screen.queryByText('The app')).toBeNull();
+    expect(screen.getByText(/If this screen comes back, close every Classroom OS tab and window/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Update now' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(sw.update).not.toHaveBeenCalled();
+    expect(await versionOf(name)).toBe(SCHEMA_VERSION + 1);
+    const check = await openDB(name);
+    expect(await check.getAll('documents')).toEqual([{ id: 'kept', kind: 'document' }]);
+    check.close();
+  });
+
+  // A plain reload keeps serving this build while the newer service worker waits, so Reload alone would bring this
+  // screen back: when a newer version is waiting, the screen switches to it instead (verify-R1, NewerDataScreen).
+  it('offers Update now, which activates the waiting newer version, when one is waiting', async () => {
+    sw.waiting = true;
+    sw.update.mockClear();
+    const name = `recovery-ui-newer-waiting-${++n}`;
+    const newer = await openDB(name, SCHEMA_VERSION + 1, { upgrade: (d) => void d.createObjectStore('documents', { keyPath: 'id' }) });
+    newer.close();
+    const reload = vi.fn();
+    render(
+      <UpgradeGate recovery={new IndexedDbAdapter(name)} reload={reload}>
+        <p>The app</p>
+      </UpgradeGate>,
+    );
+    expect(await screen.findByRole('alertdialog', { name: 'Your data was saved by a newer version of Classroom OS' })).toBeTruthy();
+    expect(screen.getByText(/The newest version is already on this device/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Update now' }));
+    expect(sw.update).toHaveBeenCalledWith(true);
+    expect(reload).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Updating…' }).hasAttribute('disabled')).toBe(true));
+    expect(await versionOf(name)).toBe(SCHEMA_VERSION + 1);
+    sw.waiting = false;
+  });
+
+  it('other open failures still show the app (its pages report the error)', async () => {
+    const adapter = new IndexedDbAdapter(`recovery-ui-other-${++n}`);
+    await adapter.listAll();
+    render(
+      <UpgradeGate recovery={adapter}>
+        <p>The app</p>
+      </UpgradeGate>,
+    );
+    expect(await screen.findByText('The app')).toBeTruthy();
     await adapter.close();
   });
 });
