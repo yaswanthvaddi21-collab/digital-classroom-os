@@ -488,6 +488,20 @@ If the schedule requires it, these are candidates to defer to after 1.0, each to
 
 ## 6. Owner decisions (D-NN)
 
+### 6.0 Decisions recorded
+
+| ID | Decided 2026-11-15 (owner's answers) |
+|---|---|
+| D-01 | The repository is public by the owner's explicit choice (recorded here). |
+| D-02 | Nothing is pushed until the owner says which work to push ("after completing we can push; don't push every update"). The Pages deploy stays push-triggered, so the live site changes only when the owner approves a push. No CI gate on the deploy was chosen. |
+| D-03 | Merge PR #1 (in AE-P2, as a push the owner has approved). |
+| D-04 | Keep the placeholder author for new commits; history unchanged. |
+| D-05 | Not chosen: no branch protection and no Dependabot security updates for now. |
+| D-06 | Tag v0.2.0 for the finished earlier programme, then 0.3 to 0.9 through the AE phases, 1.0.0-rc.N in AE-P15 and 1.0.0 in AE-P16 (RELEASE_STRATEGY §3.3 for numbering beyond AE-P9). |
+| D-39 | Not chosen: GitHub private vulnerability reporting stays off for now; SECURITY.md must state the reporting route that does exist. |
+
+Still open for AE-P2: D-23 (web CSP) and D-38 (coverage and the upgrade test in CI) may be answered in AE-P2 or AE-P3.
+
 "Blocks" names the earliest phase that needs the answer. Proposed defaults are proposals only; none is decided by this document. D-01 to D-39 come from the canonical planning brief; D-40 and D-41 come from the release strategy; D-42 to D-53 number the questions that the module PRDs asked this roadmap to add.
 
 | ID | Decision | Options / proposed default | Blocks |
