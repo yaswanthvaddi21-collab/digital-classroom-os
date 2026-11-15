@@ -8,7 +8,7 @@ This document defines what the Advanced Presentation Studio (module M03, require
 
 **Phase naming.** "AE-P6" is the Advanced Edition phase that completes this module. "v0.2 Phase 7" is the earlier programme's phase that built the current package (commit edc2672). The two are never shortened to "Phase 6" or "Phase 7".
 
-**Evidence base.** Code read at HEAD edc2672 on branch `advanced/phase1-audit`. Nothing was run in AE-P1. "Done" means implemented, with a test file and the recorded passing run of 2026-11-15 (RELEASE_GAPS.md §11, lines 251-264: Vitest 132 files / 1997 tests; Playwright 350 passed / 27 skipped / 0 failed in Chromium, WebKit and mobile Chromium; Firefox not run). Paths below are relative to `packages/presentation-studio/src/` unless they start with another root.
+**Evidence base.** Code read at HEAD edc2672 on branch `advanced/phase1-audit`. Nothing was run in AE-P1. "Done" means implemented, with a test file and the recorded passing run of 2026-11-15 (RELEASE_GAPS.md §11, lines 257-265: Vitest 132 files / 1997 tests; Playwright 350 passed / 27 skipped / 0 failed in Chromium, WebKit and mobile Chromium; Firefox not run). Paths below are relative to `packages/presentation-studio/src/` unless they start with another root.
 
 ---
 
@@ -32,7 +32,7 @@ Copied from the canonical planning brief §2 (M03). Package root: `packages/pres
 | PRS-FR-024 | Shapes | Done | 23 presets |
 | PRS-FR-025 | Diagrams | Done | hosts.ts:40; EditorPage.tsx:25-28. The diagram is **copied**, not linked |
 | PRS-FR-026 | Backgrounds | Done | design/BackgroundDialog.tsx |
-| PRS-FR-027 | Alignment guides | Done | editor/guides.ts:113-195 |
+| PRS-FR-027 | Alignment guides | Done | editor/guides.ts:113-231 |
 | PRS-FR-028 | Layers (z-order, lock, pane) | Partial | Z-order and lock Done. No selection pane; `ElementBase.name` is never set by the UI |
 | PRS-FR-029 | Grouping | **Absent** | ELEMENT_TYPES (types.ts:378) has no group type |
 | PRS-FR-040 | Speaker notes | Done | NotesPane.tsx |
@@ -97,7 +97,7 @@ Status words: Done, Partial, Stub, Absent, Unverified (brief §0.2). "Done" neve
 | PRS-FR-003 | Slide navigator with thumbnails; outline view and slide-sorter grid | Done (thumbnail list) | SlidesPanel.tsx:287 (`role="listbox"`), memoised thumbnails at :47 | Add virtualisation for PERF-007; outline and sorter views are a scope question under D-19 |
 | PRS-FR-004 | Multiple slide layouts; change layout keeps content by placeholder id | Done (8 fixed) | types.ts:398-399 `LayoutKind` / `LAYOUT_KINDS`; layouts.ts:7-16; design/model.ts:282 `changeLayout` | Adding and renaming layouts (TD-60) per D-19 |
 | PRS-FR-005 | Master slides: edit master background, placeholders and decorations; changes flow to layouts and slides; multiple masters if D-19 approves | Partial | One master (design/MasterView.tsx; design/model.ts:373, :465, :502, :514). The content model already stores `masters: SlideMaster[]` and each layout has a `masterId` (types.ts:401-420, :441-451), so more than one master needs no schema change: the schema-1 vocabulary has `masters` and `masterId` (compat.ts:15, :25-26), and safety.ts:171-190 accepts several masters with unique ids and checks each layout's `masterId` against them (read in AE-P1; no test with two masters exists). The editor cannot add or rename a master (TD-60), and master view opens on `masters[0]` (design/MasterView.tsx:159). PPTX writes one master and copies its decorations onto each layout (TD-56) | Per D-19: multiple masters need a custom PPTX master writer (PptxGenJS 4.0.1 supports one master) |
-| PRS-FR-006 | Themes and templates: built-in themes, built-in templates, custom theme colours and fonts, user-saved templates, PPTX/.potx import if D-19 approves | Partial | themes.ts:12 (6 themes); templates.ts:17-41 (5 templates); design/model.ts:57-63 (`custom` theme). No user templates; no import (ADR 0014 decision 8) | User templates and PPTX import per D-19 |
+| PRS-FR-006 | Themes and templates: built-in themes, built-in templates, custom theme colours and fonts, user-saved templates, PPTX/.potx import if D-19 approves | Partial | themes.ts:12 (6 themes); templates.ts:17-41 (5 templates); design/model.ts:49-63 (`custom` theme). No user templates; no import (ADR 0014 decision 8) | User templates and PPTX import per D-19 |
 | PRS-FR-007 | Slide size 16:9 and 4:3 (beyond the brief) | Done | types.ts:20-25 `SLIDE_SIZES`; design/model.ts:115 `setSlideSize` | Re-verify |
 | PRS-FR-008 (new) | Hide slides from the show; hidden slides are still exported and marked hidden in PPTX (beyond the brief) | Done | editor/model.ts:104 `setSlidesHidden`; types.ts:438 `Slide.hidden`; PPTX `show="0"` checked (docs/compatibility/phase7-2026-11-15/README.md) | Re-verify |
 
@@ -113,7 +113,7 @@ Status words: Done, Partial, Stub, Absent, Unverified (brief §0.2). "Done" neve
 | PRS-FR-025 | Diagrams: create, insert from template, library or .drawio file; edit in place; embedded as an editable copy (INT-02) | Done | hosts.ts:40 `PresentationDiagramHost`; apps/web/src/pages/EditorPage.tsx:25-28; tests/integration/presentation-hosts.test.ts; presentation-export.test.ts. Copied, not linked | Add `sourceRef` provenance and "update from source" through SVC-REF (ADR-0018, AE-P12); external check of the PPTX diagram |
 | PRS-FR-026 | Slide backgrounds: solid, gradient, picture; apply to all | Done | types.ts:43-52; design/BackgroundDialog.tsx; design/model.ts:136, :154; export/background-fit.test.ts. Two-stop gradients only in the dialog | Re-verify |
 | PRS-FR-027 | Alignment guides: slide edges and centre, other objects, equal spacing; Alt disables | Done | editor/guides.ts:113 `guidesFor`, :146 `spacingFor`, :177 `snapMove`, :195 `snapResize`; guides.test.ts. Resize snapping only for unrotated objects | Re-verify; M02 may adapt this code for DGM-FR-081 |
-| PRS-FR-028 | Layers: z-order, lock, and a selection pane that lists, names, hides and reorders objects | Partial | editor/arrange.ts:10-18; ui/HomeTab.tsx:323-355; model.ts:173 `setLocked`. No pane; `ElementBase.name` (types.ts:200) is read by Canvas.tsx:106 and export/pptx.ts:142 but never set by the UI | Selection pane; per-object hide (needs a schema-2 field) |
+| PRS-FR-028 | Layers: z-order, lock, and a selection pane that lists, names, hides and reorders objects | Partial | editor/arrange.ts:10-18; ui/HomeTab.tsx:323-355; model.ts:173 `setLocked`. No pane; `ElementBase.name` (types.ts:200-201) is read by Canvas.tsx:106 and export/pptx.ts:142 but never set by the UI | Selection pane; per-object hide (needs a schema-2 field) |
 | PRS-FR-029 | Group and ungroup objects; nested groups; resize and rotate a group; groups exported as PPTX group shapes | **Absent** | types.ts:376-378: `ELEMENT_TYPES` = text, image, shape, table, chart, diagram | New `group` element type, PRESENTATION_SCHEMA 2 |
 | PRS-FR-030 (new) | Resize several selected objects together | Absent | TD-60 | Implement with grouping geometry |
 
@@ -221,7 +221,7 @@ Multiple masters: the array shape already exists (§6.1) and is in the schema-1 
 
 ## 7. Technical architecture
 
-**Today.** `@dcos/presentation-studio` is a workspace package (package.json:7-14) that imports only `@dcos/ui`. It is loaded lazily by the module registry (apps/web/src/modules.tsx:74-82) and receives `diagramHost` and `imageHost` through `EditorProps` (modules.tsx:10-25), built in apps/web (`useDiagramHost`, EditorPage.tsx:25-28; `presentationImageHost`, apps/web/src/lib/presentationHosts.ts:8). Folders: `editor/` (canvas, navigator, notes, guides, history), `elements/` (content tools, tables, charts, diagrams, pictures), `design/` (themes, masters, backgrounds, templates), `show/` (slide show, presenter view, effects, sequence, BroadcastChannel), `export/` (lazy chunk: PptxGenJS, fflate post-processing, jsPDF + svg2pdf.js), `render/` (shared SVG/HTML renderer). The presenter window is a separate route (apps/web/src/App.tsx:53). Exports run on the main thread.
+**Today.** `@dcos/presentation-studio` is a workspace package (package.json:7-14) that imports only `@dcos/ui`. It is loaded lazily by the module registry (apps/web/src/modules.tsx:74-82) and receives `diagramHost` and `imageHost` through `EditorProps` (modules.tsx:10-28), built in apps/web (`useDiagramHost`, EditorPage.tsx:25-28; `presentationImageHost`, apps/web/src/lib/presentationHosts.ts:8). Folders: `editor/` (canvas, navigator, notes, guides, history), `elements/` (content tools, tables, charts, diagrams, pictures), `design/` (themes, masters, backgrounds, templates), `show/` (slide show, presenter view, effects, sequence, BroadcastChannel), `export/` (lazy chunk: PptxGenJS, fflate post-processing, jsPDF + svg2pdf.js), `render/` (shared SVG/HTML renderer). The presenter window is a separate route (apps/web/src/App.tsx:53). Exports run on the main thread.
 
 **Changes for AE-P6.**
 

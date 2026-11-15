@@ -92,7 +92,7 @@ All requirements are **Absent** today (no module code). The "Reuses" column name
 | NBK-FR-011 | Bookmarks: bookmark a page or a heading inside a page; bookmark list; jump to bookmark; bookmarks survive moving the page | Absent | — | Content-level anchors keyed by stable page id and node id (ADR-0025) |
 | NBK-FR-012 | Global search: notebook titles, page titles, page text and attachment names appear in SVC-SEARCH results, with a jump to the page | Absent | SVC-SEARCH is Absent (title filter only, apps/web/src/pages/ItemListPage.tsx:34-35) | AE-P7 builds the first SVC-SEARCH indexer (brief §9); M09 owns the global entry point (AE-P12). No notebook-private search engine |
 | NBK-FR-013 | Tags on notebooks (and, if D-11 extends it, on pages) | Absent | SVC-ORG tags (ADR-0016, proposed) | Item-level tags come from SVC-ORG. Page-level tags would be content data; raise under D-11 if wanted |
-| NBK-FR-014 | Favourite notebooks | Absent | `setFavorite` metadata-only change (types.ts:176; indexeddb.ts:808-827); Dashboard favourites (apps/web/src/pages/Dashboard.tsx:172-186) | Works as soon as the kind exists |
+| NBK-FR-014 | Favourite notebooks | Absent | `setFavorite` metadata-only change (types.ts:176; indexeddb.ts:808-810, :826-841); Dashboard favourites (apps/web/src/pages/Dashboard.tsx:172-186) | Works as soon as the kind exists |
 | NBK-FR-015 | Autosave with retries, conflict detection and drafts | Absent | `useEditableItem` (apps/web/src/lib/storage.ts:714); 600 ms debounce, retries 1/3/10 s (storage.ts:689-692); drafts (indexeddb.ts:1055-1080); ADR 0003, 0004 | See NBK-NFR-001 on whole-notebook saves |
 | NBK-FR-016 | Offline access: create, edit, draw and export notebooks with no network after the first visit | Absent | PWA precache (apps/web/vite.config.ts:22-43); ADR 0001 | Notebook chunk must be precached; e2e offline test |
 | NBK-FR-017 | PDF export of a page, chapter, section or whole notebook, with ink drawn as vectors and equations rendered | Absent | M01 print path: `buildPrintHtml`, `printDocument` (document-studio export/print.ts:173, :202; exported from index.ts) | Per ADR-0025: M01 print path, or the M05 engine if one is chosen (ADR-0023). Print-dialog limits apply (headers/footers need Chromium 131+, printSupport.ts:11) |
@@ -114,7 +114,7 @@ All proposed; performance numbers are **proposed targets, to be measured** with 
 | NBK-NFR-004 | Offline: as NBK-FR-016, verified by e2e | Absent |
 | NBK-NFR-005 | Accessibility: WCAG 2.2 AA (A11Y-001); the tree, page list and toolbar are keyboard operable; ink has a keyboard-accessible alternative (typed note) and strokes have an accessible summary ("drawing, 12 strokes") | Absent |
 | NBK-NFR-006 | Input limits: pictures as in M01 (15 MB); attachments capped per file (value set in ADR-0017); total notebook content size capped with a clear message | Absent |
-| NBK-NFR-007 | Package boundary: `@dcos/notebook` imports only what tests/integration/boundaries.test.ts allows after D-10 | Absent. Note: boundaries.test.ts:29-31 fails as soon as a package gains a `src/` folder without an `ALLOWED` entry, so this is enforced automatically |
+| NBK-NFR-007 | Package boundary: `@dcos/notebook` imports only what tests/integration/boundaries.test.ts allows after D-10 | Absent. Note: boundaries.test.ts:28-29 fails as soon as a package gains a `src/` folder without an `ALLOWED` entry, so this is enforced automatically |
 | NBK-NFR-008 | Identifiers: sections, chapters, pages, bookmarks and strokes use full random UUIDs, generated as in `packages/local-storage/src/ids.ts` (whose fallback uses `getRandomValues`). Do not copy presentation-studio create.ts:15-19, whose fallback is not a UUID (PRS-NFR-011 is Partial), and do not use truncated ids like the diagram ids (R-015) | Absent |
 | NBK-NFR-009 | Browser support per PLT-001…003; touch and pen input on mobile Chromium and, when built, Android (PLT-007) | Absent |
 
@@ -207,7 +207,7 @@ Alternative to record in the ADR: pages as separate records in a `notebook_pages
 ### 7.1 Package and app wiring
 
 - New workspace package `@dcos/notebook` (`packages/notebook/`, added to package.json workspaces, which today have six entries, apps/web and five packages, package.json:7-14).
-- Editor component `NotebookEditor` loaded lazily through `ModuleDef.loadEditor` (apps/web/src/modules.tsx:38-52), receiving `initialContent`, `onChange` and hosts through `EditorProps` (modules.tsx:10-25), like the other three studios. Storage, attachments and diagrams come through hosts (SVC-HOST); the package does not import local-storage.
+- Editor component `NotebookEditor` loaded lazily through `ModuleDef.loadEditor` (apps/web/src/modules.tsx:38-52), receiving `initialContent`, `onChange` and hosts through `EditorProps` (modules.tsx:10-28), like the other three studios. Storage, attachments and diagrams come through hosts (SVC-HOST); the package does not import local-storage.
 - Folders mirror the existing studios: `tree/` (sections, chapters, pages model and panel), `page/` (rich-text page editor), `ink/` (stroke capture, rendering, eraser hit tests), `attachments/`, `bookmarks/`, `export/` (lazy), `search/` (text extractor), `compat.ts`, `migrate.ts`, `safety.ts`.
 
 ### 7.2 Rich-text reuse (D-10)
@@ -273,7 +273,7 @@ M04 defines no private version of any shared service. References use SVC-REF's `
 
 | ID | Contract | Status |
 |---|---|---|
-| NBK-IF-001 | Editor props: the notebook editor accepts the shared `EditorProps` (apps/web/src/modules.tsx:10-25) plus a `NotebookAttachmentHost` | Absent |
+| NBK-IF-001 | Editor props: the notebook editor accepts the shared `EditorProps` (apps/web/src/modules.tsx:10-28) plus a `NotebookAttachmentHost` | Absent |
 | NBK-IF-002 | Search extractor for SVC-SEARCH, wrapped by the app as a DSH-IF-001 `TextExtractor` (locator = page id) | Absent |
 | NBK-IF-003 | NotebookHost for INT-07 (provider side), so M01 can pick a notebook page without importing the notebook package | Absent |
 | NBK-IF-004 | Schema and safety functions, matching the shape the other studios export | Absent |

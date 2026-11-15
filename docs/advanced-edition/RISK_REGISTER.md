@@ -58,7 +58,7 @@ Status counts at 2026-11-15: Realised 6 (R-001, R-002, R-019, R-035, R-037, R-09
 | AE-P11 | R-081, R-083, R-084, R-085, R-086 | R-003, R-040 |
 | AE-P12 | R-087, R-088, R-089, R-090, R-091, R-092 | R-021, R-099 |
 | AE-P13 | — | R-005, R-007, R-025, R-034, R-036, R-089 |
-| AE-P14 | R-032, R-033, R-039, R-094, R-095 | R-012, R-037, R-057, R-065, R-084 |
+| AE-P14 | R-032, R-033, R-039, R-094, R-095 | R-012, R-037, R-057, R-065, R-084, R-098 |
 | AE-P15 | — | R-021, R-035, R-098 |
 | AE-P16 | — | R-093, R-094, R-095 |
 
@@ -99,7 +99,7 @@ Status counts at 2026-11-15: Realised 6 (R-001, R-002, R-019, R-035, R-037, R-09
 
 | ID | Risk and evidence | L | I | Owner phase | Mitigation | Trigger | Status |
 |---|---|---|---|---|---|---|---|
-| R-009 | On-screen pagination in a ProseMirror editor is a large redesign; today one continuous sheet is drawn (DocumentEditor.tsx:308-320), and pagination affects DOC-FR-041, 042, 044, 045, 046 and 068 | H | M | AE-P4 | D-18 decides whether it is required; time-boxed spike before commitment; keep the print path as the paginated output; regression tests on all affected requirements | D-18 requires on-screen pagination; the spike exceeds its time box | Open |
+| R-009 | On-screen pagination in a ProseMirror editor is a large redesign; today one continuous sheet is drawn (DocumentEditor.tsx:387-392), and pagination affects DOC-FR-041, 042, 044, 045, 046 and 068 | H | M | AE-P4 | D-18 decides whether it is required; time-boxed spike before commitment; keep the print path as the paginated output; regression tests on all affected requirements | D-18 requires on-screen pagination; the spike exceeds its time box | Open |
 | R-010 | Track changes, citations and footnotes need DOCUMENT_SCHEMA 4 and a custom OOXML reader, because mammoth reads neither comments nor tracked changes | H | M | AE-P4 | Frozen vocabulary and protected read-only view for schema 4; a scoped OOXML reader with fixtures from real Word files; staged delivery; citations are a scope-cut candidate (D-36) | D-18 includes these features | Open |
 | R-011 | Word and LibreOffice compatibility is unproven: Word for Mac checked 2 of 16 DOCX samples (docs/compatibility/phase4-2026-11-14/), no Word for Windows, no LibreOffice, no ODT opened elsewhere, no OOXML or ODF schema validation | H | H | AE-P4 | D-22 access to licensed Word (Mac and Windows) and LibreOffice; dated checks of all samples; schema validation (TD-11); remove any compatibility claim that cannot be evidenced (REL-014) | AE-P4 exit approaching without the checks; a user report of a file that does not open | Open |
 | R-013 | TD-38: deterministic table-of-contents bookmarks rely on a private property of docx 9.15.3 (export/docx/index.ts:118-122); a docx upgrade can break them silently | M | L | AE-P4 | Keep docx pinned; a golden test on the bookmark output; upgrade deliberately; replace with a public API or own writer when possible | A docx version change, including a Dependabot pull request | Open |
@@ -217,14 +217,14 @@ The canonical planning brief let every writer append risks "from R-050 onwards",
 | R-063 to R-066 | M04 risks, numbers as proposed | MODULE_04 §12 |
 | R-067 to R-069 | Unused | — |
 | R-070 to R-075 | M07 risks, numbers as proposed | MODULE_07 §12 |
-| R-076 to R-080 | M06 risks. MODULE_06's draft used R-060 to R-064, which collided with M03 and M04; registered here as R-076…R-080 in the same order. MODULE_06 has since been renumbered (MODULE_06_CLASSROOM_HUB_PRD.md:605-613) | MODULE_06 §12 |
+| R-076 to R-080 | M06 risks. MODULE_06's draft used R-060 to R-064, which collided with M03 and M04; registered here as R-076…R-080 in the same order. MODULE_06 has since been renumbered (MODULE_06_CLASSROOM_HUB_PRD.md:609-617) | MODULE_06 §12 |
 | R-081 to R-086 | M08 risks (MODULE_08 asked this register to assign numbers), in the order listed there | MODULE_08 §12.2 |
 | R-087 to R-092 | M09 risks (MODULE_09 asked this register to assign numbers), in the order listed there | MODULE_09 §12.2 |
 | R-093 to R-100 | Release and platform risks | RELEASE_STRATEGY §14 |
 | R-101 to R-104 | M05 risks. MODULE_05 §12 proposed them as placeholders PDF-RISK-A…D; numbered here in that order | MODULE_05 §12 |
 | R-105 onwards | New risks | Any later document or phase |
 
-MODULE_01 and MODULE_02 state that this register "already uses R-050…R-057 for other risks" (MODULE_01_DOCUMENT_STUDIO_PRD.md:573), and four documents use R-052, R-054, R-055 and R-057 with meanings that match R-095, R-097, R-098 and R-100 here, apparently from an earlier draft numbering of the release risks. Those numbers now mean M01 and M02 risks. All the references below were corrected at the AE-P1 consolidation (2026-11-15); the line numbers are those of the drafts and are kept only as a record:
+MODULE_01 and MODULE_02 stated in their drafts that this register "already uses R-050…R-057 for other risks" (MODULE_01_DOCUMENT_STUDIO_PRD.md:573), and four documents use R-052, R-054, R-055 and R-057 with meanings that match R-095, R-097, R-098 and R-100 here, apparently from an earlier draft numbering of the release risks. Those numbers now mean M01 and M02 risks. All the references below were corrected at the AE-P1 consolidation (2026-11-15); the line numbers are those of the drafts and are kept only as a record:
 
 | Document and line | Uses | Meaning there | Correct ID |
 |---|---|---|---|

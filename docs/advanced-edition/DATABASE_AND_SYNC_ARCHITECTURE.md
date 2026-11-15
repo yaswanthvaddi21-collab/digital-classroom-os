@@ -53,7 +53,7 @@ Database `digital-classroom-os` (`apps/web/src/lib/platform.ts:4`), `SCHEMA_VERS
 | `presentations` | `id` | — | v3 | `WorkspaceItem` (presentation) |
 | `presentation_versions` | `id` | `by_item` → `itemId` | v3 | `ItemVersion` |
 
-Outside IndexedDB: preferences, theme and open tabs in `localStorage` (`dcos.preferences`, `dcos.theme`, `dcos.openTabs`), and emergency drafts in `localStorage` (`dcos-emergency-draft:<kind>:<id>`, `storage.ts:49`; capped at 2 × 1024 × 1024 characters, `EMERGENCY_DRAFT_MAX_CHARS`, `storage.ts:16`). None of these are in backups.
+Outside IndexedDB: preferences, theme and open tabs in `localStorage` (`dcos.preferences`, `dcos.theme`, `dcos.openTabs`), and emergency drafts in `localStorage` (`dcos-emergency-draft:<kind>:<id>`, `storage.ts:49`; capped at 2 × 1024 × 1024 characters, `EMERGENCY_DRAFT_MAX_CHARS`, `storage.ts:55`). None of these are in backups.
 
 ### 2.2 Records
 
@@ -81,8 +81,8 @@ Not present: folder, tags, owner user, last opened, metadata timestamp, origin o
 | From → to | Commit / phase | What it did | Evidence |
 |---|---|---|---|
 | 0 → 1 | v0.1.0 (20d3f4d) | documents, diagrams, their version stores, meta | `indexeddb.ts:246-252` |
-| 1 → 2 | ff53b49 "Release 0.2 stabilisation" (2026-11-13), before v0.2 Phase 3; v0.2 Phase 3 (2669868) then hardened storage without changing this migration (`git log -S` on `indexeddb.ts`) | item_index (backfilled from existing records, read only), drafts, attachments | `indexeddb.ts:253-264`; `indexeddb.test.ts:516` |
-| 2 → 3 | v0.2 Phase 7 (edc2672) | presentations, presentation_versions; purely additive | `indexeddb.ts:265-273`; `kinds.test.ts:174-300` |
+| 1 → 2 | ff53b49 "Release 0.2 stabilisation" (2026-11-13), before v0.2 Phase 3; v0.2 Phase 3 (2669868) then hardened storage without changing this migration (`git log -S` on `indexeddb.ts`) | item_index (backfilled from existing records, read only), drafts, attachments | `indexeddb.ts:253-266`; `indexeddb.test.ts:516` |
+| 2 → 3 | v0.2 Phase 7 (edc2672) | presentations, presentation_versions; purely additive | `indexeddb.ts:267-273`; `kinds.test.ts:174-310` |
 
 Protection around every upgrade (Done for IndexedDB):
 
@@ -93,7 +93,7 @@ Protection around every upgrade (Done for IndexedDB):
 5. Builds made for an older version fail closed with `VersionError` and change nothing (`kinds.test.ts:269`).
 6. Real-browser evidence: `scripts/upgrade-test.mjs` (v0.1.0 tag and 650cf63 → v3, downgrade, simulated full disk at `:621-681`), 82/82 on 2026-11-15, Chromium only, not in CI (RELEASE_GAPS.md:261, final run; :253 is the earlier run the same day).
 
-Gap: `apps/web/src/lib/storage.ts:318` sets `upgradeRecovery` to `null` for any adapter that is not `IndexedDbAdapter`, so a second adapter currently has no recovery screen.
+Gap: `apps/web/src/lib/storage.ts:319` sets `upgradeRecovery` to `null` for any adapter that is not `IndexedDbAdapter`, so a second adapter currently has no recovery screen.
 
 ### 2.4 Content schemas (separate from the database version)
 
@@ -101,7 +101,7 @@ Gap: `apps/web/src/lib/storage.ts:318` sets `upgradeRecovery` to `null` for any 
 |---|---|---|---|
 | document | 3 | `packages/document-studio/src/migrate.ts:13`; frozen vocabularies `compat.ts:12`, `:68` | stored under the lowest schema its content needs |
 | diagram | 3 | `packages/diagram-studio/src/types.ts:221`; ADR 0012 | chosen per save |
-| presentation | 1 | `packages/presentation-studio/src/types.ts:16`; frozen `compat.ts:14` | grouping, timeline, exit effects need 2 |
+| presentation | 1 | `packages/presentation-studio/src/types.ts:16`; frozen `compat.ts:14` | grouping, per-object hide, exit and emphasis effects need 2; a timeline only if an object may carry several animations (MODULE_03 §3.3) |
 | backup ceiling | `{ document: 3, diagram: 3, presentation: 1 }` | `packages/local-storage/src/backup.ts:14` | an item or version of an unknown kind is skipped and counted as `unsupported` (`backup.ts:76`, `:103`); content above its kind's ceiling rejects the whole import with `InvalidBackupError` (`backup.ts:82`, `:108`) |
 
 Content newer than the build opens in a protected read-only view. Upgraders are pure functions (`migrate.ts:18-23`).
@@ -319,7 +319,7 @@ Proposed path: ship the first native builds (AE-P14) on Option A only if Option 
 | Atomic save with version check | one IndexedDB transaction | `BEGIN IMMEDIATE`; `UPDATE … WHERE id = ? AND version = ?`; zero rows → `ConflictError` |
 | Cross-window coordination | BroadcastChannel + Web Locks | a single adapter in the native process; change events forwarded to every window |
 | Attachments | `attachments` store with `by_sha256` | `attachments(sha256 UNIQUE, …)` metadata + files `blobs/<sha256>`; clean-up deletes files only after the metadata transaction commits |
-| Upgrade recovery | `UpgradeRecovery` | the same interface implemented for SQLite, so `storage.ts:318` no longer returns null |
+| Upgrade recovery | `UpgradeRecovery` | the same interface implemented for SQLite, so `storage.ts:319` no longer returns null |
 | Durability | browser-managed | WAL mode, `synchronous=NORMAL` or `FULL` (to measure), `foreign_keys=ON` |
 
 ### 5.3 Table mapping (to be generated from the IndexedDB model in AE-P3; not the old DDL)

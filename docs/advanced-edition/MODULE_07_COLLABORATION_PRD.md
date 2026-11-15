@@ -234,7 +234,7 @@ The brief asks to evaluate Yjs against the current optimistic-concurrency model.
 | "Never silently overwrite" | Strong: always a copy | Merges automatically; text is never lost but intent can be (e.g. edit inside text another user deleted). Needs pre-merge snapshots and validation checks | Same as B | Strong |
 | Server needs | Plain HTTP (FastAPI) | A relay that speaks the Yjs sync protocol (Python candidates `pycrdt`/`pycrdt-websocket`, or a Node `y-websocket`-compatible server) with an auth hook | Own relay | Plain HTTP + lock expiry |
 | New storage | None beyond DB v4 | CRDT state store, compaction | Same | Lease records |
-| Undo | Existing in-memory undo | Must switch to the CRDT's undo manager (replaces StarterKit UndoRedo, `extensions/index.ts:34-38`) | Own | Existing |
+| Undo | Existing in-memory undo | Must switch to the CRDT's undo manager (replaces StarterKit UndoRedo, `extensions/index.ts:35-38`) | Own | Existing |
 | Complexity / risk | Low | Medium-high (R-029) | High (less ecosystem fit) | Low, poor UX |
 | Licence (reported, to verify) | — | Yjs MIT; y-prosemirror MIT; Tiptap open-source extensions MIT (confirm not Pro), as reported in brief ADR-0022; y-protocols to verify | MIT (reported in brief ADR-0022) | — |
 
@@ -254,7 +254,7 @@ The brief asks to evaluate Yjs against the current optimistic-concurrency model.
 | Component | Location | Responsibility |
 |---|---|---|
 | Sync client (SVC-SYNC) | `packages/sync-engine` (workspace from AE-P9) | Operation queue, retry/backoff, host sequence tracking, 409 → conflict copy; shared with M06 |
-| Collaboration client (SVC-COLLAB) | `packages/sync-engine` or a new `packages/collab` (decided in the ADR after the spike) | CRDT documents, provider abstraction (transport), awareness, persistence to `collab_state`, canonical JSON derivation and validation |
+| Collaboration client (SVC-COLLAB) | `packages/sync-engine` or a new `packages/collab` (decided in the ADR after the spike) | CRDT documents, provider abstraction (transport), awareness, persistence to `collab_updates`, canonical JSON derivation and validation |
 | Editor bindings | Injected into studios by host objects (SVC-HOST pattern; ADR 0013/0014) | Document Studio receives optional collaboration extensions from the app, so `packages/document-studio` does not import the sync packages (boundary test) |
 | Share UI | `packages/sync-engine` UI or `apps/web` components | Share dialog, participant list, conflict view |
 | Host relay | `backend/synchronization` | WebSocket endpoint with token auth and per-update role check; update log; snapshots; item-sync endpoints |
@@ -465,7 +465,7 @@ interface CollaborationHost {
 
 ## 10. Acceptance criteria
 
-Numbering mirrors requirements (brief §4.3). This table is the canonical wording of the module's criteria; [ACCEPTANCE_CRITERIA.md](ACCEPTANCE_CRITERIA.md) §4 only summarises them and owns the cross-cutting criteria (AC-SYS, AC-SEC, AC-PERF, AC-INT and others) (ACCEPTANCE_CRITERIA §1.2). A change to a criterion here is made in ACCEPTANCE_CRITERIA §4 in the same edit. Phase: **AE-P10** unless noted. Multi-device criteria use separate browser contexts (separate storage) and, where stated, separate machines. Unless a row names browsers, "e2e" means the Chromium, Firefox and WebKit Playwright projects (ACCEPTANCE_CRITERIA §1.3), plus mobile Chromium for phone-width and touch checks; a criterion is not met while Firefox is not green in CI (R-001, D-03). "Re-verify: yes" marks criteria whose requirement is v0.2-Done or Partial today (AC-COL-009, 017, 018).
+Numbering mirrors requirements (brief §4.3). This table is the canonical wording of the module's criteria; [ACCEPTANCE_CRITERIA.md](ACCEPTANCE_CRITERIA.md) §4 only summarises them and owns the cross-cutting criteria (AC-SYS, AC-SEC, AC-PERF, AC-INT and others) (ACCEPTANCE_CRITERIA §1.2). A change to a criterion here is made in ACCEPTANCE_CRITERIA §4 in the same edit. Phase: **AE-P10** unless noted. Multi-device criteria use separate browser contexts (separate storage) and, where stated, separate machines. Unless a row names browsers, "e2e" means the Chromium, Firefox and WebKit Playwright projects (ACCEPTANCE_CRITERIA §1.3), plus mobile Chromium for phone-width and touch checks; a criterion is not met while Firefox is not green in CI (R-001, D-03). "Re-verify: yes" marks criteria whose requirement is v0.2-Done (AC-COL-017, 018) or that re-check an existing Partial feature (AC-COL-009, local comments).
 
 | AC ID | Verifies | Criterion | Evidence type |
 |---|---|---|---|

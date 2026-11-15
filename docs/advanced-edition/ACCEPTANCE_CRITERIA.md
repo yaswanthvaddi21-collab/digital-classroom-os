@@ -523,9 +523,9 @@ These do not change any requirement; they align numbering with §1.1. The PRDs w
 
 | Item | Finding | Canonical resolution |
 |---|---|---|
-| M08 offline criterion | An earlier draft of the PRD labelled its FIL-NFR-004 (offline) criterion AC-FIL-503 | **Resolved:** MODULE_08_FILE_MANAGER_PRD.md:440 now numbers it AC-FIL-504 ("All File Manager actions work with the network off") |
-| M08 FIL-NFR-003 | Virtualised lists and lazy previews had no criterion in an earlier draft | **Resolved:** MODULE_08_FILE_MANAGER_PRD.md:439 defines AC-FIL-503 (lists over 200 rows virtualised; previews load lazily) |
-| M04 NBK-NFR-004 | No AC-NBK-504 in an earlier draft | **Resolved:** MODULE_04_DIGITAL_NOTEBOOK_PRD.md:338 defines AC-NBK-504 (same check as AC-NBK-016) |
+| M08 offline criterion | An earlier draft of the PRD labelled its FIL-NFR-004 (offline) criterion AC-FIL-503 | **Resolved:** MODULE_08_FILE_MANAGER_PRD.md:441 now numbers it AC-FIL-504 ("All File Manager actions work with the network off") |
+| M08 FIL-NFR-003 | Virtualised lists and lazy previews had no criterion in an earlier draft | **Resolved:** MODULE_08_FILE_MANAGER_PRD.md:440 defines AC-FIL-503 (lists over 200 rows virtualised; previews load lazily) |
+| M04 NBK-NFR-004 | No AC-NBK-504 in an earlier draft | **Resolved:** MODULE_04_DIGITAL_NOTEBOOK_PRD.md:341 defines AC-NBK-504 (same check as AC-NBK-016) |
 | M05 PDF-NFR-002, 006, 007, 010 | No AC-PDF-502, 506, 507, 510 | **Resolved:** MODULE_05 §10 now has "covered by" rows AC-PDF-502 (→ AC-PDF-018), 506 (→ 021), 507 (→ 025) and 510 (→ 017b/c), and a new AC-PDF-512 for PDF-NFR-012 (platform support), which had no criterion |
 | M03 PRS-UX-001, 004, 006, 007, 009 | No AC-PRS-701, 704, 706, 707, 709 | **Resolved:** MODULE_03 §10 now defines AC-PRS-701, 704, 706, 709 and a "covered by" row AC-PRS-707 (→ AC-PRS-063) |
 | M05 PDF-UX-002 … 005, 007 … 009 | Only AC-PDF-701 and 706 existed | **Resolved:** MODULE_05 §10 now defines AC-PDF-702 … 705 and 707 … 709 |

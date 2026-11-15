@@ -366,7 +366,7 @@ Status words follow the planning brief. "Owner" names the requirement in another
 | SEC-073 | Retention and deletion of classroom data follow an owner-approved policy | Absent | D-47 (§7) | AE-P9 | AC-SEC-073 |
 | SEC-074 | The client classroom cache is scoped per host and user and removed on sign-out | Absent | — | AE-P9 | AC-SEC-074 |
 | SEC-075 | Sign-out on a shared device leaves no usable session or classroom data | Absent | — | AE-P9 | AC-SEC-075 |
-| SEC-076 | Credentials and student data are never committed; secret scanning and push protection stay on | Done | gh 2026-11-15; `.gitignore:36-47` | every phase | AC-SEC-076 |
+| SEC-076 | Credentials and student data are never committed; secret scanning and push protection stay on | Done | gh 2026-11-15; `.gitignore:22-23`, `:30-47` | every phase | AC-SEC-076 |
 | SEC-080 | A private security reporting channel exists and docs/SECURITY.md is current | Absent | private reporting disabled; SECURITY.md:3, :23-25 | AE-P2 (D-39) | AC-SEC-080 |
 | SEC-085 | A security review of each networked phase (AE-P9, AE-P10) and a full review in AE-P13 end with no open Critical or High finding | Absent | — | AE-P9, AE-P10, AE-P13 | AC-SEC-085 |
 | SEC-086 | The threat model (§3) is reviewed whenever a trust boundary is added | Absent | this document is the first version | AE-P8, AE-P9, AE-P10, AE-P13, AE-P14 | AC-SEC-086 |

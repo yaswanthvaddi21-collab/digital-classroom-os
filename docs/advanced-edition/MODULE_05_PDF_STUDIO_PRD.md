@@ -156,7 +156,7 @@ Performance numbers are **proposed targets, to be measured** with the AE-P3 harn
 | PDF-NFR-008 | Offline: everything in PDF-FR-001…015 and -017 works offline after the first visit; the pdf.js worker and font data are precached (check against the 6 MiB per-file precache limit, apps/web/vite.config.ts:40) | Absent |
 | PDF-NFR-009 | Accessibility: WCAG 2.2 AA for the app's own UI (A11Y-001); the text layer is exposed to assistive technology where the PDF has text; annotation tools keyboard operable | Absent |
 | PDF-NFR-010 | Interoperability: every PDF the module writes opens without error or repair prompt in at least two independent readers (for example Acrobat Reader and a browser's built-in viewer), with dated records; annotations written in (c) are visible and editable there | Absent |
-| PDF-NFR-011 | Package boundary: `@dcos/pdf-studio` imports only what tests/integration/boundaries.test.ts allows (expected: `@dcos/ui`); storage comes through hosts | Absent. boundaries.test.ts:29-31 enforces this automatically once `src/` exists |
+| PDF-NFR-011 | Package boundary: `@dcos/pdf-studio` imports only what tests/integration/boundaries.test.ts allows (expected: `@dcos/ui`); storage comes through hosts | Absent. boundaries.test.ts:28-29 enforces this automatically once `src/` exists |
 | PDF-NFR-012 | Platform support per PLT-001…003; Android WebView support of the worker and of the chosen libraries checked in AE-P14 (PLT-007) | Absent |
 
 ## 5. UI/UX requirements
@@ -271,7 +271,7 @@ jspdf 4.2.1 and svg2pdf.js 2.8.1 (installed) only create new PDFs; they are not 
 ### 7.5 Security controls (SEC, detail in SECURITY_AND_PRIVACY_PLAN.md)
 
 - Worker isolation; no `eval`; no PDF JavaScript; no form scripts; no launch actions; no embedded-file opening without an explicit download.
-- External links: only `http`, `https`, `mailto` (same policy as document-studio src/links.ts:24-36), opened in a new browsing context after a confirmation that shows the full URL.
+- External links: only `http`, `https`, `mailto` (stricter than document-studio src/links.ts:9-15, :36, which applies Tiptap's default allow-list, so ftp, tel and sms links are also accepted there; javascript: is refused), opened in a new browsing context after a confirmation that shows the full URL.
 - No remote fetches triggered by PDF content.
 - Caps: input size (D-20), page count for operations, decompressed stream size, time per operation; errors are reported, never crash the shell (ErrorBoundary reset, RG-7, is an AE-P3 item).
 - Fuzz-style tests with a corpus of malformed PDFs (§11).

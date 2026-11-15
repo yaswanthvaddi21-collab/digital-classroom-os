@@ -4,7 +4,7 @@ This document defines what the Advanced Diagram Studio (module M02, prefix DGM) 
 
 **Status:** AE-P1 draft for owner approval (2026-11-15)
 
-**Audited at:** HEAD `edc2672` on branch `advanced/phase1-audit` (no commits of its own). No test suite, build or browser was run for this document; every "Done" relies on a test file plus the recorded local verification of 2026-11-15 (RELEASE_GAPS.md §11, lines 251-264).
+**Audited at:** HEAD `edc2672` on branch `advanced/phase1-audit` (whose own commits add only these planning documents). No test suite, build or browser was run for this document; every "Done" relies on a test file plus the recorded local verification of 2026-11-15 (RELEASE_GAPS.md §11, lines 257-265).
 
 **Related documents (this folder):**
 [Roadmap](ADVANCED_EDITION_PRODUCT_ROADMAP.md) ·
@@ -63,7 +63,7 @@ Package size: 66 non-test source files (13,019 lines) and 29 test files (5,557 l
 | DGM-FR-011 | Hierarchical | Done | templates.ts:149-157 |
 | DGM-FR-012 | Concept maps | **Absent** | grep finds nothing |
 | DGM-FR-020…031 | Infinite canvas, zoom/pan, grid/snap, minimap, full screen, multi-select, group, lock, layers, align/distribute, copy/paste, shortcuts | Done (all 12) | DiagramEditor.tsx:193-252; canvasModel.ts; e2e/diagram-canvas.spec.ts. The minimap is hidden at 640 px and below |
-| DGM-FR-040…047 | Quick Connect: arrows, click-create, drag-connect, palette, preview, auto-position, zoom tracking, keyboard/touch | Done (all 8) | QuickConnect.tsx; e2e/quick-connect*.spec.ts. **Fidelity to the "supplied" diagrams.net reference is Unverified: the reference never arrived (RELEASE_GAPS.md:78).** Touch is automated in mobile Chromium only. The palette has 12 fixed shapes and does not change with context |
+| DGM-FR-040…047 | Quick Connect: arrows, click-create, drag-connect, palette, preview, auto-position, zoom tracking, keyboard/touch | Done (all 8) | QuickConnect.tsx; e2e/quick-connect*.spec.ts. **Fidelity to the "supplied" diagrams.net reference is Unverified: the reference never arrived (RELEASE_GAPS.md:78).** Touch is automated in mobile Chromium only. The palette has 15 fixed shapes and does not change with context |
 | DGM-FR-060…066 | Straight, curved, elbow, orthogonal, arrowheads (11), connection points (8 plus floating), labels (1 per connector) | Done | edges.tsx:70-87; connect/geometry.ts |
 | DGM-FR-067 | Automatic rerouting | Partial | Floating ends only; no obstacle avoidance |
 | DGM-FR-080 | Automatic layouts | Partial | Tree, mind map and timeline only |
@@ -73,14 +73,14 @@ Package size: 66 non-test source files (13,019 lines) and 29 test files (5,557 l
 | DGM-FR-084 | Reusable components | **Absent** | No user library or "save as template" |
 | DGM-FR-085 | Multiple pages | **Absent** | DiagramContent has no pages; import takes page 1 with a note (drawio.ts:404-422) |
 | DGM-FR-086 | Templates | Done | 18 built-in, 7 of them schema 3 |
-| DGM-FR-100 | Import .drawio | Done (internal corpus) | drawio.ts:272-391; drawio-corpus.test.ts (10 hand-written fixtures). **No file saved by diagrams.net itself has been tested (TD-46)** |
-| DGM-FR-101 | Import diagrams.net XML | Done (same caveat) | drawio.ts:375-382 |
+| DGM-FR-100 | Import .drawio | Done (internal corpus) | drawio.ts:272-757; drawio-corpus.test.ts (10 hand-written fixtures). **No file saved by diagrams.net itself has been tested (TD-46)** |
+| DGM-FR-101 | Import diagrams.net XML | Done (same caveat) | drawio.ts:405-427 |
 | DGM-FR-102 | Export editable .drawio | Partial | Round-trip checked by our own importer only. **Never opened in diagrams.net (RELEASE_GAPS.md:170)** |
 | DGM-FR-103 | Preserve metadata | Done | drawioFeatures.ts:327-431 |
 | DGM-FR-104 | Links and custom properties | Done | Dropped on connectors, with a note |
 | DGM-FR-105 | Swimlanes and ER tables | Done (approximations, each noted) | drawio.ts:516-583 |
-| DGM-FR-106 | Report unsupported elements | Done | drawioFeatures.ts:48-87 (about 40 counted kinds) |
-| DGM-FR-120 | PNG | Done | vector/raster.ts (16,777,216 px cap; the cap constants are defined in export.ts:11-12 and imported by raster.ts:7) |
+| DGM-FR-106 | Report unsupported elements | Done | drawioFeatures.ts:48-87 (35 counted kinds) |
+| DGM-FR-120 | PNG | Done | vector/raster.ts (16,777,216 px cap; the cap constants are defined in export.ts:11-12 and applied through cappedPixelRatio, imported by raster.ts:7) |
 | DGM-FR-121 | SVG | Done | vector/renderSvg.tsx:627 |
 | DGM-FR-122 | PDF | Done | vector/pdf.ts:62. WinAnsi fonts only (TD-45) |
 | DGM-FR-123 | Native .dcosdiagram | Done | native.ts:20-26 (64 MB cap) |
@@ -149,7 +149,7 @@ Each row keeps the canonical ID and status; the grouped rows of the status table
 | DGM-FR-009 | Timelines | Done | library/timeline.ts:94; templates.ts:171-176; layouts.test.ts; e2e/diagram-shapes.spec.ts:158 | Re-verify (Arrange may remove lines between non-neighbours, with toast and undo) | — |
 | DGM-FR-010 | Business process diagrams | Done (approximations) | library/kinds.ts:10-21; library/containers.ts; library/templates.ts:290 | Lanes resize with their pool; event symbols (timer, message) (scope) | D-21 |
 | DGM-FR-011 | Hierarchical diagrams | Done | templates.ts:149-157; layout.ts:29 | Re-verify | — |
-| DGM-FR-012 | Concept maps | **Absent** | grep finds nothing in packages, apps or docs | Template plus category at minimum; labelled-link conventions; layout via DGM-FR-080 (depth per D-21) | D-21 |
+| DGM-FR-012 | Concept maps | **Absent** | grep finds nothing in packages or apps; docs/audit/FINDINGS.md:1384 only names d3-force as a possible concept-map layout | Template plus category at minimum; labelled-link conventions; layout via DGM-FR-080 (depth per D-21) | D-21 |
 | DGM-FR-013 (beyond the brief) | Searchable shape library | Done | library/categories.ts:20-116 (9 categories), :150 searchShapes; e2e/diagram-shapes.spec.ts:97 | Add concept-map, Venn and user-component categories | — |
 
 ### 3.2 Canvas (020–039)
@@ -164,7 +164,7 @@ Each row keeps the canonical ID and status; the grouped rows of the status table
 | DGM-FR-025 | Multiple selections | Done | DiagramEditor.tsx:241; shortcuts.ts:75; useCanvas.ts:188-221; e2e/diagram-canvas-touch.spec.ts | Touch multi-select automated in mobile Chromium only | — |
 | DGM-FR-026 | Group and ungroup | Done | editor/canvasModel.ts:75, :116, :139; canvasShortcuts.ts:18-25; e2e/diagram-canvas.spec.ts:33,83 | Resizing a group does not scale text (decide) | — |
 | DGM-FR-027 | Lock and unlock | Done | canvasModel.ts:170; useCanvas.ts:277; canvasShortcuts.ts:26; e2e/diagram-canvas.spec.ts:109 | Re-verify | — |
-| DGM-FR-028 | Layers | Done | model.ts:9-14 DiagramLayer; canvasModel.ts:256-345; CanvasOverlays.tsx:126; e2e/diagram-canvas.spec.ts:139 | Connectors have no layer and draw under shapes (decide with multi-page model) | — |
+| DGM-FR-028 | Layers | Done | model.ts:9-14 DiagramLayer; canvasModel.ts:254-337; CanvasOverlays.tsx:126; e2e/diagram-canvas.spec.ts:139 | Connectors have no layer and draw under shapes (decide with multi-page model) | — |
 | DGM-FR-029 | Align and distribute | Done | editor/selectionActions.tsx:21-27; mutations.ts:237; canvasModel.ts:187; e2e/diagram-canvas.spec.ts:205 | Distribute uses equal gaps (diagrams.net uses equal centres); document or add both | — |
 | DGM-FR-030 | Copy and paste | Done | shortcuts.ts:71-74; canvasShortcuts.ts:17; useCanvas.ts:377-554; editor/clipboard.test.ts; e2e/diagram-canvas.spec.ts:270 | Cut inside the document's diagram dialog untested (docs/audit/TECHNICAL_DEBT.md:133, TD-18); in Firefox on CI, synthetic copy and paste events lost their data until the PR #1 test fix (unmerged) | — |
 | DGM-FR-031 | Keyboard shortcuts | Done | editor/shortcuts.ts:44-92; canvasShortcuts.ts:16-37; CanvasOverlays.tsx:25 ShortcutHelp | Add shortcuts for new features; keep the help in sync | — |
@@ -176,13 +176,13 @@ Each row keeps the canonical ID and status; the grouped rows of the status table
 | DGM-FR-040 | Four directional blue arrows | Done | QuickConnect.tsx:246; diagramCss.ts:48-55; e2e/quick-connect.spec.ts:43 | Compare with reference (DGM-FR-048) | D-22 |
 | DGM-FR-041 | Click-to-create | Done | QuickConnect.tsx:191, 270; mutations.ts:296; quickConnectGeometry.ts:49; e2e/quick-connect.spec.ts:43 | Re-verify | — |
 | DGM-FR-042 | Drag-to-connect | Done | QuickConnect.tsx:192; mutations.ts:319; quickConnectGeometry.ts:70; e2e/quick-connect.spec.ts:121 | Re-verify | — |
-| DGM-FR-043 | Floating shape palette | Done | QuickConnect.tsx:25-44, :297; shapeRegistry.ts:193-205 (12 shapes); e2e/quick-connect.spec.ts:151 | Context-aware palette is DGM-FR-049 | — |
+| DGM-FR-043 | Floating shape palette | Done | QuickConnect.tsx:25-44, :297; shapeRegistry.ts:193-210 (15 shapes); e2e/quick-connect.spec.ts:151 | Context-aware palette is DGM-FR-049 | — |
 | DGM-FR-044 | Connection preview | Done | QuickConnect.tsx:197-198, :345, :347; diagramCss.ts:63-67 | Re-verify | — |
 | DGM-FR-045 | Automatic positioning | Done | quickConnectGeometry.ts:38, :49; mutations.ts:283; quickConnectGeometry.test.ts; e2e/diagram-native-file.spec.ts:110 | Re-verify; also use smart guides when placing | — |
 | DGM-FR-046 | Zoom and pan tracking | Done | QuickConnect.tsx:67; e2e/quick-connect.spec.ts:79 | Re-verify | — |
 | DGM-FR-047 | Keyboard and touch support | Done | shortcuts.ts:46-53; QuickConnect.tsx:16 (450 ms long press), :69-72, :163; connect/paletteNav.ts; e2e/diagram-palette-quick-connect-touch.spec.ts:11,76; e2e/quick-connect-touch.spec.ts:5 | Touch automated in mobile Chromium only; no WebKit touch project; no real device (AE-P14) | D-30 |
 | DGM-FR-048 (new) | Reproduce the supplied diagrams.net interaction (the brief's umbrella line) | Unverified | The reference screenshot never arrived (RELEASE_GAPS.md:78); none in backups/ | Owner supplies the reference (screenshot or recording), then a dated side-by-side comparison; or the owner records acceptance of the current behaviour | D-22 |
-| DGM-FR-049 (new) | Context-aware Quick Connect palette | Absent | shapeRegistry.ts:193-205 QUICK_PALETTE is fixed | Palette offers shapes from the diagram's dominant category (BPMN, UML, network, ER) plus recent shapes | D-21 |
+| DGM-FR-049 (new) | Context-aware Quick Connect palette | Absent | shapeRegistry.ts:193-210 QUICK_PALETTE is fixed | Palette offers shapes from the diagram's dominant category (BPMN, UML, network, ER) plus recent shapes | D-21 |
 
 ### 3.4 Connectors (060–079)
 
@@ -202,7 +202,7 @@ Each row keeps the canonical ID and status; the grouped rows of the status table
 | ID | Requirement | Status | Evidence | Gap to close in AE-P5 | Decision |
 |---|---|---|---|---|---|
 | DGM-FR-080 | Automatic layouts | Partial | layout.ts:29; library/mindmap.ts:144; library/timeline.ts:94; Toolbar.tsx:54-70 | Exists: tree, mind map, timeline. Missing: general layered/force layout for arbitrary diagrams (dagre or original code; elkjs and libavoid-js only with a licence exception) | D-21 |
-| DGM-FR-081 | Smart guides | **Absent** | grep finds only the drawio attribute `guides="1"` (drawio.ts:226) | Edge, centre and equal-spacing guides while dragging and resizing; Alt disables; adapted from presentation-studio editor/guides.ts:113-195 (original code), never from React Flow's Pro example | — |
+| DGM-FR-081 | Smart guides | **Absent** | grep finds only the drawio attribute `guides="1"` (drawio.ts:226) | Edge, centre and equal-spacing guides while dragging and resizing; Alt disables; adapted from presentation-studio editor/guides.ts:113-231 (original code), never from React Flow's Pro example | — |
 | DGM-FR-082 | Shape properties | Partial | Inspector.tsx:91-156; editor/canvasSections.tsx:189-192 | Exists: text, fill, border, text size/bold/colour, lock, layer, link, tooltip, custom properties. Missing: position and size fields, rotation, opacity, font family, alignment, picture controls (fields already stored, TD-43) | — |
 | DGM-FR-083 | Custom styles | Partial | Inspector.tsx:22-24 (12 fills, 10 strokes, 8 text colours); library/presets.tsx:17-26 (8 connector presets) | Free colour picker; copy/paste style; named saved styles; default style per diagram (schema 4 if stored in content) | D-21 |
 | DGM-FR-084 | Reusable components | **Absent** | grep finds no user library, scratchpad or "save as template" | Save selection as a component and a diagram as a user template; a per-device user library included in backup; import/export of a library file (format to decide) | D-21 |
@@ -214,13 +214,13 @@ Each row keeps the canonical ID and status; the grouped rows of the status table
 
 | ID | Requirement | Status | Evidence | Gap to close in AE-P5 | Decision |
 |---|---|---|---|---|---|
-| DGM-FR-100 | Import .drawio | Done (internal corpus) | drawio.ts:272-391; tests/integration/drawio-corpus.test.ts (21 tests, 10 hand-written fixtures in tests/fixtures/drawio) | Corpus of real files saved by diagrams.net (desktop and web, compressed and plain); all pages (DGM-FR-085) | D-22 |
-| DGM-FR-101 | Import supported diagrams.net XML | Done (same caveat) | drawio.ts:375-382 (`mxfile` and bare `mxGraphModel`), :350-357 (`UserObject`/`object` wrappers), :396 fromDrawio; native.ts:230-241 | As DGM-FR-100 | D-22 |
+| DGM-FR-100 | Import .drawio | Done (internal corpus) | drawio.ts:272-757; tests/integration/drawio-corpus.test.ts (21 tests, 10 hand-written fixtures in tests/fixtures/drawio) | Corpus of real files saved by diagrams.net (desktop and web, compressed and plain); all pages (DGM-FR-085) | D-22 |
+| DGM-FR-101 | Import supported diagrams.net XML | Done (same caveat) | drawio.ts:405-427 (`mxfile` and bare `mxGraphModel`), :350-357 (`UserObject`/`object` wrappers), :396 fromDrawio; native.ts:230-241 | As DGM-FR-100 | D-22 |
 | DGM-FR-102 | Export editable .drawio | Partial | drawio.ts:147-230 toDrawio; ExportMenu.tsx:50; drawio.test.ts; tests/golden/diagram-v3/kitchen-sink-v3.drawio | Exists: export round-tripped by our importer. Missing: dated check that exports open and edit correctly in diagrams.net, incl. BPMN and network stencil names (TD-46, RELEASE_GAPS.md:170) | D-22 |
 | DGM-FR-103 | Preserve supported metadata | Done | drawioFeatures.ts:327-431; drawio.ts:460-480; drawio-phase5.test.ts; e2e/diagram-drawio-features.spec.ts | External confirmation via DGM-FR-102 check | D-22 |
 | DGM-FR-104 | Preserve links and custom properties | Done | drawio.ts:129-138, :350-357; model.ts:49-73 (isSafeLink, ≤ 200 properties); tests/fixtures/drawio/links-properties.drawio | Links/properties on connectors dropped with a note (drawioFeatures.ts:73); keep or support (schema 4) | D-21 |
 | DGM-FR-105 | Handle swimlanes and ER tables | Done (approximations, each noted) | drawio.ts:516-583; drawioFeatures.ts:76-77, :119-120; fixtures swimlanes.drawio, tables.drawio | Title band side, lane colour, per-row table cells (scope) | D-21 |
-| DGM-FR-106 | Report unsupported elements | Done | drawioFeatures.ts:48-87 (about 40 counted kinds); drawio.ts:114-126 drawioExportNotes; drawioExportNotes.test.ts | Keep every new approximation counted | — |
+| DGM-FR-106 | Report unsupported elements | Done | drawioFeatures.ts:48-87 (35 counted kinds); drawio.ts:114-126 drawioExportNotes; drawioExportNotes.test.ts | Keep every new approximation counted | — |
 | DGM-FR-107 (new) | Bounded diagram imports | Absent | No `.drawio` size check (DiagramFiles.tsx:13-24 and DiagramDialogs.tsx:26-37 read `file.text()`); `inflateSync` with no output cap (drawio.ts:280); 64 MB check (counted in characters) on the JSON path only (native.ts:197, reached through readDiagramFile at :231-233) | File-size cap before reading, inflate output cap, cell-count cap, parsing in a worker (TD-40) | — |
 
 ### 3.7 Export (120–139)
@@ -248,7 +248,7 @@ Performance numbers are **proposed targets, to be measured** on the reference ha
 | DGM-NFR-007 | Identifier strength | New node, edge, page and component ids use ≥ 122 random bits (full UUID); existing short ids stay valid | 32 random bits (mutations.ts:13) | R-015 |
 | DGM-NFR-008 | Offline and privacy | No network request while editing, importing or exporting | Partial: e2e/privacy.spec.ts:38-48 covers creating, editing, autosave and PNG, PDF and SVG export; not `.drawio` or `.dcosdiagram` export, and no import | SEC |
 | DGM-NFR-009 | Accessibility | WCAG 2.2 AA (proposed, A11Y-001); keyboard path for create, connect, select, move, resize, style; shapes have accessible names; reduced motion respected | Keyboard Quick Connect and shortcuts Done; reduced motion in diagramCss.ts:69; no axe; no screen-reader run | A11Y-001, D-25 |
-| DGM-NFR-010 | Platform support | Works on the approved PLT matrix; touch verified on a real device | Chromium, WebKit, mobile Chromium; Firefox never green on CI | PLT, D-30 |
+| DGM-NFR-010 | Platform support | Works on the approved PLT matrix; touch verified on a real device | Chromium, WebKit, mobile Chromium; Firefox never green on CI for main (green only on the unmerged PR #1 branch, run 43719093806) | PLT, D-30 |
 | DGM-NFR-011 | Licence policy | No Pro-licensed React Flow code; layout/routing libraries within policy unless D-21 grants an exception | Done: no `proOptions` anywhere in packages/diagram-studio/src (grep); docs/DEPENDENCIES.md:17 records MIT and the attribution link kept visible | DEP, R-016 |
 | DGM-NFR-012 | Maintainability | Split `editor/canvasModel.ts` (865 lines) and `editor/useCanvas.ts` (714 lines) before adding pages and components | Over the 500-line guide | brief §8 |
 
@@ -262,7 +262,7 @@ Performance numbers are **proposed targets, to be measured** on the reference ha
 | DGM-UX-004 | A page bar (tabs at the bottom, like diagrams.net) for multiple pages, with keyboard navigation | Absent |
 | DGM-UX-005 | Inspector shows exact fields (x, y, w, h, rotation, opacity, font, alignment) with units and validation | Absent (TD-43) |
 | DGM-UX-006 | Smart guides are thin, high-contrast lines with distance labels; they never block selection | Absent |
-| DGM-UX-007 | Import notes appear in one consistent dialog listing counted items; export notes appear in the toast | Done (ItemListPage.tsx, DiagramFiles.tsx, DiagramDialogs.tsx) |
+| DGM-UX-007 | Import notes appear in one consistent dialog listing counted items; export notes appear in the toast | Partial: export notes appear in the toast (editor/ExportMenu.tsx:57-58; DiagramDialogs.tsx:147); import notes are listed in the document's diagram dialog (DiagramDialogs.tsx:505-514) but joined into one toast on the Diagrams page (ItemListPage.tsx:60-63; DiagramFiles.tsx:48-51) |
 | DGM-UX-008 | At phone width: no minimap, toolbar scrolls, Quick Connect usable by long press; tablet layout checked | Partial (no tablet checks) |
 | DGM-UX-009 | User library panel beside the shape library, with search, rename, delete and drag to canvas | Absent |
 | DGM-UX-010 | Dark theme keeps diagram colours as authored (paper white) while the chrome follows the theme | Partial: the canvas is always drawn in light mode (`colorMode="light"`, DiagramEditor.tsx:244); the chrome in dark theme has no recorded review |
@@ -327,7 +327,7 @@ Rules: a new frozen vocabulary (`SCHEMA3_VOCABULARY`) is added in compat.ts so t
 | SVC-SEARCH | Diagram text in global search | Absent |
 | SVC-REF | Provenance of embeds; page references | Absent (ADR-0018) |
 | SVC-PLAT | Native save dialog for exports (TD-28) | Partial |
-| presentation-studio guides | Source of the smart-guide maths (DGM-FR-081) | Done in M03 (editor/guides.ts:113-195) |
+| presentation-studio guides | Source of the smart-guide maths (DGM-FR-081) | Done in M03 (editor/guides.ts:113-231) |
 
 Consumers of M02: M01 through `DiagramHost` (INT-01), M03 through `PresentationDiagramHost` (INT-02), M04 Notebook (drawing is a separate ink layer, not a diagram), M06 (diagrams submitted; INT-04 via SVC-REF), M07 (sharing, INT-08), M08/M09 (lists, previews, search).
 
@@ -408,7 +408,7 @@ Implemented by apps/web over SVC-STORE and SVC-BLOB; the package stays storage-f
 
 **DGM-IF-009 Text extraction for search (proposed; SVC-SEARCH).** `extractDiagramText(content): { labels: string[]; connectorLabels: string[]; properties: string[] }`, pure and worker-safe. The app registers it with SVC-SEARCH by wrapping it as one DSH-IF-001 `TextExtractor` (MODULE_09 §9.1), mapping its parts to `ExtractedField` entries with a `locator`; there is no module-specific search interface.
 
-**DGM-IF-010 Clipboard format (exists, editor/canvasModel.ts:624, :626, :668, :860; index.ts:13 exports `CLIPBOARD_FORMAT`, `CLIPBOARD_MIME`, `diagramFromClipboard`, `NEWER_SHAPES_MESSAGE`).** Read for a document's paste through apps/web/src/components/diagramClipboardHost.ts; document-studio itself only recognises the MIME type (extensions/diagramClipboard.ts:20), because the boundary test forbids it to import diagram-studio. Contract: newer clipboard content is refused with `NEWER_SHAPES_MESSAGE`.
+**DGM-IF-010 Clipboard format (exists, editor/canvasModel.ts:624, :626, :668, :860; index.ts:13 exports `CLIPBOARD_FORMAT`, `CLIPBOARD_MIME`, `diagramFromClipboard`, `NEWER_SHAPES_MESSAGE`).** Read for a document's paste through apps/web/src/components/diagramClipboardHost.ts; document-studio itself only recognises the payload by its MIME type, format and HTML carrier (extensions/diagramClipboard.ts:20-22, :57 holdsShapes), because the boundary test forbids it to import diagram-studio. Contract: newer clipboard content is refused with `NEWER_SHAPES_MESSAGE`.
 
 ## 10. Acceptance criteria
 
@@ -491,7 +491,7 @@ Nothing below was run in AE-P1. The last recorded full run is 2026-11-15 (RELEAS
 | Unit | 29 files in the package (370 test declarations by a strict grep of lines starting with `it(`, `test(` or `it.each(…)(`), e.g. renderSvg.test.tsx (30), drawio.test.ts, library/layouts.test.ts, quickConnectGeometry.test.ts, edgeChanges.test.ts, clipboard.test.ts, native.test.ts | Pages model, guides, layout engines, routing, styles, component library, caps, id generation |
 | Integration | tests/integration: drawio-corpus (21 tests), diagram-schema, diagram-kitchen-sink-v3-golden, diagram-png-envelope, diagram-clipboard, diagram-export-labels, large-diagram (500/2,000 shapes); presentation-hosts | Real diagrams.net corpus; schema-4 goldens; multi-page round trips; host contract with pages |
 | Browser (component) | canvas.test.tsx and other jsdom tests | Inspector property fields, page bar, library panel |
-| End-to-end | 25 specs `e2e/diagram*.spec.ts` and `quick-connect*.spec.ts` (81 test declarations) run locally in Chromium and WebKit; touch specs in mobile Chromium; Firefox is a Playwright project (playwright.config.ts:24) not run locally and failing on CI. PR #1 (unmerged) changes the import line of every one of these specs and the assertions in diagram-export and diagram-embed. Of the 25 specs, the 8 `diagram-embed*` specs test INT-01 | User stories US-DGM-01…12 in Chromium, Firefox and WebKit; green CI including Firefox (R-001) |
+| End-to-end | 25 specs `e2e/diagram*.spec.ts` and `quick-connect*.spec.ts` (81 test declarations) run locally in Chromium and WebKit; touch specs in mobile Chromium; Firefox is a Playwright project (playwright.config.ts:24) not run locally and failing on CI for main (green only on the unmerged PR #1 branch). PR #1 (unmerged) changes the import line of every one of these specs and the assertions in diagram-export and diagram-embed. Of the 25 specs, the 8 `diagram-embed*` specs test INT-01 | User stories US-DGM-01…12 in Chromium, Firefox and WebKit; green CI including Firefox (R-001) |
 | Persistence | Save/reload in e2e; local-storage tests; diagram-native-file.spec.ts | Pages, styles and user library across reload and browser relaunch |
 | Offline | storage.chromium-only.spec.ts:46 (embedding a diagram offline, Chromium) | Offline diagram editing, import and export in all three engines |
 | Import/export | Internal `.drawio` corpus; golden SVG/drawio/json; PDF/PNG e2e. No external check recorded for diagrams.net or SVG viewers | Dated diagrams.net checks (AC-DGM-007b, 100b, 102); independent PDF and SVG viewers (D-22) |

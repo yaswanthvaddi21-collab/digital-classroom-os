@@ -67,7 +67,7 @@ Conventions: status words are Done, Partial, Stub, Absent and Unverified as defi
 | `diagram-studio` | `@dcos/ui` |
 | `presentation-studio` | `@dcos/ui` |
 
-The test also fails when a package with a `src/` folder is missing from the table (`boundaries.test.ts:27-30`), so a new package cannot go unchecked. Studios never import storage, the app or each other; everything else reaches them through hosts. The test covers only folders under `packages/`; `apps/web` is not checked (it is the composition point). Cost of the rule: documented duplication, for example the diagram PNG writer exists in both document-studio and presentation-studio; `tests/integration/presentation-export.test.ts:21-26` checks that both use the same keyword, version and size limit, and that document-studio's reader accepts the PNG that presentation-studio writes. It does not compare the two writers' bytes.
+The test also fails when a package with a `src/` folder is missing from the table (`boundaries.test.ts:27-30`), so a new package cannot go unchecked. Studios never import storage, the app or each other; everything else reaches them through hosts. The test covers only folders under `packages/`; `apps/web` is not checked (it is the composition point). Cost of the rule: documented duplication, for example the diagram PNG writer exists in both document-studio and presentation-studio; `tests/integration/presentation-export.test.ts:21-27` checks that both use the same keyword, version and size limit, and `:29-48` that document-studio's reader accepts the PNG that presentation-studio writes. It does not compare the two writers' bytes.
 
 ### 2.3 Host injection (SVC-HOST)
 
@@ -139,7 +139,7 @@ flowchart TB
 
 ### 2.7 Storage seam for other platforms
 
-`apps/web/src/lib/platform.ts:15-32` lets a native shell replace the storage factory before first use (`setStorageFactory`, `:23-26`; it throws once storage exists, `:24`). Only `IndexedDbAdapter` implements `StorageAdapter`. The upgrade-recovery path is IndexedDB-specific: `apps/web/src/lib/storage.ts:318` sets `upgradeRecovery` to `null` for any other adapter. Details and the SQLite plan: DATABASE_AND_SYNC_ARCHITECTURE §5.
+`apps/web/src/lib/platform.ts:15-32` lets a native shell replace the storage factory before first use (`setStorageFactory`, `:23-26`; it throws once storage exists, `:24`). Only `IndexedDbAdapter` implements `StorageAdapter`. The upgrade-recovery path is IndexedDB-specific: `apps/web/src/lib/storage.ts:319` sets `upgradeRecovery` to `null` for any other adapter. Details and the SQLite plan: DATABASE_AND_SYNC_ARCHITECTURE §5.
 
 ### 2.8 What is known to conflict with older documents
 
@@ -268,7 +268,7 @@ interface PlatformAdapter {
 }
 ```
 
-The duplicated file pickers (`DiagramFiles.tsx:13-24`, `DiagramDialogs.tsx:26-37`, `ImportDocument.tsx:18-27`, `presentation-studio/src/elements/images.ts:105-114`) move behind `openFiles` in AE-P3 (SYS-008).
+The duplicated file pickers (`DiagramFiles.tsx:13-24`, `DiagramDialogs.tsx:26-37`, `ImportDocument.tsx:18-27`, `presentation-studio/src/elements/images.ts:104-113`) move behind `openFiles` in AE-P3 (SYS-008).
 
 ---
 
@@ -380,7 +380,7 @@ interface PermissionView { can(action: 'open' | 'comment' | 'edit' | 'share' | '
 | SYS-007 | No import-time side effects in new modules; storage, channels and timers start from explicit calls in `main.tsx` or hooks | Unverified | storage is created on first import of `lib/storage.ts` (`platform.ts` `created` flag); no systematic audit | AE-P3 (audit and rule), new code from AE-P3 |
 | SYS-008 | One implementation per helper: file picking through SVC-PLAT `openFiles`; one XML/HTML escape module shared inside each package or through `@dcos/ui` | Partial | 4 pickers (§4.2) and 8 escape helpers found by grep: `diagram-studio/src/drawio.ts:64`, `:74`; `diagram-studio/src/editor/canvasModel.ts:713`; `document-studio/src/extensions/objectAttrs.ts:34`; `document-studio/src/export/print.ts:12`; `document-studio/src/export/odt/xml.ts:7`; `presentation-studio/src/export/xml.ts:10`; `presentation-studio/src/elements/chart.ts:337` | AE-P3 |
 | SYS-009 | Automated lint and format run in CI for TypeScript and Python | Absent | no ESLint, Prettier, EditorConfig or ruff config | AE-P3 (D-24) |
-| SYS-010 | A shared `StorageAdapter` conformance suite that every adapter (IndexedDB now; SQLite if D-12 chooses it) must pass: concurrency, safety copy before migration, upgrade recovery, attachment clean-up, never-overwrite import, metadata-only changes, purge atomicity | Absent | FINDINGS STOR-15; storage.ts:318 | AE-P3 |
+| SYS-010 | A shared `StorageAdapter` conformance suite that every adapter (IndexedDB now; SQLite if D-12 chooses it) must pass: concurrency, safety copy before migration, upgrade recovery, attachment clean-up, never-overwrite import, metadata-only changes, purge atomicity | Absent | FINDINGS STOR-15; storage.ts:319 | AE-P3 |
 | SYS-011 | No fake implementations: no control, endpoint or package that claims a capability it does not have; stubs are labelled "Not started" and are not npm workspaces | Partial | dead html-to-image export still public (TD-42, `diagram-studio/src/index.ts:6`); empty backend packages (TD-35); manifest text "classroom tools" (`vite.config.ts:29`) | AE-P3 (D-27) |
 | SYS-012 | No unused production dependencies; checked automatically | Partial | html-to-image kept for dead code only | AE-P3 (removal per D-27), AE-P13 (automated check) |
 | SYS-013 | Every architectural shortcut is recorded in an ADR or the technical-debt register with a reason | Done (v0.2) | ADRs 0001–0014; TD-38, TD-56 | every phase |
@@ -438,7 +438,7 @@ Rule: no feature package imports `local-storage`, `sync-engine`, `collab`, `sear
 
 ### 7.1 Data flow for an edit (today, and kept)
 
-Editor `onChange` → `useEditableItem` (`apps/web/src/lib/storage.ts:714`) → debounce 600 ms (`storage.ts:689`) → `StorageAdapter.save(kind, id, patch, expectedVersion)` in one transaction (`indexeddb.ts:735-776`) → `BroadcastChannel('dcos-storage')` notifies other tabs (`storage.ts:172`). On failure: retries at 1, 3 and 10 s (`storage.ts:690`), a quota retry at 2 s, and a draft. Target additions after a successful save: SVC-SEARCH `index()`, SVC-ACT `record('edited')` (coalesced), and, for shared items, an SVC-SYNC outbox entry. None of these may block or fail the save: they run after it, and their failures are reported separately.
+Editor `onChange` → `useEditableItem` (`apps/web/src/lib/storage.ts:714`) → debounce 600 ms (`storage.ts:689`) → `StorageAdapter.save(kind, id, patch, expectedVersion)` in one transaction (`indexeddb.ts:735-776`) → `BroadcastChannel('dcos-storage')` notifies other tabs (`storage.ts:172`). On failure: retries at 1, 3 and 10 s (`storage.ts:690`), a quota retry at 2 s, and a draft. Target additions after a successful save: SVC-SEARCH `indexItem()`, SVC-ACT `record('item.edit')` (coalesced), and, for shared items, an SVC-SYNC outbox entry. None of these may block or fail the save: they run after it, and their failures are reported separately.
 
 ### 7.2 Cross-module references
 
@@ -463,7 +463,7 @@ Current: 14 semantic colour tokens for light and dark plus a font family (`packa
 | SYS-062 | Components: Tabs, Tooltip, Checkbox, Switch, Popover, Skeleton/Spinner, DataTable/list with multi-select, Drawer (Escape, focus trap, dialog role), SkipLink, resettable ErrorBoundary | Absent | AE-P3 |
 | SYS-063 | New screens use tokens and `@dcos/ui` components only; no arbitrary px sizes in new code; the 51 existing ones are replaced over time | Partial | AE-P3 rule; each module phase |
 | SYS-064 | `cn()` resolves conflicting Tailwind classes (candidate `tailwind-merge`, licence to verify) | Absent (TD-48) | AE-P3 |
-| SYS-065 | Empty, loading and error states exist for every list, panel and editor (skeletons rather than blank cards) | Partial (Dashboard recent card renders nothing while loading, `Dashboard.tsx:151-165`; `EditorPage.tsx:57` returns null) | AE-P3 components; module phases |
+| SYS-065 | Empty, loading and error states exist for every list, panel and editor (skeletons rather than blank cards) | Partial (Dashboard recent card renders nothing while loading, `Dashboard.tsx:151-165`; `EditorPage.tsx:58` returns null) | AE-P3 components; module phases |
 | SYS-066 | Own icon and lucide icons only; no other product's branding or proprietary assets | Done | every phase |
 | SYS-067 | A visual change to the live app (token values, contrast fixes) needs D-09 approval and is listed in the phase report | Absent (no such rule is recorded today) | AE-P3 |
 
