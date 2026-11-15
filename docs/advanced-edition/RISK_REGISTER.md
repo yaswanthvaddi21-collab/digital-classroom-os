@@ -236,3 +236,7 @@ MODULE_01 and MODULE_02 stated in their drafts that this register "already uses 
 | MODULE_05_PDF_STUDIO_PRD.md:432-439 | PDF-RISK-A…D ("R-101+ to assign") | MODULE_05 risks | R-101…R-104 |
 
 ACCEPTANCE_CRITERIA.md did not exist when this register was checked (2026-11-15); it proposes no new risk. Eight plan-specific risks are proposed without numbers and without ratings: four in DEPENDENCY_AND_LICENCE_PLAN §10 (licence drift on upgrade, SBOM tooling gaps, exact pins blocking security patches, OCR "AI" ambiguity) and four in SECURITY_AND_PRIVACY_PLAN §11 (certificate setup burden, passphrase loss, unreviewed legal requirements, meta-CSP limits on Pages). They are not yet in this register; they are to be rated and numbered from R-105 at the AE-P2 gate step 1 (Audit). Any later risk also takes the next number from R-105.
+
+## Google Drive integration risks
+
+R-113 to R-127 belong to the optional Google Drive integration and are defined, with likelihood, impact and mitigation, in [GOOGLE_DRIVE_INTEGRATION_PLAN.md](GOOGLE_DRIVE_INTEGRATION_PLAN.md) §10.1. R-105 to R-112 stay reserved for the eight queued plan risks above.

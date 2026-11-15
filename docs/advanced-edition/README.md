@@ -28,6 +28,7 @@ This folder holds the AE-P1 (Phase 1 of the Advanced Edition) audit and plan for
 | 16 | [SECURITY_AND_PRIVACY_PLAN.md](SECURITY_AND_PRIVACY_PLAN.md) | Current posture, threat model, permission matrix, student data protection, SEC requirements and security testing |
 | 17 | [RISK_REGISTER.md](RISK_REGISTER.md) | 90 risks (R-001 to R-040, R-050 to R-057, R-060 to R-066, R-070 to R-104) with likelihood, impact, owner phase and status; owns R-NNN numbering |
 | 18 | [RELEASE_STRATEGY.md](RELEASE_STRATEGY.md) | Versioning, branches and tags, RC process, brief §15 checklist, reproducibility, platform matrix PLT-001 to PLT-008, signing, rollback, REL requirements |
+| + | [GOOGLE_DRIVE_INTEGRATION_PLAN.md](GOOGLE_DRIVE_INTEGRATION_PLAN.md) | Owner's request of 2026-11-15, planning only: optional Google Drive integration (GDR) with `drive.file` and the Picker, the web token model, architecture, scope justification, security review, phases GDR-0 to GDR-9, tests, Google Cloud setup; risks R-113 to R-127 and decisions D-54 to D-66 are defined there |
 
 ## 2. How to read them
 
@@ -145,6 +146,8 @@ The roadmap §6 holds the options, proposed defaults and the phase each decision
 | D-51 | View-only links without a host account (MODULE_07; proposed: no) |
 | D-52 | Offline duration that triggers a pre-merge snapshot and review notice (MODULE_07) |
 | D-53 | Shared items' data in host backups and its retention after sharing stops (MODULE_07) |
+
+Decisions D-54 to D-66 (Google Drive) are listed in GOOGLE_DRIVE_INTEGRATION_PLAN §10.2; D-54 and D-55 must be decided before any Drive code.
 
 Decisions needed to start AE-P2: D-01 to D-06 and D-39, preferably also D-23 and D-38 (roadmap §7).
 
