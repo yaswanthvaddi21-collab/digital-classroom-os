@@ -43,3 +43,17 @@ export async function downloadBytes(download: Download) {
 export function savedFileName(name: string, browserName: string) {
   return browserName === 'webkit' && process.platform === 'linux' ? name.replace(/ /g, '_') : name;
 }
+
+/**
+ * Headless WebKit on Linux (GitHub CI) can leave a slide show's full-screen request unfinished: the page never
+ * becomes full screen, no fullscreenchange arrives, and the browser then keeps the Escape key to itself, so the show
+ * cannot be left (CI runs 43676035968 and 43709861278). Specs that run a slide show call this before opening the app:
+ * WebKit on Linux then refuses full screen, as a browser may, and the show takes its windowed path, where Escape must
+ * end it. Full screen itself is covered in Chromium and Firefox in CI and in WebKit on macOS.
+ */
+export async function refuseFullscreenOnLinuxWebKit(page: Page, browserName: string) {
+  if (browserName !== 'webkit' || process.platform !== 'linux') return;
+  await page.addInitScript(() => {
+    Element.prototype.requestFullscreen = () => Promise.reject(new DOMException('Full screen is refused in this test browser.', 'NotAllowedError'));
+  });
+}

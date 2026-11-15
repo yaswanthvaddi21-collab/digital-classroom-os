@@ -271,7 +271,10 @@ test('copy and paste keeps equations, shapes, text boxes and captions (HTML clip
   await page.keyboard.press('ControlOrMeta+a');
   await page.locator('.ProseMirror').evaluate((el) => {
     const data = new DataTransfer();
-    el.dispatchEvent(new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true }));
+    const event = new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true });
+    // As for paste below: Firefox's event would not carry `data`, so the editor's copy would not reach it.
+    Object.defineProperty(event, 'clipboardData', { value: data });
+    el.dispatchEvent(event);
     (window as unknown as { __copied: string }).__copied = data.getData('text/html');
   });
   // To the end of the document (Ctrl+End; ⌘↓ on a Mac).

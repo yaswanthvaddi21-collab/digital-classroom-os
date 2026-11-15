@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './fixtures';
-import { createFromQuickStart, readStore, waitSaved } from './helpers';
+import { createFromQuickStart, readStore, refuseFullscreenOnLinuxWebKit, waitSaved } from './helpers';
 
 /**
  * Presentation Studio slide show (Phase 7 SHOW) in a real browser: transitions and animations set in their tabs and
@@ -18,23 +18,7 @@ const canvas = (page: Page) => page.getByRole('listbox', { name: /^Objects on sl
 const show = (page: Page) => page.getByRole('dialog', { name: 'Slide show' });
 const shownSlide = (page: Page) => page.locator('dialog[open] [data-show-slide]').first();
 
-/**
- * Presses Escape in the show and expects it to end. Headless WebKit on Linux (CI) takes the key to leave full screen
- * but never finishes leaving: the page stays full screen and no fullscreenchange arrives, so neither the show's Escape
- * key nor its full-screen handler hears anything (CI run 43676035968). Only there, and only while the page is still
- * full screen, the test finishes the browser's exit itself, as Escape does in a real browser; the show must then end.
- */
-async function escapeShow(page: Page, browserName: string) {
-  await page.keyboard.press('Escape');
-  if (browserName === 'webkit' && process.platform === 'linux') {
-    const ended = await expect(show(page)).toBeHidden({ timeout: 2000 }).then(() => true, () => false);
-    if (!ended && (await page.evaluate(() => !!document.fullscreenElement))) {
-      test.info().annotations.push({ type: 'headless WebKit', description: 'Escape did not finish leaving full screen; the test completed the exit.' });
-      await page.evaluate(() => document.exitFullscreen());
-    }
-  }
-  await expect(show(page)).toBeHidden();
-}
+test.beforeEach(({ page, browserName }) => refuseFullscreenOnLinuxWebKit(page, browserName));
 
 async function stored(page: Page, id: string) {
   return (await readStore<Item>(page, 'presentations')).find((i) => i.id === id)!.content;
@@ -145,11 +129,12 @@ test('transitions and animations play in a slide show that skips hidden slides, 
   await page.keyboard.press('ArrowRight');
   await expect(shownSlide(page)).toHaveAttribute('data-show-slide', s4.id);
   // In full screen the browser's Escape leaves full screen, which ends the show too.
-  await escapeShow(page, browserName);
+  await page.keyboard.press('Escape');
+  await expect(show(page)).toBeHidden();
   await expect(slideOption(page, 3)).toHaveAttribute('aria-current', 'true');
 });
 
-test('the transition and the build animate with Web Animations, and are cuts with reduced motion', async ({ page, browserName }) => {
+test('the transition and the build animate with Web Animations, and are cuts with reduced motion', async ({ page }) => {
   const { content } = await makeTalk(page);
   const s3 = content.slides[2];
   await slideOption(page, 0).click();
@@ -159,7 +144,8 @@ test('the transition and the build animate with Web Animations, and are cuts wit
   await expect(shownSlide(page)).toHaveAttribute('data-show-slide', s3.id);
   // The 0.75 s push is running right after the key press.
   expect(await page.evaluate(() => document.getAnimations().length)).toBeGreaterThan(0);
-  await escapeShow(page, browserName);
+  await page.keyboard.press('Escape');
+  await expect(show(page)).toBeHidden();
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.getByRole('tab', { name: 'Slide Show' }).click();
@@ -170,7 +156,8 @@ test('the transition and the build animate with Web Animations, and are cuts wit
   expect(await page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length)).toBe(0);
   await page.keyboard.press('Space');
   expect(await page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length)).toBe(0);
-  await escapeShow(page, browserName);
+  await page.keyboard.press('Escape');
+  await expect(show(page)).toBeHidden();
 });
 
 test('the presenter view opens in a second window and stays in step with the show both ways', async ({ page }) => {
