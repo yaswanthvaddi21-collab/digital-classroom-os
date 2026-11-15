@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createFromQuickStart, readStore } from './helpers';
 
 /** Phase 5 G-SHAPES on a phone: the shape library strip (search, categories, tap to add) and Add lane by touch. */

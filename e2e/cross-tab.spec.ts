@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createFromQuickStart, readStore, waitSaved } from './helpers';
 
 /** An open editor follows what another tab does to its item (Phase 3, B4 and B1 not-found). */

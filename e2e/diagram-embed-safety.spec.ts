@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { createFromQuickStart, readStore, waitSaved } from './helpers';
 
 // Regression tests for review findings DOC-1, DOC-2 and DOC-3: diagram work in documents must not disappear.

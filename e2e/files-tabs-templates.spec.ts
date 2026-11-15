@@ -1,7 +1,7 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { CommentRangeEnd, CommentRangeStart, CommentReference, Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow, TextRun } from 'docx';
 import JSZip from 'jszip';
-import { createFromQuickStart, downloadBytes, readStore, waitSaved } from './helpers';
+import { createFromQuickStart, downloadBytes, readStore, savedFileName, waitSaved } from './helpers';
 
 /** Phase 4, G-FILES: DOCX and ODT import, ODT export, the open-items tabs and the new templates, end to end. */
 
@@ -82,12 +82,12 @@ test('a file that is not a document is refused with a reason, and nothing is cre
   expect(await documents(page)).toHaveLength(before);
 });
 
-test('ODT export writes an OpenDocument file that imports back as the same document', async ({ page }) => {
+test('ODT export writes an OpenDocument file that imports back as the same document', async ({ page, browserName }) => {
   const id = await createFromQuickStart(page, 'Lab report');
   await waitSaved(page);
   await page.getByRole('button', { name: 'Export' }).click();
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: /OpenDocument text/ }).click()]);
-  expect(download.suggestedFilename()).toBe('Lab report.odt');
+  expect(download.suggestedFilename()).toBe(savedFileName('Lab report.odt', browserName));
   await expect(page.getByText('Exported OpenDocument text', { exact: false })).toBeVisible();
   const bytes = await downloadBytes(download);
   const zip = await JSZip.loadAsync(bytes);

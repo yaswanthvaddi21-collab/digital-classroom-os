@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { downloadBytes, readStore } from './helpers';
 
 /** Phase 5 G-CANVAS in the real app: groups, locks, layers, order, distribute, select all, clipboard, zoom, help, full screen. */

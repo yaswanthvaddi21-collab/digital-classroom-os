@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { createFromQuickStart, readStore } from './helpers';
 
 /** Phase 5 G-SHAPES: shape library categories and search, BPMN containers, mind map and timeline layouts, notations. */

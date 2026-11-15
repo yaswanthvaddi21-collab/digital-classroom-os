@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import JSZip from 'jszip';
 import { createFromQuickStart, downloadBytes, readStore, waitSaved } from './helpers';
 
@@ -284,7 +284,10 @@ test('copy and paste keeps equations, shapes, text boxes and captions (HTML clip
   await page.locator('.ProseMirror').evaluate((el) => {
     const data = new DataTransfer();
     data.setData('text/html', (window as unknown as { __copied: string }).__copied);
-    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    const event = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
+    // Firefox's event does not carry the clipboardData given to its constructor (the paste arrived empty in CI), so it is set here.
+    Object.defineProperty(event, 'clipboardData', { value: data });
+    el.dispatchEvent(event);
   });
   await expect(page.locator('.ProseMirror .dcos-shape')).toHaveCount(2);
   await waitSaved(page);

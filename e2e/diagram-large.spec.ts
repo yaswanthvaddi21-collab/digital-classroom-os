@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { largeDiagramFile } from '../tests/fixtures/diagrams/large';
 import { downloadBytes, readStore } from './helpers';
 

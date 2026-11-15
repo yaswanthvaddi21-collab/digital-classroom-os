@@ -35,3 +35,11 @@ export async function waitSaved(page: Page) {
 export async function downloadBytes(download: Download) {
   return readFile((await download.path())!);
 }
+
+/**
+ * The name a download is saved under. WebKit on Linux (WebKitGTK) turns the spaces in the name the app gives into
+ * underscores; every other browser keeps it.
+ */
+export function savedFileName(name: string, browserName: string) {
+  return browserName === 'webkit' && process.platform === 'linux' ? name.replace(/ /g, '_') : name;
+}

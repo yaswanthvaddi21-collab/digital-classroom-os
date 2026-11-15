@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createFromQuickStart, downloadBytes, readStore, waitSaved } from './helpers';
 
 test('create → edit → autosave → reload → export', async ({ page }) => {

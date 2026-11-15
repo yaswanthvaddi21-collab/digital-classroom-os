@@ -65,6 +65,13 @@ cd backend && .venv/bin/pytest
 
 Browser tests (`e2e/`, Playwright) run in Chromium, WebKit and mobile Chromium, plus Firefox in CI: navigation and settings, document editing and export, diagram editing, embedded diagrams (insert, double-click edit, resize, DOCX, and the editor keeping its keyboard inside the document's diagram dialog: duplicate, delete, undo), diagrams.net import/export, quick connect (click, drag, palette, keyboard, zoom/pan, undo/redo, touch), diagram safety in documents (Escape never discards work without asking, cut/copy/paste keep the whole diagram, inserting next to a selected diagram keeps it), storage problems (`save-problems`, `cross-tab`, `unsaved-drafts`), a privacy test that fails on any request to another origin (`privacy`), and Chromium-only storage tests (offline after first visit, data survives a browser restart, embedding while offline, another tab upgrading the database). Firefox does not launch on the local macOS 27 machine, so it is covered only in CI.
 
+**Browser differences the tests allow for (found in the first GitHub CI runs, 2026-11-15).** Every spec imports `test` and `expect` from `e2e/fixtures.ts`, not from `@playwright/test` directly. All four are differences in the test drivers or headless browsers; the app is unchanged:
+
+- **Firefox file pickers.** Playwright's Firefox driver cancels each file picker as it opens it and then sets the test's files. Firefox fires the input's `cancel` event at that moment, which a real picker fires only when nothing is chosen. The app's pickers resolve "nothing chosen" on `cancel`, so they gave up before the file arrived. In Firefox runs, the fixture does not register `cancel` listeners on file inputs. The cancel path itself is covered by unit tests.
+- **Firefox synthetic paste.** An event built with `new ClipboardEvent('paste', { clipboardData })` reached the editor without the data. The paste helpers set `clipboardData` on the event itself.
+- **Names and sizes.** WebKit on Linux saves a download's spaces as underscores (`savedFileName` in `e2e/helpers.ts`). Firefox writes a node's `translate(x, 0)` as `translate(x)`. A full-screen Firefox window is the size of the screen, not the viewport.
+- **Headless WebKit on Linux** takes Escape to leave full screen but never finishes. `escapeShow` in `presentation-show.spec.ts` then completes the exit itself, and the show must still end. Only that case is allowed; any other is a failure.
+
 Phase 4 browser tests, in Chromium and WebKit, plus Firefox in CI (the `*-document.spec.ts` files also run on mobile Chromium):
 
 | Spec | Covers |

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import JSZip from 'jszip';
 import { deflateSync, inflateSync } from 'node:zlib';
 import { createFromQuickStart, downloadBytes, readStore, waitSaved } from './helpers';

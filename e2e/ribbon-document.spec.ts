@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { createFromQuickStart, downloadBytes, readStore, waitSaved } from './helpers';
 
 /** Phase 4, round 1: the Word-style ribbon and the audited document fixes, end to end. */
@@ -20,7 +20,10 @@ async function pasteHtml(page: Page, html: string) {
     const data = new DataTransfer();
     data.setData('text/html', h);
     data.setData('text/plain', '');
-    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    const event = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
+    // Firefox's event does not carry the clipboardData given to its constructor (the paste arrived empty in CI), so it is set here.
+    Object.defineProperty(event, 'clipboardData', { value: data });
+    el.dispatchEvent(event);
   }, html);
 }
 

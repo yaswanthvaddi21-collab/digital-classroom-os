@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './fixtures';
 
 // Phase 5 Round 3: the Diagram toolbar and its panels at phone width, by touch (mobile-chromium; skipped elsewhere).
 test.skip(({ hasTouch }) => !hasTouch, 'touch only');
