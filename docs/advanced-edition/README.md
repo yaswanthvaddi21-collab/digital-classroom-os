@@ -2,7 +2,7 @@
 
 This folder holds the AE-P1 (Phase 1 of the Advanced Edition) audit and plan for taking Digital Classroom OS from HEAD `edc2672` to "Digital Classroom OS Advanced Edition v1.0.0 Stable". The owner's brief that asked for these documents is kept verbatim in `backups/advanced-edition-brief-20261115.md` (git-ignored, this machine only). Nothing in this folder changes application code; every statement that something exists or works cites a file and line, a test, a commit or a dated record.
 
-**Status: AE-P1 draft for owner approval (2026-11-15).** The documents were written in parallel, fact-checked against the code, then cross-checked for consistency (see "Consolidation record" below).
+**Status: AE-P1 approved by the owner on 2026-11-15; plan of record. Decisions D-NN stay open until recorded as decided.** The documents were written in parallel, fact-checked against the code, then cross-checked for consistency (see "Consolidation record" below).
 
 ---
 

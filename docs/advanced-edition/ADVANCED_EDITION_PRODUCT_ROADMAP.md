@@ -2,7 +2,7 @@
 
 This document is the top-level plan for taking Digital Classroom OS from its current state (HEAD `edc2672`, manifest version 0.1.0) to "Digital Classroom OS Advanced Edition v1.0.0 Stable". It states the product vision, records the audited current state of all nine modules and the shared infrastructure, reports the verification of commit `fe3275a`, and defines the 16 Advanced Edition phases (AE-P1 to AE-P16) with their scope, entry and exit gates and owner approval points. It also owns the list of owner decisions (D-NN). It is the AE-P1 report for the owner.
 
-**Status: AE-P1 draft for owner approval (2026-11-15)**
+**Status: AE-P1 approved by the owner on 2026-11-15 ("Approve both"); plan of record. The owner decisions D-NN are still open unless recorded as decided.**
 
 Related documents in this folder:
 [Module 01 Document Studio](MODULE_01_DOCUMENT_STUDIO_PRD.md) ·

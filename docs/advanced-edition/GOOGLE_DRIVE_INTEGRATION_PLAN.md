@@ -2,7 +2,7 @@
 
 **Purpose.** This plan answers the owner's request of 2026-11-15 to add an optional Google Drive integration to Digital Classroom OS. It audits the current architecture, proposes an architecture, justifies the OAuth scopes, reviews security and privacy, splits the work into phases with approval gates, and lists the tests, the Google Cloud setup and the owner decisions needed before any code is written.
 
-**Status: plan for owner approval (2026-11-15); no code.** Nothing in this document changes application code, tests, configuration or git state. No Google Cloud project, client ID or API key has been created.
+**Status: plan approved by the owner on 2026-11-15; no code yet. Coding still waits for decisions D-54 and D-55 and the GDR phase approvals.** Nothing in this document changes application code, tests, configuration or git state. No Google Cloud project, client ID or API key has been created.
 
 **Related documents:** [README.md](README.md) (index and ID rules) · [ADVANCED_EDITION_PRODUCT_ROADMAP.md](ADVANCED_EDITION_PRODUCT_ROADMAP.md) · [SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md) · [DATABASE_AND_SYNC_ARCHITECTURE.md](DATABASE_AND_SYNC_ARCHITECTURE.md) · [SECURITY_AND_PRIVACY_PLAN.md](SECURITY_AND_PRIVACY_PLAN.md) · [DEPENDENCY_AND_LICENCE_PLAN.md](DEPENDENCY_AND_LICENCE_PLAN.md) · [MODULE_08_FILE_MANAGER_PRD.md](MODULE_08_FILE_MANAGER_PRD.md) · [RISK_REGISTER.md](RISK_REGISTER.md) · [ACCEPTANCE_CRITERIA.md](ACCEPTANCE_CRITERIA.md) · [../adr/0002-identity-ownership-privacy.md](../adr/0002-identity-ownership-privacy.md) · [../adr/0007-backup-format.md](../adr/0007-backup-format.md) · [../DEPLOYMENT.md](../DEPLOYMENT.md)
 
