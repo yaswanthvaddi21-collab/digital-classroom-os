@@ -1,7 +1,7 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import JSZip from 'jszip';
 import { deflateSync, inflateSync } from 'node:zlib';
-import { createFromQuickStart, downloadBytes, readStore, waitSaved } from './helpers';
+import { createFromQuickStart, downloadBytes, readStore, refuseFullscreenOnLinuxWebKit, waitSaved } from './helpers';
 
 /**
  * Phase 7 Round 3, the cross-feature case: one presentation that uses every group's work at once — a theme, a custom
@@ -108,7 +108,8 @@ async function checkPptx(bytes: Buffer, content: Content, slideIndex: number, wo
 
 test.use({ actionTimeout: 20_000 });
 
-test('one presentation with every feature survives save, reload, versions, trash, backup and restore, the show and both exports', async ({ page, browser, baseURL }) => {
+test('one presentation with every feature survives save, reload, versions, trash, backup and restore, the show and both exports', async ({ page, browser, baseURL, browserName }) => {
+  await refuseFullscreenOnLinuxWebKit(page, browserName);
   test.setTimeout(300_000);
 
   // ── DESIGN: a themed template, another theme, and a custom master ──

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { inflateSync } from 'node:zlib';
 import { createFromQuickStart, downloadBytes } from './helpers';
 
@@ -45,6 +45,11 @@ function readPdf(bytes: Buffer) {
 }
 
 const numbers = (d: string) => (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map((n) => Math.round(Number(n)));
+/** A translate as [x, y]: Firefox writes `translate(200px)` where Chromium writes `translate(200px, 0px)`. */
+const translate = (t: string) => {
+  const [x = 0, y = 0] = numbers(t);
+  return [x, y];
+};
 
 test('the SVG export is plain vector SVG that matches the canvas and opens as an image', async ({ page }) => {
   await createFromQuickStart(page, 'Flowchart');
@@ -73,7 +78,7 @@ test('the SVG export is plain vector SVG that matches the canvas and opens as an
   // Same connector geometry as React Flow draws on the canvas (end points at the handles, same corners).
   expect(Object.keys(exported.edges).sort()).toEqual(Object.keys(canvas.edges).sort());
   for (const [id, d] of Object.entries(canvas.edges)) expect(numbers(String(exported.edges[id])), id).toEqual(numbers(String(d)));
-  for (const [id, t] of Object.entries(canvas.nodes)) expect(numbers(String(exported.nodes[id])), id).toEqual(numbers(String(t)));
+  for (const [id, t] of Object.entries(canvas.nodes)) expect(translate(String(exported.nodes[id])), id).toEqual(translate(String(t)));
   expect(exported.texts).toEqual(expect.arrayContaining(['Start', 'Read number N', 'Yes', 'No']));
 
   // The file opens as an image in the browser (a plain SVG viewer): the Start terminator's fill is painted.

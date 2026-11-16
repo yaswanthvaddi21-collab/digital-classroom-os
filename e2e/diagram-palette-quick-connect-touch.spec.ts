@@ -1,4 +1,4 @@
-import { expect, test, type CDPSession, type Page } from '@playwright/test';
+import { expect, test, type CDPSession, type Page } from './fixtures';
 import { createFromQuickStart, readStore } from './helpers';
 
 // Phase 5 G-CONNECT: the Quick Connect palette by keyboard (every project) and by touch (the phone profile:

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { createFromQuickStart, readStore, waitSaved } from './helpers';
 
 // Phase 6 (NODE): the embedded diagram in the document: keyboard access, alignment/caption/alt text/title, a missing

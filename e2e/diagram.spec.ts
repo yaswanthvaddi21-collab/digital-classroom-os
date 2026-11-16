@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createFromQuickStart, downloadBytes, readStore } from './helpers';
 
 type Stored = { id: string; content: { nodes: Array<{ id: string; position: { x: number; y: number }; data: { label: string } }>; edges: unknown[] } };

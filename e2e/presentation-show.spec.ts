@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { createFromQuickStart, readStore, waitSaved } from './helpers';
+import { expect, test, type Page } from './fixtures';
+import { createFromQuickStart, readStore, refuseFullscreenOnLinuxWebKit, waitSaved } from './helpers';
 
 /**
  * Presentation Studio slide show (Phase 7 SHOW) in a real browser: transitions and animations set in their tabs and
@@ -17,6 +17,8 @@ const slideOption = (page: Page, n: number) => slides(page).getByRole('option').
 const canvas = (page: Page) => page.getByRole('listbox', { name: /^Objects on slide/ });
 const show = (page: Page) => page.getByRole('dialog', { name: 'Slide show' });
 const shownSlide = (page: Page) => page.locator('dialog[open] [data-show-slide]').first();
+
+test.beforeEach(({ page, browserName }) => refuseFullscreenOnLinuxWebKit(page, browserName));
 
 async function stored(page: Page, id: string) {
   return (await readStore<Item>(page, 'presentations')).find((i) => i.id === id)!.content;
@@ -81,11 +83,11 @@ test('transitions and animations play in a slide show that skips hidden slides, 
   await expect(shownSlide(page)).toHaveAttribute('data-show-slide', s1.id);
   // The click on From beginning makes the page full screen (Chromium; WebKit may refuse it headless, and then says so).
   if (browserName === 'chromium') await expect.poll(() => page.evaluate(() => document.fullscreenElement === document.documentElement)).toBe(true);
-  // The show covers the whole window.
+  // The show covers the whole window (in full screen Firefox makes the window the size of the screen, not the viewport).
   const box = (await show(page).boundingBox())!;
-  const vp = page.viewportSize()!;
-  expect(Math.round(box.width)).toBe(vp.width);
-  expect(Math.round(box.height)).toBe(vp.height);
+  const win = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  expect(Math.round(box.width)).toBe(win.width);
+  expect(Math.round(box.height)).toBe(win.height);
   // The controls' full screen button leaves and re-enters full screen without ending the show.
   const controls = page.getByRole('toolbar', { name: 'Slide show controls' });
   if (browserName === 'chromium') {
@@ -126,8 +128,8 @@ test('transitions and animations play in a slide show that skips hidden slides, 
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowRight');
   await expect(shownSlide(page)).toHaveAttribute('data-show-slide', s4.id);
-  await page.keyboard.press('Escape');
   // In full screen the browser's Escape leaves full screen, which ends the show too.
+  await page.keyboard.press('Escape');
   await expect(show(page)).toBeHidden();
   await expect(slideOption(page, 3)).toHaveAttribute('aria-current', 'true');
 });

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { downloadBytes, readStore } from './helpers';
