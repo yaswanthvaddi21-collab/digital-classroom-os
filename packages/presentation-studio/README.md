@@ -1,8 +1,8 @@
 # Presentation Studio (`@dcos/presentation-studio`)
 
-Slide presentations for Classroom OS (Phase 7, [ADR 0014](../../docs/adr/0014-presentation-studio.md)).
+Slide presentations for Classroom OS (v0.2 Phase 7, [ADR 0014](../../docs/adr/0014-presentation-studio.md)).
 
-**Status: Phase 7 complete in the working tree (Rounds 1–3).** Presentations are created from five templates (New
+**Status: v0.2 Phase 7 complete (Rounds 1–3), committed as `edc2672` and live on GitHub Pages since 2026-11-15; further work is Advanced Edition AE-P6.** Presentations are created from five templates (New
 and quick start), edited, saved with version history, trashed and restored, backed up and restored, played as a slide
 show with a presenter view, and exported to PowerPoint (.pptx) and PDF. Content from a newer version, or damaged
 content, opens read-only and is never changed. PowerPoint, Keynote and LibreOffice have not opened the exports yet

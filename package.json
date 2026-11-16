@@ -1,6 +1,6 @@
 {
   "name": "digital-classroom-os",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Offline-first academic productivity platform: documents, diagrams, presentations and classroom tools.",
@@ -21,6 +21,7 @@
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run test && npm run build",
     "licenses": "node scripts/license-report.mjs",
+    "versions": "node scripts/check-versions.mjs",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:upgrade": "node scripts/upgrade-test.mjs"

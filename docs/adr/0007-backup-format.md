@@ -15,6 +15,8 @@ A backup file is the only protection against clearing site data, eviction and lo
    - Only attachments referenced by the exported items and versions are included ([0008](0008-attachments.md)).
 2. **Validate everything first; all or nothing.** Damaged JSON, unknown formats, newer schemas and item or version content that isn't an object refuse the whole file, with a reason. Nothing is written.
    - "Newer schema" is judged per kind (`MAX_CONTENT_SCHEMA_BY_KIND` in `backup.ts`): documents up to 2, diagrams up to 3 since Phase 5 ([0012](0012-diagram-format-phase5.md)). The file's `schemaVersion` may be up to the highest of these (3). Each item and each version is checked against its own kind, so a schema-3 document is still refused. The limits must move with `DOCUMENT_SCHEMA` and `DIAGRAM_SCHEMA`; `tests/integration/diagram-schema.test.ts` fails if they drift.
+
+   > **Update 2026-11-16 (numbers only; the decision is unchanged).** The per-kind limits in point 2 are those of Phase 5. Since v0.2 Phase 6 (`650cf63`) documents go up to schema **3** as well, and since v0.2 Phase 7 (`edc2672`) presentations are a third kind at schema 1: `MAX_CONTENT_SCHEMA_BY_KIND` is `{ document: 3, diagram: 3, presentation: 1 }` (`packages/local-storage/src/backup.ts`), and the file-level maximum is still 3. So a schema-3 document is no longer refused by this build; content above each kind's limit still is. `tests/integration/diagram-schema.test.ts` now checks the limits against `DOCUMENT_SCHEMA`, `DIAGRAM_SCHEMA` and `PRESENTATION_SCHEMA`.
 3. **Never overwrite:**
    - New ids are added.
    - Identical items are skipped.

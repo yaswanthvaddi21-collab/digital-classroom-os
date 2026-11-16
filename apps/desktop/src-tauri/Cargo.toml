@@ -1,6 +1,6 @@
 [package]
 name = "digital-classroom-os"
-version = "0.1.0"
+version = "0.2.0"
 description = "Digital Classroom OS desktop shell"
 edition = "2021"
 license = "MIT"

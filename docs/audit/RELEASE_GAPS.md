@@ -35,8 +35,8 @@ Each item either can lose work, misleads the user, or breaks the "no fake functi
 | RG-10 | **A menu item that only shows a hint toast** ("SVG or PDF…" in the document's Diagram tab) | DS-8 | S |
 | RG-11 | **Overstated claims in docs and UI**, to be fixed or reworded: quick connect "works with touch" (the palette doesn't); "importing the same file twice adds nothing"; page setup implying PDF parity; ARCHITECTURE's "import reports anything it had to approximate"; DEPLOYMENT's desktop build steps; Firefox "covered in CI" | DS-R5, STOR-R6, DS-5, DS-R1, BP-3, BP-1 | S |
 | RG-12 | **DOCX never opened in Microsoft Word or LibreOffice.** Either verify (dated results for each golden fixture plus a document with a diagram) or say plainly that it's untested | DS-4 | S (needs Word or LibreOffice) |
-| RG-13 | **CI has never run.** A green run across unit, e2e (including Firefox), build, licences, audit and backend is needed, or Firefox must be stated as untested | BP-1; needs a remote (Phase 2, with approval) | S |
-| RG-14 | **Release metadata**: versions are still 0.1.0 everywhere (About would say 0.1.0); no project LICENSE; no `v0.2.0` tag (tagging belongs to Phase 15) | WEB-9, BP-7 | S (licence choice is yours) |
+| RG-13 | **CI has never run.** A green run across unit, e2e (including Firefox), build, licences, audit and backend is needed, or Firefox must be stated as untested. Update 2026-11-16: CI has run since 2026-11-15 but `main` has not had a green run yet (§6) | BP-1; needs a remote (Phase 2, with approval) | S |
+| RG-14 | **Release metadata**: versions are still 0.1.0 everywhere (About would say 0.1.0); no project LICENSE; no `v0.2.0` tag (tagging belongs to Phase 15). *Update 2026-11-16:* MIT `LICENSE` added in 468ab89; every manifest bumped to 0.2.0 in AE-P2 (About shows 0.2.0); the `v0.2.0` tag waits for the owner's AE-P2 approval (D-06) | WEB-9, BP-7 | S (licence choice is yours) |
 | RG-15 | **`.gitignore` misses `.env*`, `*.db`, `*.sqlite`** | BP-6 | S (Phase 2) |
 
 ## 3. Strongly recommended for v0.2.0 (not blocking)
@@ -94,8 +94,8 @@ Scope decision: **option B, the full brief** (owner, 2026-11-13).
 | RR-10 backup validation and import pruning (STOR-R7, STOR-R6) | ✅ Fixed | DATA_SAFETY_REPORT §4 |
 | New: half-upgraded database after a failing migration | ✅ Fixed | DATA_SAFETY_REPORT §5 |
 | New: two tabs upgrading at once could remove the safety copy | ✅ Fixed | DATA_SAFETY_REPORT §5 |
-| RG-13 CI has never run | ⬜ Needs a remote; prepared in [GIT_WORKFLOW.md](../GIT_WORKFLOW.md) §7, waiting for the owner | — |
-| RG-14 release metadata, licence | ⬜ Waiting for the owner's licence choice; versions are bumped in Phase 14 | — |
+| RG-13 CI has never run | ⬜ Needs a remote; prepared in [GIT_WORKFLOW.md](../GIT_WORKFLOW.md) §7, waiting for the owner. **Update 2026-11-16 (still open):** the public remote exists since 2026-11-15 and CI has run. On `main` the e2e job failed for `468ab89` (run 43669491390) and `edc2672` (run 43676035968). PR #1 (`2731876`, `4983af4`: test-only fixes for failures seen only in CI, in Firefox and Linux WebKit) was green on every job on its branch (run 43719093806) and was merged into `main` on 2026-11-16 as `0fa0064`. In main's own run for `0fa0064` (43780673925) its `web` and `backend` jobs passed, but `e2e` failed one Firefox test (`e2e/cross-tab.spec.ts`, also on retry): a false "new version is ready" notice shifted the page under the click. The app fix is on branch `advanced/phase2-safety` (AE-P2 report). RG-13 closes only when `main` has a green run | — |
+| RG-14 release metadata, licence | 🟡 Licence MIT (468ab89) and versions 0.2.0 (AE-P2, 2026-11-16) done; `v0.2.0` tag pending the owner's approval | — |
 | RG-1, RG-2 and the other storage items | ⬜ Phase 3 | — |
 
 ## 7. Status after Phase 3 (architecture and storage hardening)
@@ -138,7 +138,7 @@ Feature by feature, see [FEATURE_STATUS.md](FEATURE_STATUS.md) (Document Studio 
 
 ## 9. Status after Phase 5 (Diagram Studio)
 
-Working tree on top of `206e080`, not yet committed. Feature by feature, see [FEATURE_STATUS.md](FEATURE_STATUS.md) (Diagram Studio table). Format decisions: [ADR 0012](../adr/0012-diagram-format-phase5.md); exports and their approximations: [DIAGRAM_EXPORTS.md](../DIAGRAM_EXPORTS.md). "Where" names the code, the tests and, where there are any, the debt items.
+Committed as `8f772ba` on top of `206e080`. Feature by feature, see [FEATURE_STATUS.md](FEATURE_STATUS.md) (Diagram Studio table). Format decisions: [ADR 0012](../adr/0012-diagram-format-phase5.md); exports and their approximations: [DIAGRAM_EXPORTS.md](../DIAGRAM_EXPORTS.md). "Where" names the code, the tests and, where there are any, the debt items.
 
 | Item | Status | Where |
 |---|---|---|
@@ -169,14 +169,14 @@ Final rerun after the dialog-host fix (same day): typecheck clean; vitest 77 fil
 
 - **No external diagrams.net check has been done.** Neither the exported `.drawio` files (including the golden `kitchen-sink-v3.drawio`) nor the BPMN (`mxgraph.bpmn.event`, `gateway2`) and network (`mxgraph.networks.*`) stencil names were opened in diagrams.net; the round trips are checked only by our own importer. Needs diagrams.net (web or desktop) and a dated record, like DOCUMENT_COMPATIBILITY.md §8 for Word.
 - SVG and PDF exports not opened in office or design tools; PDF labels with characters outside WinAnsi (Greek, CJK, emoji) may not show.
-- Touch flows automated only in mobile Chromium; Firefox only in CI, which has never run (RG-13).
+- Touch flows automated only in mobile Chromium; Firefox only in CI (RG-13; CI has run since 2026-11-15, see RG-13).
 - Copied shapes reach other apps and Document Studio as JSON text (TD-44).
 - No obstacle avoidance; connectors always under shapes; lanes do not resize with their pool; BPMN event symbols (timer, message) not drawn.
 - Timeline Arrange and Add event delete any straight, unlabelled line without arrows or bend points that joins dates that are no longer next to each other, treating it as an old axis piece. A toast says how many lines were removed and Undo brings them back; a label, an arrow or a bend keeps a line (`library/timeline.ts` `isAxisSegment`; `layouts.test.ts`; the toast is checked for Arrange only, in `editor.test.tsx`).
 
 ## 10. Status after Phase 6 (document–diagram integration)
 
-Working tree on top of `8f772ba`, not yet committed. Built in three rounds (foundation; four groups in parallel, each checked by a separate verifier; integration). Feature by feature, see [FEATURE_STATUS.md](FEATURE_STATUS.md) (the Embed rows); decisions in [ADR 0013](../adr/0013-document-diagram-integration.md); debt in [TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) (status after Phase 6).
+Committed as `650cf63` on top of `8f772ba`. Built in three rounds (foundation; four groups in parallel, each checked by a separate verifier; integration). Feature by feature, see [FEATURE_STATUS.md](FEATURE_STATUS.md) (the Embed rows); decisions in [ADR 0013](../adr/0013-document-diagram-integration.md); debt in [TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) (status after Phase 6).
 
 | Item | Status | Where |
 |---|---|---|
@@ -216,7 +216,7 @@ Working tree on top of `8f772ba`, not yet committed. Built in three rounds (foun
 
 ## 11. Status after Phase 7 (Presentation Studio)
 
-Working tree on top of `468ab89` (Phase 6 plus the MIT licence and the GitHub Pages workflow; the deployed site is the Phase 6 app), not yet committed or deployed. Built in three rounds (foundation; the editor core, then four groups in parallel — DESIGN, CONTENT, SHOW, EXPORT — each checked by a separate verifier; integration). Feature by feature, see [FEATURE_STATUS.md](FEATURE_STATUS.md) (Presentation Studio); decisions in [ADR 0014](../adr/0014-presentation-studio.md); debt in [TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) (status after Phase 7).
+Committed as `edc2672` on top of `468ab89` (Phase 6 plus the MIT licence and the GitHub Pages workflow), pushed to `main` and deployed on 2026-11-15 by GitHub Pages run 43676035951 (checked 2026-11-16). Built in three rounds (foundation; the editor core, then four groups in parallel — DESIGN, CONTENT, SHOW, EXPORT — each checked by a separate verifier; integration). Feature by feature, see [FEATURE_STATUS.md](FEATURE_STATUS.md) (Presentation Studio); decisions in [ADR 0014](../adr/0014-presentation-studio.md); debt in [TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) (status after Phase 7).
 
 | Brief item | Status | Where |
 |---|---|---|

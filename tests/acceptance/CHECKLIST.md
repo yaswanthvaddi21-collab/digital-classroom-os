@@ -1,5 +1,7 @@
 # MVP acceptance checklist
 
+> **Not re-run since 2026-11-12 (note added 2026-11-16).** Nothing in this checklist has been re-checked since the run recorded below, and it does not yet cover the later v0.2 work: Document Studio (v0.2 Phase 4), Diagram Studio (Phase 5), document–diagram integration (Phase 6) or Presentation Studio (Phase 7). The ✅ marks are the 2026-11-12/13 results, not the state of the current build. Extending it to those modules and re-running it is listed as open in the AE-P2 report ([docs/advanced-edition/AE-P2_REPORT.md](../../docs/advanced-edition/AE-P2_REPORT.md)); until then the automated suites in docs/TESTING.md are the evidence for those modules. The phase numbers in the rows below are the old plan's: Classroom is now AE-P9 and the native platforms AE-P14 ([roadmap](../../docs/advanced-edition/ADVANCED_EDITION_PRODUCT_ROADMAP.md) §5.3).
+
 Status of PRD §11 criteria. ✅ verified · 🟡 partly verified · ⬜ not started (later phase).
 "Unit" means covered by Vitest; "E2E" means covered by Playwright in Chromium, WebKit and mobile Chromium (Firefox in CI only); "Browser" means checked by hand.
 

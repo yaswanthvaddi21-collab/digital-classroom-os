@@ -1,4 +1,4 @@
-# Classroom Hub — Phase 3
+# Classroom Hub — AE-P9 (M06)
 
 Not started. Per the PRD's implementation rule, modules are built one at a time after the
 Document Studio and Diagram Studio foundations are validated. See `docs/PRD.md` §3 and §10.

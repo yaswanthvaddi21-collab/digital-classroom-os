@@ -1,6 +1,6 @@
 # Backend
 
-FastAPI service for local-network classroom features (Phase 3). Phase 0 ships only a health/info API.
+FastAPI service for local-network classroom features (Advanced Edition AE-P9). Today it has only a health/info API, and it is not deployed: the live web app does not use it.
 
 ```bash
 cd backend

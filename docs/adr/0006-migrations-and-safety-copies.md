@@ -23,6 +23,8 @@ The project rules forbid deleting user data, resetting the database and destruct
 5. **One tab at a time.** Copy and upgrade run under the Web Lock `dcos-upgrade:<db>`. A tab that waited re-reads the version and simply opens if the upgrade already happened. Browsers without Web Locks run unguarded, as before.
 6. **Content schemas are versioned separately** (documents: schema 1, or 2 with a diagram or, since Phase 4, anything else outside the v0.1.0 vocabulary, see [0011](0011-document-format-phase4.md); diagrams: schema 2). Content from a newer app opens read-only.
 
+   > **Update 2026-11-16 (numbers only; the decision is unchanged).** The schema numbers in point 6 are those of the time it was written. Today the newest document schema is **3** (`DOCUMENT_SCHEMA` in `packages/document-studio/src/migrate.ts`, raised in v0.2 Phase 6, `650cf63`), the newest diagram schema is **3** (`DIAGRAM_SCHEMA` in `packages/diagram-studio/src/types.ts`, raised in v0.2 Phase 5, `8f772ba`; [0012](0012-diagram-format-phase5.md)), and presentations are schema 1 (v0.2 Phase 7, [0014](0014-presentation-studio.md)). Each item is still stored under the lowest number its content needs. Current details: [DATABASE.md](../DATABASE.md), "Content schemas".
+
 ## Consequences
 
 - Each upgrade needs free space roughly equal to the data, or a downloaded backup.

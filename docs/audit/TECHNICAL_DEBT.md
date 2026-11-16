@@ -8,7 +8,7 @@ Audited commit `ea7f316`, 2026-11-13. Debt here means structural problems that m
 
 | # | Debt | Where | Impact | Effort |
 |---|---|---|---|---|
-| TD-1 | **No attachment cleanup.** `StorageAdapter` has no `deleteAttachment`, purge leaves attachments, and every embedded-diagram edit stores a new PNG | `packages/local-storage/src/indexeddb.ts` (putAttachment/purge/export), `apps/web/src/components/DiagramDialogs.tsx` | IndexedDB and every backup grow without bound. This raises the chance of hitting quota or eviction (incident S-1 in the Release 0.2 audit) | M |
+| TD-1 | ✅ **Fixed in Phase 3 (`2669868`); checked in the code 2026-11-16.** ~~**No attachment cleanup.** `StorageAdapter` has no `deleteAttachment`, purge leaves attachments, and every embedded-diagram edit stores a new PNG~~. Clean-up is by reference, not by a per-attachment delete ([ADR 0008](../adr/0008-attachments.md)): `cleanUpAttachments()` (`packages/local-storage/src/types.ts:191-195`, `indexeddb.ts:1096-1136`) removes, in one transaction under a cross-tab lock, every attachment that no item, trashed item, version or draft refers to and that was not stored or re-used in the last 24 hours (`indexeddb.ts:56`). It runs after a purge or Empty trash (`apps/web/src/lib/storage.ts:260-265`), once a day after start-up (`storage.ts:235-253`, `apps/web/src/main.tsx:12`) and from Settings → Storage → Free up space (`apps/web/src/pages/settings/SettingsPages.tsx:89-95`). `putAttachment` reuses an identical image by its SHA-256 (`indexeddb.ts:1010-1018`), and a replaced diagram preview is removed by the next clean-up after the grace period. Backups carry only referenced attachments (`indexeddb.ts:157`, `:927`) | `packages/local-storage/src/indexeddb.ts`, `apps/web/src/lib/storage.ts`; tests `hardening.test.ts` 'cleanUpAttachments (STOR-R3 / TD-1)' and 'backups carry only referenced attachments', `kinds.test.ts` (clean-up across every kind's stores); both files passed on 2026-11-16 (68 tests) | None left for TD-1. Purged items' images stay up to 24 hours (the grace period) | M (done) |
 | TD-2 | **Images stored inline as data URLs** inside content, and so inside every version snapshot | `packages/document-studio/src/image.ts`, `indexeddb.ts` versionOf | Up to 50× duplication per image, large `JSON.stringify` on every edit, faster quota exhaustion. The planned images-to-attachments migration (Release 0.2 audit, step 7) is not done | L |
 | TD-3 | **One draft slot per item**, and no list of pending drafts | `indexeddb.ts` saveDraft (key `kind:id`), `apps/web/src/lib/storage.ts` | Drafts can be overwritten. They are invisible unless that exact item is opened, and they are not in backups | M |
 | TD-4 | **Every failure handled the same way** (quota, not found, transient) | `apps/web/src/lib/storage.ts` save queue | Terminal errors are retried, the status text claims retrying when nothing is scheduled, and the user is never told the storage is full | S |
@@ -60,11 +60,11 @@ Audited commit `ea7f316`, 2026-11-13. Debt here means structural problems that m
 | TD-30 | **Native shells outside the npm workspace and lockfile**; no `Cargo.lock`; Tauri icons missing | `package.json` workspaces, `apps/desktop`, `apps/android` | Non-reproducible native builds; licence and audit gates don't cover the Tauri CLI, Capacitor or Rust crates; the desktop build fails as committed | M |
 | TD-31 | **No platform detection**: the service worker would register inside native webviews | `apps/web/src/main.tsx`, `components/SystemBanners.tsx` | Offline and update behaviour in the shells is undefined | S |
 | TD-32 | **Python dependencies unpinned** (ranges, no lock); local venv 3.9 vs CI 3.12 | `backend/requirements*.txt`, `.github/workflows/ci.yml` | Drift between local and CI runs | S |
-| TD-33 | **CI hardening**: no `permissions` block, actions pinned to tags not SHAs, no timeouts or concurrency, coverage thresholds never enforced | `.github/workflows/ci.yml`, `vitest.config.ts` | Weaker supply-chain posture; coverage floors are decorative | S |
-| TD-34 | **Placeholder git identity and no remote** | git config, all 6 commits | No real authorship; CI never triggered | S |
+| TD-33 | **CI hardening**: no `permissions` block, actions pinned to tags not SHAs, no timeouts or concurrency, coverage thresholds never enforced. *Partly fixed 2026-11-16 (AE-P2):* `permissions: contents: read`, every action pinned to a full commit SHA (the same commit its tag pointed to), job timeouts and pull-request concurrency in `ci.yml`; SHAs and timeouts in `pages.yml`. Still open: coverage floors in CI (D-38) | `.github/workflows/ci.yml`, `.github/workflows/pages.yml`, `vitest.config.ts` | Coverage floors are decorative until D-38 | S |
+| TD-34 | **Placeholder git identity and no remote** | git config, all 6 commits | No real authorship; CI never triggered. *Update 2026-11-16:* the remote exists (public GitHub repository since 2026-11-15, D-01) and CI runs; the placeholder author is kept by the owner's decision D-04, so this stays open as accepted | S |
 | TD-35 | **Empty backend packages** (`authentication`, `classroom`, `synchronization`) | `backend/*/__init__.py` | Clutter that can read as progress | S |
-| TD-36 | **No project LICENSE** (Cargo.toml says MIT, nothing else does) | repository root | The project's own licence is undefined for a release | S |
-| TD-37 | **`.gitignore` misses `.env*`, `*.db`, `*.sqlite`** outside `backend/` | `.gitignore` | A future secret or local database could be committed by `git add -A` | S |
+| TD-36 | ✅ **Fixed in `468ab89` (2026-11-15); checked 2026-11-16.** ~~**No project LICENSE** (Cargo.toml says MIT, nothing else does)~~. `LICENSE` at the repository root is the MIT licence (`LICENSE:1-3`, "Copyright (c) 2026 Digital Classroom OS contributors"), matching `apps/desktop/src-tauri/Cargo.toml:6` | `LICENSE` | None for the licence itself. No `package.json` has a `license` field yet (the root one is `"private": true`) | S (done) |
+| TD-37 | ✅ **Fixed in Phase 2 (`dbbce17`, 2026-11-13; RG-15 in RELEASE_GAPS §6); checked 2026-11-16.** ~~**`.gitignore` misses `.env*`, `*.db`, `*.sqlite`** outside `backend/`~~. `.gitignore:31-33` ignores `.env` and `.env.*` but keeps `.env.example`, and `.gitignore:44-47` ignores `*.db`, `*.db-journal`, `*.sqlite` and `*.sqlite3` anywhere; `git check-ignore -v` confirms `.env`, `.env.local`, `foo.db`, `foo.sqlite` and `x/foo.sqlite3` are ignored | `.gitignore` | None left | S (done) |
 
 ## Notes
 
@@ -95,7 +95,7 @@ New debt from Phase 4:
 
 ## Status after Phase 5 (Diagram Studio)
 
-Working tree on top of `206e080`, not yet committed.
+Committed as `8f772ba` on top of `206e080`.
 
 | # | Status | Where |
 |---|---|---|
@@ -123,7 +123,7 @@ New debt from Phase 5:
 
 ## Status after Phase 6 (document–diagram integration)
 
-Working tree on top of `8f772ba`, not yet committed. Decisions: [ADR 0013](../adr/0013-document-diagram-integration.md).
+Committed as `650cf63` on top of `8f772ba`. Decisions: [ADR 0013](../adr/0013-document-diagram-integration.md).
 
 | # | Status | Where |
 |---|---|---|
@@ -145,7 +145,7 @@ New debt from Phase 6:
 
 ## Status after Phase 7 (Presentation Studio)
 
-Working tree on top of `468ab89` (Phase 6 is `650cf63`), not yet committed. Decisions: [ADR 0014](../adr/0014-presentation-studio.md).
+Committed as `edc2672` on top of `468ab89` (Phase 6 is `650cf63`), pushed to `main` and deployed on 2026-11-15 (GitHub Pages run 43676035951). Decisions: [ADR 0014](../adr/0014-presentation-studio.md).
 
 | # | Status | Where |
 |---|---|---|

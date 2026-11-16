@@ -1,6 +1,6 @@
 {
   "name": "@dcos/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Tauri 2 shell for macOS and Windows. Loads the built web app from apps/web/dist.",
   "scripts": {

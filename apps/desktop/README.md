@@ -1,4 +1,4 @@
-# Desktop (Tauri 2) — Phase 5
+# Desktop (Tauri 2) — AE-P14
 
 Wraps `apps/web` in a native window for macOS and Windows. Not built yet.
 
@@ -12,5 +12,6 @@ npm run icons   # generates src-tauri/icons from the app icon
 npm run dev
 ```
 
-Phase 5 work: SQLite storage adapter (`@tauri-apps/plugin-sql`) implementing `StorageAdapter`,
+AE-P14 work: native storage as decided under D-12 (design in AE-P3; for example a SQLite adapter with `@tauri-apps/plugin-sql`
+implementing `StorageAdapter`),
 native save dialogs for exports, and PDF printing through the platform webview.

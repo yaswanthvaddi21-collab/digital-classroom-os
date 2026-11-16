@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-API_VERSION = "0.1.0"
+API_VERSION = "0.2.0"
 
 app = FastAPI(
     title="Digital Classroom OS API",

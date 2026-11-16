@@ -1,6 +1,6 @@
 {
   "name": "@dcos/android",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Capacitor shell for Android. Loads the built web app from apps/web/dist.",
   "scripts": {

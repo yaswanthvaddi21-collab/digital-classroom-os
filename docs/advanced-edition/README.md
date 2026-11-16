@@ -29,6 +29,7 @@ This folder holds the AE-P1 (Phase 1 of the Advanced Edition) audit and plan for
 | 17 | [RISK_REGISTER.md](RISK_REGISTER.md) | 90 risks (R-001 to R-040, R-050 to R-057, R-060 to R-066, R-070 to R-104) with likelihood, impact, owner phase and status; owns R-NNN numbering |
 | 18 | [RELEASE_STRATEGY.md](RELEASE_STRATEGY.md) | Versioning, branches and tags, RC process, brief §15 checklist, reproducibility, platform matrix PLT-001 to PLT-008, signing, rollback, REL requirements |
 | + | [GOOGLE_DRIVE_INTEGRATION_PLAN.md](GOOGLE_DRIVE_INTEGRATION_PLAN.md) | Owner's request of 2026-11-15, planning only: optional Google Drive integration (GDR) with `drive.file` and the Picker, the web token model, architecture, scope justification, security review, phases GDR-0 to GDR-9, tests, Google Cloud setup; risks R-113 to R-127 and decisions D-54 to D-66 are defined there |
+| + | [AE-P2_REPORT.md](AE-P2_REPORT.md) | AE-P2 (Git, backup and data safety) report, 2026-11-16: decisions applied, backup, PR #1 merge, version 0.2.0, CI hardening, corrected documents, checks and what is still open |
 
 ## 2. How to read them
 

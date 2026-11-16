@@ -28,6 +28,18 @@ const VERSION_CHANGE_TEXT: Record<FlushOutcome, string> = {
 };
 
 /**
+ * Whether a service worker controls this page, that is, whether it runs an installed version that an update could
+ * replace. vite-plugin-pwa 2.0.0 (prompt mode, client/build/register.js:68-71) reports the very first install as an
+ * update when another tab started it: open a second tab while the first one is still installing the service worker
+ * and the second tab said "A new version of Classroom OS is ready" although nothing had changed (found by CI run
+ * 43780673925, Firefox, e2e/cross-tab.spec.ts). Without clientsClaim a page that loaded uncontrolled stays so until it
+ * reloads, and it is already running the newest build, so there is nothing to update to.
+ */
+export function isControlledPage(): boolean {
+  return typeof navigator !== 'undefined' && !!navigator.serviceWorker?.controller;
+}
+
+/**
  * App-wide notices. Updates never reload a page on their own: the user chooses when, and pending edits are
  * saved first (audit STOR-9 / CODE-10). If edits could be neither saved nor kept, the page does not reload
  * until the user confirms.
@@ -37,9 +49,10 @@ export function SystemBanners() {
   const [reloading, setReloading] = useState(false);
   const [unsafe, setUnsafe] = useState<boolean | null>(null);
   const {
-    needRefresh: [needRefresh],
+    needRefresh: [waiting],
     updateServiceWorker,
   } = useRegisterSW();
+  const needRefresh = waiting && isControlledPage();
 
   const reload = async (applyUpdate: boolean, force = false) => {
     setReloading(true);
