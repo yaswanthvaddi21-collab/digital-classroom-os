@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { deflateSync } from 'node:zlib';
 import { createFromQuickStart, readStore, waitSaved } from './helpers';
 
@@ -155,7 +155,10 @@ test('pictures pasted from the clipboard are added to the slide', async ({ page,
   await canvas(page).evaluate((el, data) => {
     const dt = new DataTransfer();
     dt.items.add(new File([new Uint8Array(data)], 'pasted.png', { type: 'image/png' }));
-    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    const event = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+    // Firefox's event does not carry the clipboardData given to its constructor (the paste arrived empty in CI), so it is set here.
+    Object.defineProperty(event, 'clipboardData', { value: dt });
+    el.dispatchEvent(event);
   }, bytes);
   await expect(canvas(page).getByRole('option', { name: /^Picture/ })).toBeVisible();
   await waitSaved(page);

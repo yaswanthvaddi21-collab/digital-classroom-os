@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import JSZip from 'jszip';
 import { createFromQuickStart, downloadBytes, readStore, waitSaved } from './helpers';
 
@@ -228,7 +228,10 @@ test('custom colours and font sizes, and a copied formatted paragraph keeps its 
     const data = new DataTransfer();
     data.setData('text/html', h);
     data.setData('text/plain', 'Second paragraph.');
-    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    const event = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
+    // Firefox's event does not carry the clipboardData given to its constructor (the paste arrived empty in CI), so it is set here.
+    Object.defineProperty(event, 'clipboardData', { value: data });
+    el.dispatchEvent(event);
   }, html);
   await waitSaved(page);
   const doc = await blocks(page, id);

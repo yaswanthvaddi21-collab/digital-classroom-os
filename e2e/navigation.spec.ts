@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 // Every route that existed in v0.1.0 must keep resolving (links and bookmarks depend on them).
 const ROUTES: Array<[string, RegExp]> = [

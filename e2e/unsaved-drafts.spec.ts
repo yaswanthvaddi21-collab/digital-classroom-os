@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { createFromQuickStart, readStore, waitSaved } from './helpers';
 
 /** Writes draft records straight into the app's database, as an editor that could not save would have. */

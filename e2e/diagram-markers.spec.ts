@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createFromQuickStart, downloadBytes } from './helpers';
 
 // Connector ends are shared <marker> definitions (TD-21). The image exports capture the canvas, so the definitions

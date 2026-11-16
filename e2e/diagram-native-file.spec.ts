@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createFromQuickStart, downloadBytes, readStore } from './helpers';

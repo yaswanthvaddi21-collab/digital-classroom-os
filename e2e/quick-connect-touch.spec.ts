@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createFromQuickStart } from './helpers';
 
 // Runs on the phone profile (touch screen): tapping an arrow adds a connected shape.

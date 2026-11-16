@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createFromQuickStart, downloadBytes } from './helpers';
 
 // Touch and phone-width checks of the diagram editor's toolbar and panels (mobile-chromium; skipped elsewhere).

@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './fixtures';
 import { createFromQuickStart, readStore, waitSaved } from './helpers';
 
 // Phase 6 (NODE): an embedded diagram at phone width, by touch. Runs on mobile-chromium (Pixel 7, as every *-touch

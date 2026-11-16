@@ -1,8 +1,8 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import JSZip from 'jszip';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createFromQuickStart, downloadBytes, readStore, waitSaved } from './helpers';
+import { createFromQuickStart, downloadBytes, readStore, savedFileName, waitSaved } from './helpers';
 
 const DRAWIO_FIXTURE = join(dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'fixtures', 'drawio', 'library-system.drawio');
 
@@ -132,7 +132,7 @@ test('resizing keeps the aspect ratio, and cancelling inserts nothing', async ({
   expect(Math.abs(d.height / d.width - d.naturalHeight / d.naturalWidth)).toBeLessThan(0.01);
 });
 
-test('diagrams.net files import into documents and into Diagram Studio, and export back', async ({ page }) => {
+test('diagrams.net files import into documents and into Diagram Studio, and export back', async ({ page, browserName }) => {
   // Into a document, via the Diagram tab.
   const id = await createFromQuickStart(page, 'Assignment');
   await openDiagramTab(page);
@@ -158,7 +158,7 @@ test('diagrams.net files import into documents and into Diagram Studio, and expo
 
   await page.getByRole('button', { name: 'Export' }).click();
   const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: /diagrams\.net/i }).click()]);
-  expect(file.suggestedFilename()).toBe('Library system.drawio');
+  expect(file.suggestedFilename()).toBe(savedFileName('Library system.drawio', browserName));
   const xml = (await downloadBytes(file)).toString();
   expect(xml).toContain('<mxfile');
   expect(xml).toContain('Available?');

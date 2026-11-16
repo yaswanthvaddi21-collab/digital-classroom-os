@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { crc32, deflateSync } from 'node:zlib';
 import { createFromQuickStart, downloadBytes, readStore, waitSaved } from './helpers';
 
